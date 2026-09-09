@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# .NET build output
+bin/
+obj/
+*.user
+*.suo
+
+# Node / frontend build output (frontends also carry their own .gitignore)
+node_modules/
+dist/
+.next/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+*.log
+
+# Local UI screenshots / tooling config (not for the repo)
+menu/admin_ui/
+reasonix.toml

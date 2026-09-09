@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+@theme {
+  /* Admin colors - matching customer app */
+  --color-primary: #8B3A3A;
+  --color-primary-dark: #6B2A2A;
+  --color-secondary: #3C2A21;
+  --color-accent: #D4AF37;
+  --color-accent-red: #C30139;
+  --color-cream: #F5F0E6;
+  --color-tan: #E8DCC8;
+  --color-brown-light: #D2B48C;
+  --color-brown-medium: #8B4513;
+
+  /* Admin dashboard colors */
+  --color-sidebar: #1C1C1E;
+  --color-sidebar-hover: #2C2C2E;
+  --color-background: #F5F5F7;
+  --color-card: #FFFFFF;
+  --color-border: #E5E5E7;
+
+  /* Status colors */
+  --color-status-pending: #FF9500;
+  --color-status-confirmed: #007AFF;
+  --color-status-preparing: #5856D6;
+  --color-status-ready: #34C759;
+  --color-status-completed: #8E8E93;
+  --color-status-cancelled: #FF3B30;
+
+  /* Semantic colors */
+  --color-success: #4CAF50;
+  --color-warning: #F57C00;
+  --color-error: #C62828;
+  --color-info: #2196F3;
+
+  /* Fonts */
+  --font-family-sans: 'Manrope', 'Inter', system-ui, sans-serif;
+  --font-family-serif: 'Playfair Display', Georgia, serif;
+}
+
+/* Base styles */
+@layer base {
+  body {
+    @apply bg-background text-secondary font-sans antialiased;
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold;
+  }
+
+  h1 {
+    @apply text-3xl;
+  }
+
+  h2 {
+    @apply text-2xl;
+  }
+
+  h3 {
+    @apply text-xl;
+  }
+
+  h4 {
+    @apply text-lg;
+  }
+}
+
+/* Custom scrollbar */
+@layer components {
+  .scrollbar-custom {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-brown-light) var(--color-cream);
+  }
+
+  .scrollbar-custom::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-track {
+    background: var(--color-cream);
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb {
+    background: var(--color-brown-light);
+    border-radius: 4px;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+    background: var(--color-brown-medium);
+  }
+}

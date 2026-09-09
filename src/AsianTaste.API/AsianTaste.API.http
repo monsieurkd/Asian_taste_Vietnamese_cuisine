@@ -1,0 +1,6 @@
+@AsianTaste.API_HostAddress = http://localhost:5070
+
+GET {{AsianTaste.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
