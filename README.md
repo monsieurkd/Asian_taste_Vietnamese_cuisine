@@ -7,8 +7,9 @@ Online ordering platform for Asian Taste Vietnamese Restaurant
 - **Admin dashboard** — live orders, order management, menu management, reports
 - **API** — ASP.NET Core + PostgreSQL, Stripe payments, optional Lightspeed POS sync
 
-See [`Asian_Taste_PRD.md`](Asian_Taste_PRD.md) for full product requirements and
-[`MAJOR_UPDATE_PLAN.md`](MAJOR_UPDATE_PLAN.md) for the current roadmap.
+See [`Asian_Taste_PRD.md`](Asian_Taste_PRD.md) for full product requirements,
+[`MAJOR_UPDATE_PLAN.md`](MAJOR_UPDATE_PLAN.md) for the roadmap, and
+[`docs/SESSION_NOTES.md`](docs/SESSION_NOTES.md) for the current state and what's next.
 
 ---
 
