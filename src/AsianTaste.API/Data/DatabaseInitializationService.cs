@@ -74,6 +74,14 @@ public class DatabaseInitializationService : IDatabaseInitializationService
         var webhookLogSql = await GetMigrationScriptAsync("07_create_webhook_event_log.sql");
         await ExecuteScriptAsync(webhookLogSql, cancellationToken);
 
+        // Run restaurant settings migration
+        var settingsSql = await GetMigrationScriptAsync("08_create_restaurant_settings.sql");
+        await ExecuteScriptAsync(settingsSql, cancellationToken);
+
+        // Run Adelaide localisation + operating hours migration
+        var adelaideSql = await GetMigrationScriptAsync("09_fix_adelaide_settings.sql");
+        await ExecuteScriptAsync(adelaideSql, cancellationToken);
+
         // Auto-seed on first initialization (only if database was just created)
         if (!wasAlreadyInitialized)
         {
@@ -91,7 +99,8 @@ public class DatabaseInitializationService : IDatabaseInitializationService
         var tables = new[] { "order_item_modifiers", "order_items", "order_attempts", "orders",
                              "customer_payment_methods", "customers", "admin_users",
                              "modifiers", "modifier_groups", "menu_items", "categories",
-                             "lightspeed_tokens", "webhook_event_log" };
+                             "lightspeed_tokens", "webhook_event_log",
+                             "operating_hours", "restaurant_settings" };
 
         foreach (var table in tables)
         {

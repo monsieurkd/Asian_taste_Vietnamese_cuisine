@@ -36,6 +36,7 @@ builder.Services.AddScoped<IMenuRepository, MenuRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
+builder.Services.AddScoped<IRestaurantSettingsRepository, RestaurantSettingsRepository>();
 builder.Services.AddScoped<OrderService>();
 builder.Services.AddScoped<CustomerService>();
 builder.Services.AddSingleton<JwtService>();

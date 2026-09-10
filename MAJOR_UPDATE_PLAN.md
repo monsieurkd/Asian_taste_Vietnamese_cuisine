@@ -205,16 +205,38 @@ A (get running)  →  B (Adelaide correctness)  →  C1/C2 (email + payment)  �
 
 ---
 
-## 5. Open decisions (need your input)
+## 5. Decisions (confirmed 2026-09-10)
 
-1. **Pickup only, or delivery too?** If delivery: self-delivered, or keep Uber/DoorDash as a delivery arm while pushing pickup direct?
-2. **Lightspeed now or later?** Integration is the biggest scope item (C7/D2).
-3. **Hosting**: stay with the PRD's Azure plan, or cheaper/simpler (e.g. a single VPS + managed Postgres)?
-4. **Order of attack**: start with Phase A (smoothness) — or prioritise C2 (Stripe webhook) because payments are the riskiest path?
+| # | Decision | Consequence |
+|---|---|---|
+| 1 | **Pickup-first.** Cannot compete with Uber on delivery for now. | Delivery is **out of scope** for v1. Optimise the pickup flow; keep the Uber Eats channel as-is. Delivery becomes a later phase. |
+| 2 | **Simpler hosting** (not the PRD's Azure App Service + Flexible Postgres). | Target a single small VPS or a simple managed platform (e.g. Docker Compose on one box, or a PaaS with managed Postgres). Revisit in Phase D. |
+| 3 | **Lightspeed POS integration: now.** | D/C7 moves into active scope. Order routing to the K-Series POS is required, not deferred. |
+| 4 | **Testing TODOs required**, now and later for business integration planning. | Every phase must ship tests; add a standing testing + business-integration planning backlog (see §7). |
+| 5 | Start with **Phase B** (Adelaide localisation). | Correctness before features. |
 
 ---
 
-## 6. Sources
+## 6. Testing & business-integration backlog (standing)
+
+**Now (automated, CI-blocking):**
+- [x] API unit tests (`tests/AsianTaste.API.Tests`) — 14 tests, run in CI
+- [ ] Settings/hours repository tests (Adelaide config correctness)
+- [ ] Menu + order unit tests against a test database
+- [ ] Order creation happy-path + validation tests
+- [ ] Frontend typecheck in CI (currently via `npm run build`)
+- [ ] Clear pre-existing lint debt, then make CI lint blocking
+
+**Later (business integration planning):**
+- [ ] **Lightspeed K-Series POS integration test plan** — sandbox account, order push, mapping of menu items to Lightspeed products, failure/retry behaviour
+- [ ] End-to-end order flow test (browser) — Playwright
+- [ ] Stripe test-mode end-to-end: payment intent → webhook → order paid
+- [ ] Load/soak test for the realtime WebSocket channel
+- [ ] Pre-launch acceptance checklist (menu accuracy, pricing, hours, GST)
+
+---
+
+## 7. Sources
 ABS Regional Population 2023–24; plan.sa.gov.au; economy.id.com.au; premier.sa.gov.au / business.sa.gov.au; IBISWorld 2024 via ABC News (13 Nov 2025); Fonto 2024; Statista (AU food delivery); NCR Voyix (Nov 2024); Paytronix 2024 Online Ordering Report; Flipdish 2025; ACCC card surcharges; RBA Standard No.3 (2016); replacethewaste.sa.gov.au; BeyondMenu (vendor example).
 
 > **Confidence note:** market figures are from press/vendor/gov pages, not primary rate cards. Commission ranges and gateway rates should be confirmed with the providers before financial modelling.

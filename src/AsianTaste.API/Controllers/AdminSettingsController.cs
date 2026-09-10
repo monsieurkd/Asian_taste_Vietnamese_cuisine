@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using AsianTaste.API.Repositories;
-using AsianTaste.API.Models.DTOs;
 
 namespace AsianTaste.API.Controllers;
 
 /// <summary>
 /// Controller for admin settings and restaurant configuration.
+/// Backed by the restaurant_settings / operating_hours tables (Adelaide, SA).
 /// </summary>
 [ApiController]
 [Route("api/admin/settings")]
@@ -15,10 +15,14 @@ namespace AsianTaste.API.Controllers;
 public class AdminSettingsController : ControllerBase
 {
     private readonly ILogger<AdminSettingsController> _logger;
+    private readonly IRestaurantSettingsRepository _settings;
 
-    public AdminSettingsController(ILogger<AdminSettingsController> logger)
+    public AdminSettingsController(
+        ILogger<AdminSettingsController> logger,
+        IRestaurantSettingsRepository settings)
     {
         _logger = logger;
+        _settings = settings;
     }
 
     /// <summary>
@@ -30,16 +34,7 @@ public class AdminSettingsController : ControllerBase
     {
         try
         {
-            // TODO: Implement settings repository
-            var settings = new Dictionary<string, string>
-            {
-                { "restaurant_name", "Asian Taste Vietnamese Cuisine" },
-                { "phone", "(555) 123-4567" },
-                { "email", "contact@asiantaste.com" },
-                { "address", "123 Main St, City, State 12345" },
-                { "pickup_minutes", "15" },
-                { "order_confirmation_message", "Thank you for your order!" },
-            };
+            var settings = await _settings.GetAllAsync(cancellationToken);
             return Ok(settings);
         }
         catch (Exception ex)
@@ -50,10 +45,28 @@ public class AdminSettingsController : ControllerBase
     }
 
     /// <summary>
+    /// Gets a single restaurant setting by key.
+    /// </summary>
+    [HttpGet("{key}")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> GetSetting(string key, CancellationToken cancellationToken)
+    {
+        var value = await _settings.GetAsync(key, cancellationToken);
+        if (value is null)
+        {
+            return NotFound(new { error = $"Setting '{key}' was not found" });
+        }
+
+        return Ok(new { key, value });
+    }
+
+    /// <summary>
     /// Updates a restaurant setting.
     /// </summary>
     [HttpPut("{key}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> UpdateSetting(
             string key,
             [FromBody] UpdateSettingDto dto,
@@ -71,8 +84,8 @@ public class AdminSettingsController : ControllerBase
                 return BadRequest(new { error = "Setting value is required" });
             }
 
-            // TODO: Implement settings update
-            _logger.LogInformation("Updating setting {Key} to {Value}", key, dto.Value);
+            await _settings.SetAsync(key, dto.Value, cancellationToken);
+            _logger.LogInformation("Updated setting {Key}", key);
             return NoContent();
         }
         catch (Exception ex)
@@ -93,8 +106,13 @@ public class AdminSettingsController : ControllerBase
     {
         try
         {
-            // TODO: Implement bulk settings update
-            _logger.LogInformation("Updating {Count} settings", settings.Count);
+            if (settings is null || settings.Count == 0)
+            {
+                return BadRequest(new { error = "At least one setting is required" });
+            }
+
+            await _settings.SetManyAsync(settings, cancellationToken);
+            _logger.LogInformation("Updated {Count} settings", settings.Count);
             return NoContent();
         }
         catch (Exception ex)
@@ -105,7 +123,7 @@ public class AdminSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Gets restaurant operating hours.
+    /// Gets restaurant operating hours (Adelaide local time).
     /// </summary>
     [HttpGet("hours")]
     [ProducesResponseType(typeof(List<DayHoursDto>), StatusCodes.Status200OK)]
@@ -113,17 +131,16 @@ public class AdminSettingsController : ControllerBase
     {
         try
         {
-            // TODO: Implement hours repository
-            var hours = new List<DayHoursDto>
+            var records = await _settings.GetHoursAsync(cancellationToken);
+
+            var hours = records.Select(r => new DayHoursDto
             {
-                new() { DayOfWeek = "Monday", OpenTime = "10:00", CloseTime = "21:00", IsClosed = false },
-                new() { DayOfWeek = "Tuesday", OpenTime = "10:00", CloseTime = "21:00", IsClosed = false },
-                new() { DayOfWeek = "Wednesday", OpenTime = "10:00", CloseTime = "21:00", IsClosed = false },
-                new() { DayOfWeek = "Thursday", OpenTime = "10:00", CloseTime = "21:00", IsClosed = false },
-                new() { DayOfWeek = "Friday", OpenTime = "10:00", CloseTime = "22:00", IsClosed = false },
-                new() { DayOfWeek = "Saturday", OpenTime = "11:00", CloseTime = "22:00", IsClosed = false },
-                new() { DayOfWeek = "Sunday", OpenTime = "11:00", CloseTime = "21:00", IsClosed = false },
-            };
+                DayOfWeek = DayName(r.DayOfWeek),
+                OpenTime = FormatTime(r.OpenTime),
+                CloseTime = FormatTime(r.CloseTime),
+                IsClosed = r.IsClosed,
+            }).ToList();
+
             return Ok(hours);
         }
         catch (Exception ex)
@@ -134,10 +151,12 @@ public class AdminSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Updates operating hours for a specific day.
+    /// Updates operating hours for a specific day. Accepts either a day name
+    /// (Monday..Sunday) or an ISO day number (1..7).
     /// </summary>
     [HttpPut("hours/{day}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> UpdateOperatingHours(
             string day,
             [FromBody] UpdateDayHoursDto dto,
@@ -145,8 +164,20 @@ public class AdminSettingsController : ControllerBase
     {
         try
         {
-            // TODO: Implement hours update
-            _logger.LogInformation("Updating hours for {Day}", day);
+            if (!TryParseDay(day, out var dayOfWeek))
+            {
+                return BadRequest(new { error = $"'{day}' is not a valid day. Use Monday..Sunday or 1..7." });
+            }
+
+            if (!TryParseTime(dto.OpenTime, out var openTime) || !TryParseTime(dto.CloseTime, out var closeTime))
+            {
+                return BadRequest(new { error = "OpenTime and CloseTime must be in HH:mm format." });
+            }
+
+            var isClosed = dto.IsClosed ?? false;
+
+            await _settings.SetHoursAsync(dayOfWeek, openTime, closeTime, isClosed, cancellationToken);
+            _logger.LogInformation("Updated hours for {Day}", day);
             return NoContent();
         }
         catch (Exception ex)
@@ -154,6 +185,59 @@ public class AdminSettingsController : ControllerBase
             _logger.LogError(ex, "Error updating operating hours for {Day}", day);
             return StatusCode(500, new { error = "An error occurred while updating operating hours" });
         }
+    }
+
+    private static string DayName(int isoDay) => isoDay switch
+    {
+        1 => "Monday",
+        2 => "Tuesday",
+        3 => "Wednesday",
+        4 => "Thursday",
+        5 => "Friday",
+        6 => "Saturday",
+        7 => "Sunday",
+        _ => $"Day {isoDay}",
+    };
+
+    private static bool TryParseDay(string day, out int isoDay)
+    {
+        if (int.TryParse(day, out var numeric) && numeric is >= 1 and <= 7)
+        {
+            isoDay = numeric;
+            return true;
+        }
+
+        var names = new[] { "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday" };
+        var index = Array.IndexOf(names, day.Trim().ToLowerInvariant());
+        if (index >= 0)
+        {
+            isoDay = index + 1;
+            return true;
+        }
+
+        isoDay = 0;
+        return false;
+    }
+
+    private static string? FormatTime(TimeSpan? time) => time?.ToString(@"hh\:mm");
+
+    private static bool TryParseTime(string? value, out TimeSpan? time)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            // Treat blank as "not set" rather than an error (e.g. closed days).
+            time = null;
+            return true;
+        }
+
+        if (TimeSpan.TryParse(value, out var parsed))
+        {
+            time = parsed;
+            return true;
+        }
+
+        time = null;
+        return false;
     }
 }
 
