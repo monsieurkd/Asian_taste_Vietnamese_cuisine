@@ -29,6 +29,36 @@ jobs:
       - name: Test
         run: dotnet test AsianTaste.sln --no-build --configuration Release --verbosity normal
 
+      - name: Verify test wiring
+        # Fails when a tracked test file cannot actually run — e.g. a spec whose
+        # runner is not installed, or a test project missing from the solution.
+        # Guards against the checkout.spec.ts class of "fake coverage".
+        run: ./scripts/check-test-wiring.sh
+
+      - name: Verify test health
+        # Fails when the suite passes but proves nothing: skipped tests, an
+        # assertion-free test file, zero tests run, or a suite that shrank
+        # below .test-baseline. This is the "do not fail quietly" guardrail.
+        run: ./scripts/check-test-health.sh
+
+  guardrails:
+    name: Guardrails (CI integrity)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the change-size check has a real diff base.
+          fetch-depth: 0
+
+      - name: Verify CI integrity
+        # Fails when the guardrails themselves are weakened (a blocking step
+        # gains continue-on-error, a guardrail script is deleted, the workflow
+        # stops triggering), or when a change is too large to review reliably.
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: ./scripts/check-ci-integrity.sh
+
   frontend:
     name: Frontend (${{ matrix.app }})
     runs-on: ubuntu-latest

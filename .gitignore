@@ -22,7 +22,12 @@ yarn-error.log*
 # Local UI screenshots / tooling config (not for the repo)
 menu/admin_ui/
 reasonix.toml
-.reasonix/
+
+# Reasonix runtime state (tasks, logs, telemetry) — local only.
+.reasonix/*
+# ...but the custom skills/agents ARE shared with the team.
+!.reasonix/skills/
+!.reasonix/skills/**
 
 # Local secrets / environment-specific config (use .example templates + user-secrets)
 src/AsianTaste.API/appsettings.Development.json

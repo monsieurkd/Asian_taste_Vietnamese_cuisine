@@ -1,0 +1,9 @@
+# Test-count floor enforced by scripts/check-test-health.sh
+#
+# The API suite must run at least this many tests. A lower count fails the build,
+# because a shrinking suite means tests were deleted, skipped, or filtered out.
+#
+# When you legitimately add tests, raise this number in the same commit.
+# When you legitimately REMOVE a test, lower it in a *separate, reviewed* commit
+# and say why — otherwise the guardrail cannot tell sabotage from refactoring.
+45
