@@ -1,6 +1,6 @@
 import { type LucideIcon, TrendingUp, TrendingDown } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import { cn, formatCurrency } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 interface StatCardProps {
   title: string

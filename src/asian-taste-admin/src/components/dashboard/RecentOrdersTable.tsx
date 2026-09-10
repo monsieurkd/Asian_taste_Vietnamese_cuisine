@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatDate, getStatusColor } from "@/lib/utils"
+import { formatDate } from "@/lib/utils"
 import type { RecentOrder } from "@/types"
 
 interface RecentOrdersTableProps {

@@ -16,7 +16,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatCurrency } from "@/lib/utils"
-import type { DashboardSummary, DailyStats } from "@/types"
 
 type DateRange = "7d" | "30d" | "90d" | "custom"
 
@@ -41,20 +40,6 @@ export function ReportsPage() {
     queryFn: () => ordersApi.getDailyStats(),
     refetchInterval: 60000,
   })
-
-  // Calculate date range for display
-  const getDateRangeLabel = () => {
-    switch (dateRange) {
-      case "7d":
-        return "Last 7 Days"
-      case "30d":
-        return "Last 30 Days"
-      case "90d":
-        return "Last 90 Days"
-      case "custom":
-        return "Custom Range"
-    }
-  }
 
   // Calculate mock trend percentages
   const calculateTrend = (current: number, previous: number) => {

@@ -3,17 +3,17 @@
     "DefaultConnection": "Host=localhost;Port=5432;Database=AsianTaste_Dev;Username=postgres;Password="
   },
   "Jwt": {
-    "SecretKey": "AsianTasteSecretKey2025ForJWTTokenGenerationMin32Chars",
+    "SecretKey": "change-me-to-a-long-random-development-secret",
     "Issuer": "AsianTasteAPI",
     "Audience": "AsianTasteAdmin",
     "ExpirationMinutes": "1440"
   },
   "Encryption": {
-    "Key": "/73HwFzlYTUsmAyvQrd82ao/T3BnkeyExdSOUgUO/Fc="
+    "Key": ""
   },
   "Stripe": {
-    "SecretKey": "sk_test_51T1mTlIIFhqfQ0ckTllFJ3TuWSxwFwNJgu2r3LdC1ZO2VtekZAaI666iQYx8LOvKfp4hKAb1F3yMauvNTyK3Ij6m007ucXJ6EL",
-    "PublishableKey": "pk_test_51T1mTlIIFhqfQ0ckyojjFBxoScpRXLU7tfb1rYNRIPGnVPXeHBt2RWzKG2ddF5xHd62oBqvewwObubYbBckZfmSi005STXaYNA",
+    "SecretKey": "",
+    "PublishableKey": "",
     "WebhookSecret": "",
     "Currency": "aud"
   },

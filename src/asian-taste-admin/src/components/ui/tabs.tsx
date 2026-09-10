@@ -2,10 +2,11 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 interface TabsProps {
-  defaultValue: string
-  value: string
-  onValueChange: (value: string) => void
+  defaultValue?: string
+  value?: string
+  onValueChange?: (value: string) => void
   children: React.ReactNode
+  className?: string
 }
 
 const TabsContext = React.createContext<{
@@ -16,10 +17,25 @@ const TabsContext = React.createContext<{
   onValueChange: () => {},
 })
 
-export function Tabs({ defaultValue, value, onValueChange, children }: TabsProps) {
+export function Tabs({ defaultValue, value, onValueChange, children, className }: TabsProps) {
+  const [uncontrolledValue, setUncontrolledValue] = React.useState(defaultValue ?? "")
+
+  const isControlled = value !== undefined
+  const currentValue = isControlled ? value : uncontrolledValue
+
+  const handleValueChange = React.useCallback(
+    (next: string) => {
+      if (!isControlled) {
+        setUncontrolledValue(next)
+      }
+      onValueChange?.(next)
+    },
+    [isControlled, onValueChange]
+  )
+
   return (
-    <TabsContext.Provider value={{ value, onValueChange }}>
-      {children}
+    <TabsContext.Provider value={{ value: currentValue, onValueChange: handleValueChange }}>
+      <div className={className}>{children}</div>
     </TabsContext.Provider>
   )
 }
@@ -50,7 +66,7 @@ interface TabsTriggerProps {
 }
 
 export function TabsTrigger({ children, className, value }: TabsTriggerProps) {
-  const { currentValue, onValueChange } = React.useContext(TabsContext)
+  const { value: currentValue, onValueChange } = React.useContext(TabsContext)
   const isSelected = currentValue === value
 
   return (
@@ -77,7 +93,7 @@ interface TabsContentProps {
 }
 
 export function TabsContent({ children, className, value }: TabsContentProps) {
-  const { currentValue } = React.useContext(TabsContext)
+  const { value: currentValue } = React.useContext(TabsContext)
 
   if (currentValue !== value) {
     return null

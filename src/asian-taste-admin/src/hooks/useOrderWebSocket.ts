@@ -11,7 +11,7 @@ export function useOrderWebSocket() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected")
 
   // Play notification sound

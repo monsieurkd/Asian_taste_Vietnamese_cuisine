@@ -14,7 +14,7 @@ import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
  * Dashboard page showing overview of restaurant operations.
  */
 export function DashboardPage() {
-  const { connectionState, isConnected } = useOrderWebSocket()
+  const { isConnected } = useOrderWebSocket()
 
   const { data: summary, isLoading } = useQuery({
     queryKey: ["dashboard-summary"],

@@ -8,10 +8,19 @@ import {
   Elements,
 } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
+import type { Stripe } from '@stripe/stripe-js';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
 
 // Load Stripe outside of component to avoid recreating on every render
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51T1mTlIIFhqfQ0ckyojjFBxoScpRXLU7tfb1rYNRIPGnVPXeHBt2RWzKG2ddF5xHd62oBqvewwObubYbBckZfmSi005STXaYNA');
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+
+if (!stripePublishableKey) {
+  console.warn(
+    'VITE_STRIPE_PUBLISHABLE_KEY is not set. Copy .env.example to .env.development and add your Stripe publishable key.'
+  );
+}
+
+const stripePromise = loadStripe(stripePublishableKey ?? '');
 
 export interface StripePaymentResult {
   success: boolean;
@@ -159,7 +168,7 @@ export const StripeCardPaymentForm: FC<StripeCardPaymentFormProps> = ({
   onSubmit,
   orderAmount,
 }) => {
-  const [stripe, setStripe] = useState<typeof import('@stripe/stripe-js').Stripe | null>(null);
+  const [stripe, setStripe] = useState<Stripe | null>(null);
 
   useEffect(() => {
     stripePromise.then((stripeInstance) => {

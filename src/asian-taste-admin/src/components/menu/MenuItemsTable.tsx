@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Search, Edit, Trash2, Power, PowerOff } from "lucide-react"
-import { menuAdminApi, type MenuItemSummary } from "@/api/menuApi"
+import { menuAdminApi } from "@/api/menuApi"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"

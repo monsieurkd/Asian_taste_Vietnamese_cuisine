@@ -7,7 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { OrderStatus } from "@/types"
 
 interface OrderFiltersProps {
   searchQuery: string

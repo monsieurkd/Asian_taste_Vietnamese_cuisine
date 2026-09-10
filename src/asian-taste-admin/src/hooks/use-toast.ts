@@ -7,17 +7,15 @@ export type Toast = {
   title?: string
   description?: string
   variant?: ToastType
+  open?: boolean
+}
+
+export type ToasterToast = Toast & {
+  id: string
 }
 
 const TOAST_LIMIT = 3
 const TOAST_REMOVE_DELAY = 5000
-
-type ToasterToast = Toast & {
-  id: string
-  title?: string
-  description?: string
-  variant?: ToastType
-}
 
 let count = 0
 
@@ -26,17 +24,11 @@ function genId() {
   return count.toString()
 }
 
-type ActionType = {
-  ADD_TOAST: ToasterToast
-  UPDATE_TOAST: Partial<ToasterToast> & { id: string }
-  DISMISS_TOAST: ToasterToast["id"]
-  REMOVE_TOAST: ToasterToast["id"]
-}
-
-type Action = {
-  type: ActionType[keyof ActionType]
-  [key: string]: unknown
-}
+type Action =
+  | { type: "ADD_TOAST"; toast: ToasterToast }
+  | { type: "UPDATE_TOAST"; toast: Partial<ToasterToast> & { id: string } }
+  | { type: "DISMISS_TOAST"; toastId?: string }
+  | { type: "REMOVE_TOAST"; toastId?: string }
 
 interface State {
   toasts: ToasterToast[]
@@ -50,11 +42,8 @@ const addToRemoveQueue = (toastId: string) => {
   }
 
   const timeout = setTimeout(() => {
-    toastDispatch({
-      type: "REMOVE_TOAST",
-      toastId,
-    })
     toastTimeouts.delete(toastId)
+    dispatch({ type: "REMOVE_TOAST", toastId })
   }, TOAST_REMOVE_DELAY)
 
   toastTimeouts.set(toastId, timeout)
@@ -72,7 +61,7 @@ export const reducer = (state: State, action: Action): State => {
       return {
         ...state,
         toasts: state.toasts.map((t) =>
-          t.id === action.toastId ? { ...t, ...action.toast } : t
+          t.id === action.toast.id ? { ...t, ...action.toast } : t
         ),
       }
 
@@ -99,6 +88,7 @@ export const reducer = (state: State, action: Action): State => {
         ),
       }
     }
+
     case "REMOVE_TOAST":
       if (action.toastId === undefined) {
         return {
@@ -126,13 +116,13 @@ function dispatch(action: Action) {
 
 type ToastProps = Omit<Toast, "id">
 
-function toast({ ...props }: ToastProps) {
+function toast(props: ToastProps) {
   const id = genId()
 
-  const update = (props: ToasterToast) =>
+  const update = (updated: Partial<ToasterToast>) =>
     dispatch({
       type: "UPDATE_TOAST",
-      toast: { ...props, id },
+      toast: { ...updated, id },
     })
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
@@ -146,7 +136,7 @@ function toast({ ...props }: ToastProps) {
   })
 
   return {
-    id: id,
+    id,
     dismiss,
     update,
   }
@@ -163,7 +153,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     }
-  }, [state])
+  }, [])
 
   return {
     toasts: state.toasts,
