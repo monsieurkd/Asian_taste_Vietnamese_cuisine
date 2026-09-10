@@ -87,13 +87,16 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
       className="card card-hover flex h-full flex-col overflow-hidden group"
     >
       {/* Image Section — omitted entirely when the dish has no photo: the title
-          sits directly below, so a placeholder would just repeat it. */}
+          sits directly below, so a placeholder would just repeat it.
+          `w-full` is required: inside a flex column the aspect box would
+          otherwise stretch to the row height instead of computing 16:9 from
+          the card width. */}
       {item.imageUrl && (
-        <div className="relative aspectvideo shrink-0">
+        <div className="relative aspect-video w-full shrink-0">
           <DishImage
             src={item.imageUrl}
             name={item.name}
-            className="h-full w-full"
+            className="absolute inset-0"
             imgClassName="transition-transform duration-300 group-hover:scale-105"
           />
 

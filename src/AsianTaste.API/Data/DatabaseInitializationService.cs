@@ -82,6 +82,10 @@ public class DatabaseInitializationService : IDatabaseInitializationService
         var adelaideSql = await GetMigrationScriptAsync("09_fix_adelaide_settings.sql");
         await ExecuteScriptAsync(adelaideSql, cancellationToken);
 
+        // Clear unverified dish image references (see the migration header)
+        var dishImagesSql = await GetMigrationScriptAsync("10_clear_unverified_dish_images.sql");
+        await ExecuteScriptAsync(dishImagesSql, cancellationToken);
+
         // Auto-seed on first initialization (only if database was just created)
         if (!wasAlreadyInitialized)
         {

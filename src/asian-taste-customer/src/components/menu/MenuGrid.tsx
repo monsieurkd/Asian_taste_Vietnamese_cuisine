@@ -12,7 +12,7 @@ interface MenuGridProps {
 function MenuItemCardSkeleton() {
   return (
     <div className="card overflow-hidden">
-      <div className="aspectvideo animate-shimmer" />
+      <div className="aspect-video animate-shimmer" />
       <div className="p-4">
         <div className="mb-2 h-6 w-3/4 animate-shimmer rounded" />
         <div className="mb-1 h-4 w-full animate-shimmer rounded" />

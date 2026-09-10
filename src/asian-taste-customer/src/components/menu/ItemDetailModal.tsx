@@ -311,17 +311,19 @@ export function ItemDetailModal() {
 
           {/* Scrollable Content */}
           <div className="max-h-[85vh] overflow-y-auto">
-            {/* Image Section — keeps a branded fallback: an empty hero region in
-                a modal would itself read as broken. */}
-            <div className="relative aspect-[16/9] overflow-hidden rounded-t-2xl">
-              <DishImage
-                src={item.imageUrl}
-                name={item.name}
-                showFallback
-                className="h-full w-full"
-              />
+            {/* Image Section — rendered only when the dish actually has a photo.
+                With no photo, an empty hero region (gradient or placeholder)
+                reads as a broken image on the one screen where the food must
+                sell itself, so the modal simply starts at the dish content. */}
+            {item.imageUrl && (
+              <div className="relative aspect-video w-full overflow-hidden rounded-t-2xl">
+                <DishImage
+                  src={item.imageUrl}
+                  name={item.name}
+                  className="absolute inset-0"
+                />
 
-              {/* Badges Overlay */}
+                {/* Badges Overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
               <div className="absolute bottom-4 left-4 flex flex-wrap gap-2">
                 {item.isPopular && (
@@ -351,7 +353,8 @@ export function ItemDetailModal() {
                   </span>
                 )}
               </div>
-            </div>
+              </div>
+            )}
 
             {/* Content Section */}
             <div className="p-6">

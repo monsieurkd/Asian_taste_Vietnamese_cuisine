@@ -61,18 +61,16 @@ export function CategoryNav({ categories, popularCount = 0 }: CategoryNavProps) 
   return (
     <nav className="sticky top-14 z-40 bg-cream border-b border-tan md:top-18">
       <div className="relative mx-auto max-w-7xl">
-        {/* Edge fades: the row scrolls but the scrollbar is hidden, so without a
-            visual cue the clipped categories look unreachable rather than
-            scrollable. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-cream to-transparent"
-        />
-        {/* Desktop - Horizontal scroll */}
-        <div className="hidden md:flex items-center gap-1 overflow-x-auto pl-6 pr-12 scrollbar-hide scroll-smooth snap-x snap-mandatory">
+        {/* Desktop — wrap rather than scroll.
+            The row overflows its container (measured: 3006px of chips in a
+            1280px viewport), and a hidden-scrollbar overflow-x row gave no
+            affordance that more categories existed, so the clipped chips read
+            as unreachable. With ample width on desktop, wrapping shows every
+            category at once. */}
+        <div className="hidden md:flex flex-wrap items-center gap-1 px-6">
           <Link
             to="/menu"
-            className={`snap-start flex items-center gap-2 px-5 py-4 text-sm font-medium transition-all border-b-3 whitespace-nowrap ${
+            className={`flex items-center gap-2 px-5 py-4 text-sm font-medium transition-all border-b-3 whitespace-nowrap ${
               !activeCategory && !activePopular
                 ? 'text-primary border-primary'
                 : 'text-gray-600 border-transparent hover:text-primary hover:bg-tan'
@@ -84,7 +82,7 @@ export function CategoryNav({ categories, popularCount = 0 }: CategoryNavProps) 
             <Link
               key={item.id}
               to={item.id === 'popular' ? '/menu?popular=true' : `/menu?category=${item.id}`}
-              className={`snap-start flex items-center gap-2 px-5 py-4 text-sm font-medium transition-all border-b-3 whitespace-nowrap ${
+              className={`flex items-center gap-2 px-5 py-4 text-sm font-medium transition-all border-b-3 whitespace-nowrap ${
                 isActive(item.id)
                   ? 'text-primary border-primary'
                   : 'text-gray-600 border-transparent hover:text-primary hover:bg-tan'
@@ -101,9 +99,16 @@ export function CategoryNav({ categories, popularCount = 0 }: CategoryNavProps) 
           ))}
         </div>
 
-        {/* Mobile - Horizontal scroll */}
-        <div className="md:hidden">
-          <div className="flex gap-2 overflow-x-auto px-4 py-3 scrollbar-hide">
+        {/* Mobile - Horizontal scroll.
+            Scrolling horizontally is right for a phone, but a hidden-scrollbar
+            row gave no cue that more categories existed. A wider, stronger fade
+            plus a visible hint make the overflow read as scrollable. */}
+        <div className="relative md:hidden">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 bg-gradient-to-l from-cream via-cream/80 to-transparent"
+          />
+          <div className="flex gap-2 overflow-x-auto px-4 py-3 pr-14 scrollbar-hide">
             <Link
               to="/menu"
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-colors ${

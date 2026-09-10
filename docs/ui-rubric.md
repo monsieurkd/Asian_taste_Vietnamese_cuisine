@@ -96,6 +96,23 @@ Fold them into the single `**Overall: n/10**` (severity-weighted):
 - **Accent is a spice.** If `primary` red appears on more than ~1–2 elements per viewport,
   or `accent` gold appears on non-highlight UI, flag `[med]`+.
 
+## Known false positives (verified against the DOM — do not "fix" these)
+
+The judge is a vision model reading a static frame, and it has produced findings that are
+demonstrably wrong. Each was checked with a DOM probe before being rejected:
+
+| Reported `[high]` | Reality |
+|---|---|
+| Item-detail modal "vertically clipped, Add to Cart cut off" | The button measured fully on-screen (bottom 773px in an 800px viewport); the modal's scroll container reported `canScroll: true`. Scrollable by design. |
+| "View Menu" uses "a raw white border" | Computed style is `rgb(245, 240, 230)` — exactly the `cream` (#F5F0E6) token, via `.btn-outline-light`. |
+| Super Deal card "raw gold… not the `accent` token" | The classes are `border-accent` / `bg-accent/10`, and `accent` **is** #D4AF37. |
+| Search page shows "only a grey spinner" with no empty state | No spinner exists; the empty state renders "Search Our Menu" copy plus a clear-filters action. |
+| Menu prices "render as bare integers (`$15.5`)" | Every price on the page renders with two decimals (`$15.50`); the API returns `15.50`. |
+| Category row "clipped with no scroll affordance" (mobile) | Intentional horizontal scroll with a visible edge fade; verified present in the DOM. |
+
+**Before acting on a `[high]`, check the DOM.** If the computed style or geometry contradicts
+the finding, record it here rather than changing working code.
+
 ## What this loop does NOT catch
 
 - Real interaction bugs, keyboard flow, motion feel — run the app and click through; the
