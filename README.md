@@ -151,6 +151,29 @@ cd src/asian-taste-admin    && npm run lint
 Payment mock fixtures live in `tests/payloads/`; `tests/test-payment-mock.sh`
 exercises the mock payment gateway.
 
+### Guardrails (run before calling a change done)
+
+```bash
+./scripts/check-test-wiring.sh    # every tracked test file can actually run
+./scripts/check-test-health.sh    # tests really ran; none skipped; count >= .test-baseline
+./scripts/check-ci-integrity.sh   # guardrails intact; change is reviewable
+```
+
+See [`docs/GUARDRAILS.md`](docs/GUARDRAILS.md).
+
+### UI quality loop (frontend equivalent of a test suite)
+
+```bash
+npm install                       # repo root: playwright-core + dotenv
+# with the API (:5070) and a frontend dev server running:
+npm run ui:shots                  # screenshots the key screens -> ui-shots/
+npm run ui:judge                  # a vision LLM scores them against docs/ui-rubric.md
+```
+
+Needs a vision API key in `.env.local` — see [`.env.example`](.env.example) and
+[`docs/ui-qa-loop.md`](docs/ui-qa-loop.md). Fix `[high]` findings against the tokens,
+re-run, repeat.
+
 ---
 
 ## Configuration notes

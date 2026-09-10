@@ -1,0 +1,16 @@
+{
+  "name": "asian-taste-tooling",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Repo-level tooling for Asian Taste: the UI quality loop (screenshot -> vision judge).",
+  "scripts": {
+    "ui:shots": "node scripts/ui-shots.mjs",
+    "ui:judge": "node scripts/ui-judge.mjs",
+    "ui:qa": "node scripts/ui-shots.mjs && node scripts/ui-judge.mjs"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "playwright-core": "^1.62.1"
+  }
+}

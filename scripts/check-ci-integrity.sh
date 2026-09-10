@@ -51,6 +51,11 @@ declare -a REQUIRED=(
   "$WORKFLOW"
   "scripts/check-test-wiring.sh"
   "scripts/check-test-health.sh"
+  "scripts/check-ci-integrity.sh"
+  "scripts/ui-shots.mjs"
+  "scripts/ui-judge.mjs"
+  "docs/ui-rubric.md"
+  "docs/GUARDRAILS.md"
   "README.md"
 )
 for p in "${REQUIRED[@]}"; do

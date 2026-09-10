@@ -37,3 +37,6 @@ src/asian-taste-admin/.env.development
 .env
 .env.local
 .env.*.local
+
+# UI quality loop output (screenshots + judge report are artifacts, not source)
+ui-shots/
