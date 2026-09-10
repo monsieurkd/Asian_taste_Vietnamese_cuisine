@@ -1,4 +1,4 @@
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import type { FC } from 'react';
 import type { OrderType, PickupTimeType } from '@/types/menu';
 
@@ -29,7 +29,7 @@ export const ContactInfoForm: FC<ContactInfoFormProps> = ({
     register,
     handleSubmit,
     formState: { errors },
-    watch,
+    control,
   } = useForm<ContactInfoData>({
     defaultValues: {
       name: initialData?.name || '',
@@ -40,8 +40,11 @@ export const ContactInfoForm: FC<ContactInfoFormProps> = ({
     },
   });
 
-  const orderType = watch('orderType');
-  const pickupTimeType = watch('pickupTimeType');
+  // `useWatch` rather than `watch()`: react-hook-form's `watch` returns a
+  // function that React Compiler cannot memoize, so it skips this whole
+  // component. useWatch subscribes to a single field and is memoization-safe.
+  const orderType = useWatch({ control, name: 'orderType' });
+  const pickupTimeType = useWatch({ control, name: 'pickupTimeType' });
 
   const handleFormSubmit = (data: ContactInfoData) => {
     onSubmit(data);
