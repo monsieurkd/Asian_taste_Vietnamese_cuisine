@@ -41,6 +41,10 @@ builder.Services.AddScoped<OrderService>();
 builder.Services.AddScoped<CustomerService>();
 builder.Services.AddSingleton<JwtService>();
 
+// Order confirmation email queue + background sender
+builder.Services.AddSingleton<IOrderEmailQueue, OrderEmailQueue>();
+builder.Services.AddHostedService<OrderEmailBackgroundService>();
+
 // Email service
 builder.Services.AddScoped<IEmailService, SendGridEmailService>();
 builder.Services.AddHttpClient("SendGrid");

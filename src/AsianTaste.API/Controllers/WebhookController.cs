@@ -101,134 +101,58 @@ public class WebhookController : ControllerBase
     /// <summary>
     /// Simulates a Stripe webhook for testing purposes.
     /// POST: /api/webhook/simulate
-    /// Only available in development mode.
+    /// Only available to local requests.
     /// </summary>
     /// <param name="eventType">Type of event to simulate (default: payment_intent.succeeded)</param>
+    /// <param name="orderId">Order ID to attach to the simulated event.</param>
     /// <returns>200 OK with simulation result</returns>
     [HttpPost("simulate")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> SimulateWebhook([FromQuery] string eventType = "payment_intent.succeeded")
+    public async Task<IActionResult> SimulateWebhook(
+        [FromQuery] string eventType = "payment_intent.succeeded",
+        [FromQuery] int orderId = 1)
     {
         if (!HttpContext.Request.IsFromLocal())
         {
             return Forbid();
         }
 
-        // Create a mock Stripe event payload
-        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var orderId = 1; // Default test order ID
         var paymentIntentId = $"pi_test_{Guid.NewGuid():N}";
-
-        string payload = eventType.ToLowerInvariant() switch
+        var status = eventType.ToLowerInvariant() switch
         {
-            "payment_intent.succeeded" => CreateMockStripeEvent("payment_intent.succeeded", paymentIntentId, orderId, "succeeded"),
-            "payment_intent.payment_failed" => CreateMockStripeEvent("payment_intent.payment_failed", paymentIntentId, orderId, "requires_payment_method"),
-            "payment_intent.canceled" => CreateMockStripeEvent("payment_intent.canceled", paymentIntentId, orderId, "canceled"),
-            "charge.refunded" => CreateMockRefundEvent(paymentIntentId),
-            _ => CreateMockStripeEvent(eventType, paymentIntentId, orderId, "succeeded")
+            "payment_intent.payment_failed" => "requires_payment_method",
+            "payment_intent.canceled" => "canceled",
+            _ => "succeeded",
         };
 
-        var testSignature = ComputeTestStripeSignature(payload, timestamp);
+        _logger.LogInformation("Simulating Stripe webhook event: {EventType} for order {OrderId}", eventType, orderId);
 
-        _logger.LogInformation("Simulating Stripe webhook event: {EventType}", eventType);
+        // Run the handler directly rather than signing and verifying a mock JSON
+        // payload: Stripe's SDK deserializer rejects synthetic event JSON. The
+        // signature-verification path is covered by unit tests and real deliveries.
+        if (_webhookService is not StripeWebhookService stripeService)
+        {
+            return Ok(new
+            {
+                message = "Webhook simulation is only available for the Stripe gateway",
+                eventType,
+                success = false,
+            });
+        }
 
-        var result = await _webhookService.ProcessWebhookAsync(payload, testSignature);
+        var result = await stripeService.SimulateEventAsync(eventType, paymentIntentId, orderId, status);
 
         return Ok(new
         {
             message = "Stripe webhook simulation completed",
-            eventType = eventType,
+            eventType,
+            orderId,
             success = result.Success,
             error = result.ErrorMessage
         });
     }
 
-    /// <summary>
-    /// Creates a mock Stripe event payload for testing.
-    /// </summary>
-    private string CreateMockStripeEvent(string eventType, string paymentIntentId, int orderId, string status)
-    {
-        var mockEvent = new
-        {
-            id = $"evt_test_{Guid.NewGuid():N}",
-            @object = "event",
-            api_version = "2020-08-27",
-            created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            type = eventType,
-            data = new
-            {
-                @object = "payment_intent",
-                id = paymentIntentId,
-                status = status,
-                amount = 2550, // $25.50 in cents
-                currency = "aud",
-                metadata = new
-                {
-                    order_id = orderId.ToString(),
-                    order_number = $"AT-{orderId:D6}"
-                }
-            }
-        };
-
-        return System.Text.Json.JsonSerializer.Serialize(mockEvent);
-    }
-
-    /// <summary>
-    /// Creates a mock Stripe refund event payload for testing.
-    /// </summary>
-    private string CreateMockRefundEvent(string paymentIntentId)
-    {
-        var mockEvent = new
-        {
-            id = $"evt_test_{Guid.NewGuid():N}",
-            @object = "event",
-            api_version = "2020-08-27",
-            created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            type = "charge.refunded",
-            data = new
-            {
-                @object = "charge",
-                id = $"ch_test_{Guid.NewGuid():N}",
-                amount = 2550,
-                amount_refunded = 2550,
-                currency = "aud",
-                payment_intent = paymentIntentId,
-                refunded = true
-            }
-        };
-
-        return System.Text.Json.JsonSerializer.Serialize(mockEvent);
-    }
-
-    /// <summary>
-    /// Computes a test Stripe webhook signature for simulation.
-    /// </summary>
-    private string ComputeTestStripeSignature(string payload, long timestamp)
-    {
-        // For testing, we use the test webhook secret
-        const string testSecret = "whsec_test_webhook_secret_for_development";
-        var payloadToSign = $"{timestamp}.{payload}";
-
-        using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(testSecret));
-        var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(payloadToSign));
-        var signature = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-
-        return $"t={timestamp},v1={signature}";
-    }
-
-    /// <summary>
-    /// Computes a test signature for webhook simulation.
-    /// In production, this would use the actual webhook secret.
-    /// </summary>
-    private string ComputeTestSignature(string payload)
-    {
-        // For testing, we use a fixed test secret
-        const string testSecret = "test_webhook_secret_for_development";
-        using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(testSecret));
-        var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(payload));
-        return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-    }
 }
 
 /// <summary>

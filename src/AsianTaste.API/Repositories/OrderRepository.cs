@@ -298,9 +298,12 @@ public class OrderRepository : IOrderRepository
         using var connection = _dbConnectionFactory.CreateConnection();
         connection.Open();
 
+        // The status column is a PostgreSQL enum (order_status). The parameter is
+        // sent as text, so cast explicitly to avoid:
+        //   42804: column "status" is of type order_status but expression is of type text
         const string sql = @"
             UPDATE orders
-            SET status = @Status, updated_at = @UpdatedAt
+            SET status = @Status::order_status, updated_at = @UpdatedAt
             WHERE id = @OrderId";
 
         await connection.ExecuteAsync(
