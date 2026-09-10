@@ -1,8 +1,10 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {}
+// `type` (not `interface`): an interface with no members is identical to its
+// supertype, which the linter rejects. A type alias expresses the same thing
+// without the empty-body lint error.
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement>
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => {

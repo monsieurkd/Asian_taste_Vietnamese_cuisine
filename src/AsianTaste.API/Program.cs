@@ -19,18 +19,16 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using EnumOrderType = AsianTaste.API.Models.Enums.OrderType;
 
-// Configure PostgreSQL enum mappings BEFORE any connections are created
-// This must happen at app startup before any database operations
-NpgsqlConnection.GlobalTypeMapper.MapEnum<EnumOrderType>("order_type");
-NpgsqlConnection.GlobalTypeMapper.MapEnum<OrderStatus>("order_status");
-NpgsqlConnection.GlobalTypeMapper.MapEnum<PaymentMethod>("payment_method");
-NpgsqlConnection.GlobalTypeMapper.MapEnum<AsianTaste.API.Models.Enums.PaymentStatus>("payment_status");
-NpgsqlConnection.GlobalTypeMapper.MapEnum<SyncStatus>("sync_status");
+// PostgreSQL enum mappings are declared on the shared NpgsqlDataSource inside
+// DbConnectionFactory. (The obsolete NpgsqlConnection.GlobalTypeMapper approach
+// used process-global mutable state and was removed in Npgsql 7+.)
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddScoped<IDbConnectionFactory, DbConnectionFactory>();
+// Singleton: the NpgsqlDataSource behind it is expensive to build and is
+// designed to be shared for the lifetime of the application.
+builder.Services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
 builder.Services.AddScoped<IDatabaseInitializationService, DatabaseInitializationService>();
 builder.Services.AddScoped<IMenuRepository, MenuRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();

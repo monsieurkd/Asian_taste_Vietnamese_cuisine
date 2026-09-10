@@ -45,17 +45,12 @@ const CheckoutForm: FC<
   const stripe = useStripe();
   const elements = useElements();
 
-  const [email, setEmail] = useState('');
+  // Read the stored email once, as the state's initial value — no effect needed.
+  const [email, setEmail] = useState(
+    () => (typeof window !== 'undefined' ? localStorage.getItem('asian-taste-customer-email') ?? '' : '')
+  );
   const [message, setMessage] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
-
-  // Retrieve email from localStorage
-  useEffect(() => {
-    const storedEmail = localStorage.getItem('asian-taste-customer-email');
-    if (storedEmail) {
-      setEmail(storedEmail);
-    }
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,10 +165,21 @@ export const StripeCardPaymentForm: FC<StripeCardPaymentFormProps> = ({
 }) => {
   const [stripe, setStripe] = useState<Stripe | null>(null);
 
+  // Resolve the Stripe.js instance. The setState happens inside the promise
+  // callback (asynchronously), with a cancellation guard so a late resolution
+  // after unmount cannot update state.
   useEffect(() => {
-    stripePromise.then((stripeInstance) => {
-      setStripe(stripeInstance);
-    });
+    let cancelled = false;
+    stripePromise
+      .then((stripeInstance) => {
+        if (!cancelled) setStripe(stripeInstance);
+      })
+      .catch(() => {
+        if (!cancelled) setStripe(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!clientSecret) {

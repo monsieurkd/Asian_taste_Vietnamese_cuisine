@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserIcon,
@@ -42,16 +42,7 @@ export function AccountPage() {
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/menu');
-      return;
-    }
-
-    loadAccountData();
-  }, [isAuthenticated]);
-
-  const loadAccountData = async () => {
+  const loadAccountData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -73,7 +64,16 @@ export function AccountPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [customer?.email]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/menu');
+      return;
+    }
+
+    loadAccountData();
+  }, [isAuthenticated, navigate, loadAccountData]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();

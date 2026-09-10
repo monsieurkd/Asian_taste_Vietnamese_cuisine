@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { XCircleIcon, ClockIcon, CreditCardIcon, BanknotesIcon } from '@heroicons/react/24/outline';
 import { checkoutApi } from '@/api/checkoutApi';
@@ -28,7 +28,6 @@ export function ConfirmationPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number>(0); // in seconds
-  const [isPolling, setIsPolling] = useState(false);
   const [showAccountPromptCard, setShowAccountPromptCard] = useState(true);
 
   // Track if order submission has started to prevent double submission in StrictMode
@@ -37,116 +36,21 @@ export function ConfirmationPage() {
   const hasSubmittedSuccessfully = useRef(false);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    // If we have an orderNumber in URL, fetch the existing order
-    if (orderNumber) {
-      fetchOrder(orderNumber);
-      return;
-    }
-
-    // Otherwise, check if we have a pending order to submit
-    if (pendingOrder && !isSubmitting.current) {
-      isSubmitting.current = true;
-      submitOrder(pendingOrder);
-      return;
-    }
-
-    // No order number and no pending order - redirect to menu
-    // BUT don't redirect if we're in the middle of processing a submission
-    if (!pendingOrder && !orderNumber && !isSubmitting.current && !hasSubmittedSuccessfully.current) {
-      navigate('/menu');
-    }
-  }, [orderNumber, pendingOrder, navigate]);
-
-  // Poll for order status updates every 10 seconds
-  useEffect(() => {
-    if (!orderNumber || !isPolling) return;
-
-    pollIntervalRef.current = setInterval(() => {
-      fetchOrder(orderNumber);
-    }, 10000); // Poll every 10 seconds
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
-  }, [orderNumber, isPolling]);
-
-  // Update countdown timer every second
-  useEffect(() => {
-    if (!order) return;
-
-    // Start polling after initial load
-    if (!isPolling && order.status !== 'Completed' && order.status !== 'Cancelled') {
-      setIsPolling(true);
-    }
-
-    // Stop polling if order is completed or cancelled
-    if (order.status === 'Completed' || order.status === 'Cancelled') {
-      setIsPolling(false);
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    }
-
-    // Update countdown
-    const updateTimeRemaining = () => {
-      const now = new Date();
-      const readyTime = new Date(order.estimatedReadyTime);
-      const secondsLeft = Math.max(0, differenceInSeconds(readyTime, now));
-      setTimeRemaining(secondsLeft);
-    };
-
-    updateTimeRemaining();
-    const timer = setInterval(updateTimeRemaining, 1000);
-
-    return () => clearInterval(timer);
-  }, [order]);
-
-  // Fetch order function
-  const fetchOrder = async (orderNum: string) => {
+  // Fetch order function. useCallback keeps it referentially stable so the
+  // effects that call it can list it as a dependency without re-running.
+  const fetchOrder = useCallback(async (orderNum: string) => {
     try {
       const data = await checkoutApi.getOrderByNumber(orderNum);
       setOrder(data);
       setState('success');
     } catch (err) {
       console.error('Failed to fetch order:', err);
-      if (!order) {
-        // Only show error if we don't have order data yet
-        setErrorMessage(err instanceof Error ? err.message : 'Order not found');
-        setState('error');
-      }
+      setErrorMessage(err instanceof Error ? err.message : 'Order not found');
+      setState('error');
     }
-  };
+  }, []);
 
-  // Format remaining time
-  const formatTimeRemaining = (seconds: number): string => {
-    if (seconds <= 0) return 'Ready soon!';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-  };
-
-  // Get status color and icon
-  const getStatusInfo = (status: OrderStatus) => {
-    switch (status) {
-      case 'Pending':
-        return { color: 'text-yellow-600', bg: 'bg-yellow-100', icon: '⏳', label: 'Pending' };
-      case 'Confirmed':
-        return { color: 'text-blue-600', bg: 'bg-blue-100', icon: '✓', label: 'Confirmed' };
-      case 'Preparing':
-        return { color: 'text-orange-600', bg: 'bg-orange-100', icon: '👨‍🍳', label: 'Preparing' };
-      case 'Ready':
-        return { color: 'text-green-600', bg: 'bg-green-100', icon: '🔔', label: 'Ready!' };
-      case 'Completed':
-        return { color: 'text-gray-600', bg: 'bg-gray-100', icon: '✓', label: 'Completed' };
-      default:
-        return { color: 'text-gray-600', bg: 'bg-gray-100', icon: '?', label: status };
-    }
-  };
-
-  const submitOrder = async (pendingData: PendingOrderData) => {
+  const submitOrder = useCallback(async (pendingData: PendingOrderData) => {
     try {
       console.log('Submitting order:', pendingData);
 
@@ -210,7 +114,102 @@ export function ConfirmationPage() {
       // Reset submission flag on error so user can retry
       isSubmitting.current = false;
     }
+  }, [stripePaymentIntentId, clearPendingOrder, clearCart, clearStripeInfo, setLastOrderNumber]);
+
+  useEffect(() => {
+    // If we have an orderNumber in URL, fetch the existing order
+    if (orderNumber) {
+      fetchOrder(orderNumber);
+      return;
+    }
+
+    // Otherwise, check if we have a pending order to submit
+    if (pendingOrder && !isSubmitting.current) {
+      isSubmitting.current = true;
+      submitOrder(pendingOrder);
+      return;
+    }
+
+    // No order number and no pending order - redirect to menu
+    // BUT don't redirect if we're in the middle of processing a submission
+    if (!pendingOrder && !orderNumber && !isSubmitting.current && !hasSubmittedSuccessfully.current) {
+      navigate('/menu');
+    }
+  }, [orderNumber, pendingOrder, navigate, fetchOrder, submitOrder]);
+
+  // Poll for order status updates every 10 seconds.
+  // Polling is active whenever there is an order number and the order has not
+  // reached a terminal state — derived, not stored.
+  const isPolling = !!orderNumber && order?.status !== 'Completed' && order?.status !== 'Cancelled';
+
+  useEffect(() => {
+    if (!orderNumber || !isPolling) return;
+
+    pollIntervalRef.current = setInterval(() => {
+      fetchOrder(orderNumber);
+    }, 10000); // Poll every 10 seconds
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [orderNumber, isPolling, fetchOrder]);
+
+  // Update countdown timer every second.
+  // `isPolling` is DERIVED from the order status rather than held in state, so
+  // this effect does not setState (which would cascade a render).
+  useEffect(() => {
+    if (!order) return;
+
+    // Stop polling once the order reaches a terminal state.
+    if (order.status === 'Completed' || order.status === 'Cancelled') {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    }
+
+    // Update countdown
+    const updateTimeRemaining = () => {
+      const now = new Date();
+      const readyTime = new Date(order.estimatedReadyTime);
+      const secondsLeft = Math.max(0, differenceInSeconds(readyTime, now));
+      setTimeRemaining(secondsLeft);
+    };
+
+    updateTimeRemaining();
+    const timer = setInterval(updateTimeRemaining, 1000);
+
+    return () => clearInterval(timer);
+  }, [order]);
+
+
+  // Format remaining time
+  const formatTimeRemaining = (seconds: number): string => {
+    if (seconds <= 0) return 'Ready soon!';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
+
+  // Get status color and icon
+  const getStatusInfo = (status: OrderStatus) => {
+    switch (status) {
+      case 'Pending':
+        return { color: 'text-yellow-600', bg: 'bg-yellow-100', icon: '⏳', label: 'Pending' };
+      case 'Confirmed':
+        return { color: 'text-blue-600', bg: 'bg-blue-100', icon: '✓', label: 'Confirmed' };
+      case 'Preparing':
+        return { color: 'text-orange-600', bg: 'bg-orange-100', icon: '👨‍🍳', label: 'Preparing' };
+      case 'Ready':
+        return { color: 'text-green-600', bg: 'bg-green-100', icon: '🔔', label: 'Ready!' };
+      case 'Completed':
+        return { color: 'text-gray-600', bg: 'bg-gray-100', icon: '✓', label: 'Completed' };
+      default:
+        return { color: 'text-gray-600', bg: 'bg-gray-100', icon: '?', label: status };
+    }
+  };
+
 
   const handleRetry = () => {
     isSubmitting.current = false;

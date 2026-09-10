@@ -81,7 +81,7 @@ public class OrderService
                 OrderDate = order.CreatedAt,
                 EstimatedReadyTime = order.RequestedTime.AddMinutes(pickupMinutes),
                 OrderType = order.OrderType.ToString(),
-                PaymentMethod = order.PaymentMethod.ToString(),
+                PaymentMethod = order.PaymentMethod?.ToString() ?? string.Empty,
                 Subtotal = order.Subtotal,
                 Total = order.Total,
                 Items = items.Select(i => new OrderItemEmailModel

@@ -10,7 +10,6 @@ export function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const itemCount = useCartStore((state) => state.getItemCount());
   const isAuthenticated = useCustomerAuthStore(selectIsAuthenticated);
@@ -26,10 +25,14 @@ export function Header() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close mobile menu on route change
-  useEffect(() => {
+  // Close the mobile menu on route change. Tracked by the pathname the menu was
+  // opened at, so the closure is derived during render rather than applied via
+  // setState in an effect (react-hooks/set-state-in-effect).
+  const [menuOpenedAtPath, setMenuOpenedAtPath] = useState(location.pathname);
+  if (isMobileMenuOpen && menuOpenedAtPath !== location.pathname) {
+    setMenuOpenedAtPath(location.pathname);
     setIsMobileMenuOpen(false);
-  }, [location.pathname]);
+  }
 
   // Focus search input when opened
   useEffect(() => {
@@ -38,20 +41,19 @@ export function Header() {
     }
   }, [isSearchOpen]);
 
-  // Check if we're on the search page
-  const isSearchPage = location.pathname === '/search';
-
-  // Initialize search query from URL.
+  // Initialize search query from the URL during render rather than syncing it
+  // in an effect (which causes a cascading render and is flagged by
+  // react-hooks/set-state-in-effect).
   // On the search page we deliberately do NOT auto-open the header field: the
   // page renders its own search input, and two near-identical controls stacked
   // ~100px apart left users unable to tell which was authoritative.
-  useEffect(() => {
-    if (isSearchPage) {
-      const urlParams = new URLSearchParams(location.search);
-      setSearchQuery(urlParams.get('q') || '');
-      setIsSearchOpen(false);
-    }
-  }, [location, isSearchPage]);
+  const isSearchPage = location.pathname === '/search';
+  const [searchQuery, setSearchQuery] = useState(() => new URLSearchParams(location.search).get('q') || '');
+
+  // The header search field is never open on the search page (the page has its
+  // own). Derived rather than forced closed in an effect, which would setState
+  // after mount for no reason.
+  const isHeaderSearchOpen = isSearchOpen && !isSearchPage;
 
   const handleSearchClick = () => {
     if (isSearchPage) {
@@ -120,7 +122,7 @@ export function Header() {
               <button
                 onClick={handleSearchClick}
                 className={`rounded-full p-2 transition-colors ${
-                  isSearchOpen || isSearchPage
+                  isHeaderSearchOpen || isSearchPage
                     ? 'bg-cream text-primary'
                     : 'text-gray-600 hover:bg-cream hover:text-primary'
                 }`}
@@ -165,7 +167,7 @@ export function Header() {
         </div>
 
         {/* Search Bar */}
-        {isSearchOpen && (
+        {isHeaderSearchOpen && (
           <div className="border-t border-tan bg-cream py-4 animate-fade-in-up">
             <form onSubmit={handleSearchSubmit} className="mx-auto max-w-2xl px-4">
               <div className="relative">

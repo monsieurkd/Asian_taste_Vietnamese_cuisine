@@ -471,7 +471,7 @@ public class StripeWebhookService : IWebhookService
                 OrderDate = order.CreatedAt,
                 EstimatedReadyTime = order.RequestedTime.AddMinutes(15),
                 OrderType = order.OrderType.ToString(),
-                PaymentMethod = order.PaymentMethod.ToString(),
+                PaymentMethod = order.PaymentMethod?.ToString() ?? string.Empty,
                 Subtotal = order.Subtotal,
                 Total = order.Total,
                 SpecialInstructions = order.Notes,

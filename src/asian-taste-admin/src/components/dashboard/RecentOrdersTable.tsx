@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom"
+import { getStatusVariant } from "@/lib/orderStatus"
 import { Eye } from "lucide-react"
 import {
   Table,
@@ -59,7 +60,7 @@ export function RecentOrdersTable({ orders }: RecentOrdersTableProps) {
                 </span>
               </TableCell>
               <TableCell>
-                <Badge variant={order.status.toLowerCase() as any}>
+                <Badge variant={getStatusVariant(order.status)}>
                   {order.status}
                 </Badge>
               </TableCell>

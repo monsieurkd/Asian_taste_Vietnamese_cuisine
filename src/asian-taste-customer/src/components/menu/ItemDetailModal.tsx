@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import {
@@ -79,14 +79,26 @@ export function ItemDetailModal() {
   const addItem = useCartStore((state) => state.addItem);
   const updateItem = useCartStore((state) => state.updateItem);
   const getItem = useCartStore((state) => state.getItem);
-  const [selectedQuickOption, setSelectedQuickOption] = useState<number | null>(null);
-  const [includeSuperDeal, setIncludeSuperDeal] = useState(false);
+  // Super deal selection.
+  // - When editing a cart item, the default comes from whether that item
+  //   already carries the super-deal modifier.
+  // - `superDealOverride` holds an explicit user toggle (null = no override).
+  // Deriving rather than setState-ing in an effect avoids a cascading render
+  // (react-hooks/set-state-in-effect).
+  const [superDealOverride, setSuperDealOverride] = useState<boolean | null>(null);
 
   // Check if we're on the cart route (for editing items from cart)
   const isFromCart = location.pathname.startsWith('/cart/edit/');
 
   // When editing, itemId is the cartItemId; get the existing cart item
   const existingCartItem = isFromCart && itemId ? getItem(itemId) : undefined;
+
+  // Effective super-deal selection: an explicit user toggle wins, otherwise the
+  // default is whether the cart item being edited already carries the modifier.
+  const seededSuperDeal = existingCartItem
+    ? existingCartItem.modifiers.some((m) => m.id === SUPER_DEAL_MODIFIER.id)
+    : false;
+  const includeSuperDeal = superDealOverride ?? seededSuperDeal;
 
   // Build the return path based on where we came from
   const returnPath = isFromCart
@@ -137,17 +149,42 @@ export function ItemDetailModal() {
 
   const quickSelectOptions = item ? getQuickSelectOptions() : null;
 
+  // Tracks which item the current selections were seeded for. Seeding runs once
+  // per item (not on every render/dep change), so React sees no state update in
+  // an effect for an unchanged item — the pattern react-hooks/set-state-in-effect
+  // warns about.
+  const seededItemIdRef = useRef<number | null>(null);
+
+  // The quick-select choice belongs to a specific item. Deriving it from the
+  // item id (rather than clearing it inside the effect's else branch) means
+  // switching items naturally discards a stale choice with no effect-time
+  // setState. `quickOptionChoice` is the item the choice was made for.
+  const [quickOptionChoice, setQuickOptionChoice] = useState<{ itemId: number; optionId: number } | null>(null);
+  const selectedQuickOption =
+    quickOptionChoice && item && quickOptionChoice.itemId === item.id ? quickOptionChoice.optionId : null;
+  const setSelectedQuickOption = useCallback(
+    (optionId: number | null) =>
+      setQuickOptionChoice(optionId === null || !item ? null : { itemId: item.id, optionId }),
+    [item]
+  );
+
   // Reset selections when item changes, and load existing selections when editing
   useEffect(() => {
-    if (item) {
-      reset();
+    if (!item) return;
 
-      if (existingCartItem) {
-        // Load existing selections when editing
-        setQuantity(existingCartItem.quantity);
-        if (existingCartItem.specialInstructions) {
-          setSpecialInstructions(existingCartItem.specialInstructions);
-        }
+    // Already seeded for this item — nothing to do. This guard is what keeps the
+    // setState calls below from firing on every render/dep change.
+    if (seededItemIdRef.current === item.id) return;
+    seededItemIdRef.current = item.id;
+
+    reset();
+
+    if (existingCartItem) {
+      // Load existing selections when editing
+      setQuantity(existingCartItem.quantity);
+      if (existingCartItem.specialInstructions) {
+        setSpecialInstructions(existingCartItem.specialInstructions);
+      }
 
         // Restore modifier selections
         if (item.modifierGroups.length > 0 && existingCartItem.modifiers.length > 0) {
@@ -174,18 +211,14 @@ export function ItemDetailModal() {
             }
           });
 
-          // Check for super deal (if the super deal modifier is in the cart item)
-          if (existingCartItem.modifiers.some(m => m.id === SUPER_DEAL_MODIFIER.id)) {
-            setIncludeSuperDeal(true);
-          }
+          // Super deal default is DERIVED (see seededSuperDeal), so there is
+          // nothing to set here — no state update in an effect.
         }
-      } else {
-        // Clear selections when adding new item
-        setSelectedQuickOption(null);
-        setIncludeSuperDeal(false);
       }
-    }
-  }, [item?.id, existingCartItem, reset, setQuantity, setSpecialInstructions, setModifier, toggleModifier, quickSelectOptions]);
+      // Note: no else-branch reset needed for the quick-select choice — it is
+      // derived from the current item id, so a stale choice is discarded
+      // automatically when the item changes.
+  }, [item, existingCartItem, reset, setQuantity, setSpecialInstructions, setModifier, toggleModifier, quickSelectOptions, setSelectedQuickOption]);
 
   // Check if super deal is available (price >= $7.80)
   const isSuperDealAvailable = item ? item.basePrice >= 7.80 : false;
@@ -407,7 +440,7 @@ export function ItemDetailModal() {
                   <input
                     type="checkbox"
                     checked={includeSuperDeal}
-                    onChange={(e) => setIncludeSuperDeal(e.target.checked)}
+                    onChange={(e) => setSuperDealOverride(e.target.checked)}
                     className="h-5 w-5 rounded border-tan text-primary focus:ring-primary"
                   />
                   <div className="flex-1">

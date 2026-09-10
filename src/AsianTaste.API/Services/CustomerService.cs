@@ -376,51 +376,21 @@ public class CustomerService
     /// </summary>
     private bool VerifyPassword(string password, string storedHash)
     {
-        try
+        var isValid = PasswordHasher.Verify(password, storedHash);
+        if (!isValid && !string.IsNullOrEmpty(storedHash) && storedHash.Split(':').Length != 3)
         {
-            // Check if it's the new PBKDF2 format: {iterations}:{salt}:{hash}
-            var parts = storedHash.Split(':');
-            if (parts.Length == 3)
-            {
-                var iterations = int.Parse(parts[0]);
-                var salt = Convert.FromBase64String(parts[1]);
-                var hash = Convert.FromBase64String(parts[2]);
-
-                using var pbkdf2 = new Rfc2898DeriveBytes(password, salt, iterations, HashAlgorithmName.SHA256);
-                var computedHash = pbkdf2.GetBytes(32); // 256 bits
-
-                return CryptographicOperations.FixedTimeEquals(hash, computedHash);
-            }
-
-            // Legacy format: old base64 hash (broken HMAC implementation)
-            // Since the old implementation was fundamentally broken (random key each time),
-            // we cannot verify these passwords. User must reset password.
-            // Log this so admins know which accounts need password resets.
+            // Legacy format: cannot be verified (the old implementation used a
+            // random key per hash). Log it so admins know which accounts need a reset.
             _logger.LogWarning("Attempting to verify legacy password hash format. Password reset required.");
-            return false;
         }
-        catch
-        {
-            return false;
-        }
+        return isValid;
     }
 
     /// <summary>
     /// Hashes a password using PBKDF2.
     /// Format: {iterations}:{salt}:{hash}
     /// </summary>
-    private string HashPassword(string password)
-    {
-        const int iterations = 10000;
-        const int saltSize = 16; // 128 bits
-        const int hashSize = 32; // 256 bits
-
-        using var pbkdf2 = new Rfc2898DeriveBytes(password, saltSize, iterations, HashAlgorithmName.SHA256);
-        var salt = pbkdf2.Salt;
-        var hash = pbkdf2.GetBytes(hashSize);
-
-        return $"{iterations}:{Convert.ToBase64String(salt)}:{Convert.ToBase64String(hash)}";
-    }
+    private string HashPassword(string password) => PasswordHasher.Hash(password);
 
     /// <summary>
     /// Maps a Customer entity to a CustomerResponseDto.

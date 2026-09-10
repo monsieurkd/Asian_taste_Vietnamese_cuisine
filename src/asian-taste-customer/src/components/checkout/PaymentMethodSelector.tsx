@@ -49,7 +49,7 @@ export const PaymentMethodSelector: FC<PaymentMethodSelectorProps> = ({
         setCardError(result.errorMessage || 'Failed to initialize payment. Please try again.');
         return false;
       }
-    } catch (error) {
+    } catch {
       setCardError('Failed to connect to payment service. Please try again.');
       return false;
     } finally {

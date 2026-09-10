@@ -86,11 +86,12 @@ jobs:
         run: npm ci
 
       - name: Lint
-        # Non-blocking: there is pre-existing lint debt (unused vars, explicit
-        # any, react-refresh) tracked in MAJOR_UPDATE_PLAN.md. Reports issues
-        # without failing CI until that debt is cleared.
+        # Blocking: both frontends are lint-clean (the earlier debt was cleared
+        # when the UI work was done). Any new lint problem fails the build.
         run: npm run lint
-        continue-on-error: true
+
+      - name: Test
+        run: npm test
 
       - name: Build (typecheck + bundle)
         run: npm run build

@@ -9,8 +9,8 @@ import { useCustomerAuthStore } from '@/stores/customerAuthStore';
 // Guard: an env value of just an origin (http://localhost:5070) silently drops
 // the /api prefix, so every request 404s while the app still renders. That cost
 // us a real bug, so normalise it here rather than trusting the env file.
-function resolveApiBaseUrl(): string {
-  const raw = import.meta.env.VITE_API_BASE_URL;
+// Exported for tests (src/api/client.test.ts).
+export function resolveApiBaseUrl(raw?: string): string {
   if (!raw) return '/api';
 
   const trimmed = raw.replace(/\/+$/, '');
@@ -28,7 +28,7 @@ function resolveApiBaseUrl(): string {
   return trimmed;
 }
 
-export const API_BASE_URL = resolveApiBaseUrl();
+export const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 // Create axios instance with default config
 export const apiClient = axios.create({

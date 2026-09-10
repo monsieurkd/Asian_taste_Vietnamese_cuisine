@@ -4,6 +4,7 @@ import { ArrowLeft, Phone, Mail, Clock, DollarSign } from "lucide-react"
 import { ordersApi } from "@/api/orders"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { getStatusVariant } from "@/lib/orderStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -132,7 +133,7 @@ export function OrderDetailPage() {
           </p>
         </div>
         <Badge
-          variant={order.status.toLowerCase() as any}
+          variant={getStatusVariant(order.status)}
           className="ml-auto"
         >
           {statusLabels[order.status] || order.status}
