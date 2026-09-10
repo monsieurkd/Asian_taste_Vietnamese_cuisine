@@ -1,2 +1,8 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AsianTaste.API/AsianTaste.API.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AsianTaste.API.Tests/AsianTaste.API.Tests.csproj" />
+  </Folder>
 </Solution>
