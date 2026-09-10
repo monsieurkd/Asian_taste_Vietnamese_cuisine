@@ -34,10 +34,18 @@ export function useOrderWebSocket() {
 
     setConnectionState("connecting")
 
-    // Connect directly to backend API (port 5070) instead of via proxy
-    // Use ws:// (not wss://) to avoid mixed content issues
-    // Use backend port directly, not the proxied connection
-    const wsUrl = `ws://localhost:5070/ws/orders?token=${token}`
+    // Resolve the WebSocket base URL:
+    //  1. VITE_WS_URL if set (explicit override, e.g. ws://localhost:5070 for local dev)
+    //  2. otherwise derive from the current page origin, so a deployed site on
+    //     https://admin.asiantaste.com.au connects to wss://admin.asiantaste.com.au/ws/orders
+    // This avoids hardcoding localhost, which breaks in any non-local environment.
+    const envWsUrl = import.meta.env.VITE_WS_URL as string | undefined
+    const wsBase =
+      envWsUrl && envWsUrl.length > 0
+        ? envWsUrl.replace(/\/$/, "")
+        : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
+
+    const wsUrl = `${wsBase}/ws/orders?token=${token}`
 
     console.log("[WebSocket] Attempting to connect to:", wsUrl.replace(/token=[^&]+/, "token=REDACTED"))
 

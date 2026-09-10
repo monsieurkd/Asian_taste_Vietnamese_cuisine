@@ -22,6 +22,7 @@ yarn-error.log*
 # Local UI screenshots / tooling config (not for the repo)
 menu/admin_ui/
 reasonix.toml
+.reasonix/
 
 # Local secrets / environment-specific config (use .example templates + user-secrets)
 src/AsianTaste.API/appsettings.Development.json

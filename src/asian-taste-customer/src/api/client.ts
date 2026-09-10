@@ -1,8 +1,11 @@
 import axios from 'axios';
 import { useCustomerAuthStore } from '@/stores/customerAuthStore';
 
-// API base URL - use relative path to go through vite proxy in development
-export const API_BASE_URL = '/api';
+// API base URL.
+// Defaults to the relative '/api' path, which goes through the Vite dev proxy
+// (see vite.config.ts). Set VITE_API_BASE_URL to point at a deployed API,
+// e.g. https://api.asiantaste.com.au/api
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 // Create axios instance with default config
 export const apiClient = axios.create({
