@@ -99,16 +99,49 @@ them would silently produce a duplicate of the redirect target and the judge wou
 wrong page. `AUTHED_SCREENS_NOT_CAPTURED` in `ui-shots.mjs` lists them, and the report
 repeats the list. To close that gap, drive a real login in the script before capturing.
 
-## What this loop caught on its first run
+## The judge is noisy — read it as a trend, not a number
+
+**Measured run-to-run variance: ±2 points on identical code.** The same `menu-1280` capture
+scored 6, 6, 4 across three consecutive runs with no card changes; `home-390` flipped 6 → 4
+just the same. Treat the score as a smoke alarm, not a measurement:
+
+- **Act on the `[high]` findings**, which are far more stable than the score — they name a
+  concrete element and a concrete token fix.
+- **Ignore small score moves** between runs; they are usually the model, not your change.
+- **Some findings are wrong.** Two examples from real runs: it reported the item-detail
+  modal as "vertically clipped" when the Add-to-Cart button measured fully on-screen
+  (bottom 773px in an 800px viewport), and it flagged `border-accent` as "a raw gold value"
+  when `accent` *is* the `#D4AF37` token. Verify a `[high]` against the DOM before acting on it.
+- Prefer **fixing against the rubric** (tokens, primitives, real states) over chasing a score.
+
+## CI
+
+`.github/workflows/ci.yml` has a `ui-quality` job that captures, judges, writes the report to
+the job summary, and uploads `ui-shots/` as an artifact.
+
+- It **skips itself** when `LLM_VISION_API_KEY` is not configured, so forks and local runs
+  are never blocked by a missing secret. Add the secret to enable it.
+- The **hard gate is off by default** (`UI_QA_FAIL_ON_HIGH: '0'`). A `--fail-on-high` gate
+  would fail unrelated PRs because of the ±2-point variance above and the outstanding
+  `[high]` findings. Flip it to `'1'` once those are cleared.
+
+## What this loop caught on its first runs
 
 - **A real API-prefix regression** — `VITE_API_BASE_URL` was set to a bare origin
   (`http://localhost:5070`), dropping the `/api` segment, so every data-loading screen made
   requests to `/menu/...` and got 404s while still rendering. Fixed in
   `src/asian-taste-customer/src/api/client.ts`, which now normalises the value and warns.
 - Console errors on 8 of 12 screens (now 0).
-- 5 screens carrying `[high]` UI findings — an off-token hero CTA, illegible text over a
-  photo, and a clipped category row on mobile. Those are real work items, listed in
-  `ui-shots/ui-qa-report.md`.
+- **A systemic font bug** — `--font-family-serif` is not a Tailwind v4 token name (the
+  utilities come from `--font-serif`), *and* the base layer forced every heading to the sans
+  family, so all headings rendered in the body face. Both fixed in `index.css`.
+- **Off-token colours** — the Super Deal upsell used raw `amber-*`/`orange-*`, and the
+  "Popular" badge used `bg-yellow-500`; both now use the `accent` token.
+- **Duplicate search controls** — the header search auto-opened on `/search` while the page
+  also rendered its own field, with no way to tell which was authoritative.
+- **A missing search field** — the search page told users to "use the search bar in the
+  header" when the header showed only an icon; it now renders a real input.
+- **Sub-44px tap target** — the dish card "Add +" button was ~36px tall.
 
 ## What this loop does NOT catch (be honest about it)
 
@@ -119,3 +152,4 @@ repeats the list. To close that gap, drive a real login in the script before cap
 - Authenticated screens (admin dashboard/orders/menu/reports/settings) — not captured yet.
 - Taste. The judge is a consistency engine; the final "does this feel like a real
   restaurant's site?" call is still a 10-second human look.
+

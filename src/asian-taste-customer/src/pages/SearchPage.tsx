@@ -7,7 +7,7 @@ import { menuApi } from '@/api/menuApi';
 import { useSearchStore } from '@/stores/searchStore';
 
 export function SearchPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     setQuery,
     setResults,
@@ -85,14 +85,38 @@ export function SearchPage() {
         <div className="py-8">
           {/* Page Header */}
           <div className="mb-8">
-            <h1 className="font-sans text-3xl font-bold text-secondary">
+            <h1 className="font-serif text-3xl font-bold text-secondary">
               {query ? `Search: "${query}"` : 'Search Menu'}
             </h1>
             {!query && (
               <p className="mt-2 text-gray-600">
-                Use the search bar in the header to find dishes, or apply filters below.
+                Find a dish by name, or narrow the menu with the filters below.
               </p>
             )}
+
+            {/* The page previously pointed at a search bar that only existed as a
+                header icon, leaving no visible field to type into. */}
+            <form
+              className="mt-4 flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const value = (e.currentTarget.elements.namedItem('q') as HTMLInputElement).value.trim();
+                setSearchParams(value ? { q: value } : {});
+              }}
+              role="search"
+            >
+              <input
+                type="search"
+                name="q"
+                defaultValue={query}
+                placeholder="Search for a dish…"
+                aria-label="Search the menu"
+                className="w-full rounded-lg border-2 border-tan bg-white px-4 py-3 text-secondary placeholder:text-gray-400 focus:border-primary focus:outline-none"
+              />
+              <button type="submit" className="btn-primary shrink-0">
+                Search
+              </button>
+            </form>
           </div>
 
           {/* Main Content */}
@@ -110,10 +134,20 @@ export function SearchPage() {
               {displayHasSearched ? (
                 <>
                   {isLoading ? (
-                    <div className="flex items-center justify-center py-16">
-                      <div className="text-center">
-                        <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-tan border-t-primary"></div>
-                        <p className="text-gray-600">Searching...</p>
+                    // Skeleton cards rather than a bare spinner: they show the
+                    // shape of the results and read as loading, not as broken.
+                    <div>
+                      <p className="mb-4 text-gray-600">Searching…</p>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                          <div key={i} className="card overflow-hidden">
+                            <div className="aspectvideo w-full animate-pulse bg-tan" />
+                            <div className="space-y-2 p-4">
+                              <div className="h-4 w-3/4 animate-pulse rounded bg-tan" />
+                              <div className="h-4 w-1/2 animate-pulse rounded bg-tan" />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ) : displayResults.length > 0 ? (
@@ -140,12 +174,20 @@ export function SearchPage() {
                           d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                         />
                       </svg>
-                      <h3 className="font-sans text-xl font-semibold text-secondary">
+                      <h3 className="font-serif text-xl font-semibold text-secondary">
                         No results found
                       </h3>
                       <p className="mt-2 text-center text-gray-600">
-                        Try adjusting your search terms or filters
+                        No dishes match those terms. Try a different search, or
+                        clear the filters below.
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => setSearchParams({})}
+                        className="btn-primary mt-6"
+                      >
+                        Clear search &amp; filters
+                      </button>
                     </div>
                   )}
                 </>
@@ -164,12 +206,12 @@ export function SearchPage() {
                       d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                     />
                   </svg>
-                  <h3 className="font-sans text-xl font-semibold text-secondary">
+                  <h3 className="font-serif text-xl font-semibold text-secondary">
                     Search Our Menu
                   </h3>
                   <p className="mt-2 text-center text-gray-600">
-                    Use the search bar in the header to find dishes by name,<br />
-                    or use the filters to browse by dietary preferences, price, and more.
+                    Type a dish name above, or use the filters to browse by
+                    dietary preferences, price, and more.
                   </p>
                 </div>
               )}

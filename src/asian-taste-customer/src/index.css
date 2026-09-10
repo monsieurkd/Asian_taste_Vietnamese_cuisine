@@ -15,8 +15,11 @@
   --color-warning: #F57C00;
   --color-error: #C62828;
 
-  --font-family-sans: 'Manrope', 'Inter', system-ui, sans-serif;
-  --font-family-serif: 'Playfair Display', Georgia, serif;
+  /* Tailwind v4 maps `font-sans` / `font-serif` to --font-sans / --font-serif.
+     (--font-family-* would generate no utility at all, which silently left
+     headings on the browser default face.) */
+  --font-sans: 'Manrope', 'Inter', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
 }
 
 /* Custom styles for Asian Taste */
@@ -24,15 +27,18 @@
   body {
     background-color: var(--color-cream);
     color: var(--color-secondary);
-    font-family: var(--font-family-sans);
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
     min-height: 100vh;
   }
 
+  /* Headings use the display serif (Playfair Display) — the locked system face.
+     Previously these were forced to the sans family, so every heading rendered
+     in the body face. */
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-family-sans);
+    font-family: var(--font-serif);
   }
 
   h1 {
@@ -92,6 +98,28 @@
 
   .btn-secondary:hover {
     background-color: var(--color-tan);
+  }
+
+  /* Secondary action used over a dark/image surface (e.g. the hero).
+     Keeps the secondary action visibly quieter than .btn-primary without
+     hand-rolling border and fill values at the call site. */
+  .btn-outline-light {
+    background-color: transparent;
+    color: white;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    padding: 1rem 2rem;
+    border: 2px solid var(--color-cream);
+    transition: all 0.2s;
+  }
+
+  .btn-outline-light:hover {
+    background-color: rgba(245, 240, 230, 0.15);
+  }
+
+  .btn-outline-light:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-cream);
   }
 
   .btn-cta {

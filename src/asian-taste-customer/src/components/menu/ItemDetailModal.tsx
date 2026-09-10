@@ -10,6 +10,7 @@ import { useCartStore } from '@/stores/cartStore';
 import { menuApi } from '@/api/menuApi';
 import { useItemSelection } from '@/hooks/useItemSelection';
 import { ModifierGroupSection } from './ModifierGroupSection';
+import { DishImage } from './DishImage';
 import { QuantitySelector } from './QuantitySelector';
 import { SpecialInstructions } from './SpecialInstructions';
 import type { CartItemModifier } from '@/types/menu';
@@ -310,37 +311,21 @@ export function ItemDetailModal() {
 
           {/* Scrollable Content */}
           <div className="max-h-[85vh] overflow-y-auto">
-            {/* Image Section */}
-            <div className="relative aspect-[16/9] overflow-hidden rounded-t-2xl bg-tan">
-              {item.imageUrl ? (
-                <img
-                  src={item.imageUrl}
-                  alt={item.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center text-gray-400">
-                  <svg
-                    className="h-24 w-24"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                </div>
-              )}
+            {/* Image Section — keeps a branded fallback: an empty hero region in
+                a modal would itself read as broken. */}
+            <div className="relative aspect-[16/9] overflow-hidden rounded-t-2xl">
+              <DishImage
+                src={item.imageUrl}
+                name={item.name}
+                showFallback
+                className="h-full w-full"
+              />
 
               {/* Badges Overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
               <div className="absolute bottom-4 left-4 flex flex-wrap gap-2">
                 {item.isPopular && (
-                  <span className="rounded-lg bg-yellow-500 px-3 py-1 text-sm font-semibold text-white">
+                  <span className="rounded-lg bg-accent px-3 py-1 text-sm font-semibold text-secondary">
                     🏆 Popular
                   </span>
                 )}
@@ -415,12 +400,12 @@ export function ItemDetailModal() {
 
               {/* Super Deal Option */}
               {isSuperDealAvailable && (
-                <label className="mb-6 flex cursor-pointer items-center gap-3 rounded-xl border-2 border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-4 transition-colors hover:border-amber-300">
+                <label className="mb-6 flex cursor-pointer items-center gap-3 rounded-xl border-2 border-accent bg-accent/10 px-4 py-4 transition-colors hover:border-accent/80 hover:bg-accent/15">
                   <input
                     type="checkbox"
                     checked={includeSuperDeal}
                     onChange={(e) => setIncludeSuperDeal(e.target.checked)}
-                    className="h-5 w-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                    className="h-5 w-5 rounded border-tan text-primary focus:ring-primary"
                   />
                   <div className="flex-1">
                     <p className="font-semibold text-amber-900">🎁 Snack Super Deal</p>

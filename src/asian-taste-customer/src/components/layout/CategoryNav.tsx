@@ -60,9 +60,16 @@ export function CategoryNav({ categories, popularCount = 0 }: CategoryNavProps) 
 
   return (
     <nav className="sticky top-14 z-40 bg-cream border-b border-tan md:top-18">
-      <div className="mx-auto max-w-7xl">
+      <div className="relative mx-auto max-w-7xl">
+        {/* Edge fades: the row scrolls but the scrollbar is hidden, so without a
+            visual cue the clipped categories look unreachable rather than
+            scrollable. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-cream to-transparent"
+        />
         {/* Desktop - Horizontal scroll */}
-        <div className="hidden md:flex items-center gap-1 overflow-x-auto pl-6 pr-4 scrollbar-hide scroll-smooth snap-x snap-mandatory">
+        <div className="hidden md:flex items-center gap-1 overflow-x-auto pl-6 pr-12 scrollbar-hide scroll-smooth snap-x snap-mandatory">
           <Link
             to="/menu"
             className={`snap-start flex items-center gap-2 px-5 py-4 text-sm font-medium transition-all border-b-3 whitespace-nowrap ${

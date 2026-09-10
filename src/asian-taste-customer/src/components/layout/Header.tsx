@@ -41,13 +41,15 @@ export function Header() {
   // Check if we're on the search page
   const isSearchPage = location.pathname === '/search';
 
-  // Initialize search query from URL
+  // Initialize search query from URL.
+  // On the search page we deliberately do NOT auto-open the header field: the
+  // page renders its own search input, and two near-identical controls stacked
+  // ~100px apart left users unable to tell which was authoritative.
   useEffect(() => {
     if (isSearchPage) {
       const urlParams = new URLSearchParams(location.search);
-      const query = urlParams.get('q') || '';
-      setSearchQuery(query);
-      setIsSearchOpen(true);
+      setSearchQuery(urlParams.get('q') || '');
+      setIsSearchOpen(false);
     }
   }, [location, isSearchPage]);
 
