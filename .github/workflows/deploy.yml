@@ -37,38 +37,70 @@ jobs:
   await-ci:
     name: Wait for CI
     runs-on: ubuntu-latest
+    # actions: read is required to query the CI workflow's run status via the
+    # REST API. Without it the default token returns nothing and the wait loop
+    # times out instead of deploying.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Wait for the CI workflow to succeed on this commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Waiting for CI on ${{ github.sha }}..."
-          # `gh run watch` follows the run that matches this commit. If CI has
-          # not started yet (both workflows trigger on push, so ordering is not
-          # guaranteed), the loop waits for it to appear.
-          for attempt in $(seq 1 60); do
-            run_id=$(gh run list \
-              --workflow=ci.yml \
-              --commit "${{ github.sha }}" \
-              --limit 1 \
-              --json databaseId,status,conclusion \
-              --jq '.[0].databaseId' 2>/dev/null || true)
 
-            if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-              echo "Found CI run $run_id"
+          # Poll the API directly rather than shelling out to `gh run list`.
+          #
+          # The first version of this used `gh run list --commit ...`, which works
+          # interactively but returned nothing on the runner: the default
+          # GITHUB_TOKEN does not carry Actions-read permission in this context,
+          # and because its stderr was suppressed the loop just spun until its
+          # 10-minute timeout — a deploy that silently never starts, which is
+          # worse than one that fails. Hitting the REST API with an explicit
+          # `permissions` grant below removes the ambiguity.
+          #
+          # The job-level `permissions:` block grants actions: read for exactly
+          # this reason.
+          api="https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci.yml/runs"
+
+          run_id=""
+          conclusion=""
+          for attempt in $(seq 1 60); do
+            json=$(curl -sS \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$api?head_sha=${{ github.sha }}&per_page=1") || json=""
+
+            # Surface API errors instead of looping over them silently.
+            if echo "$json" | grep -q '"message"'; then
+              echo "::error::GitHub API refused the request: $(echo "$json" | head -c 300)"
+              exit 1
+            fi
+
+            run_id=$(echo "$json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("workflow_runs") or []; print(d[0]["id"] if d else "")')
+            status=$(echo "$json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("workflow_runs") or []; print(d[0]["status"] if d else "")')
+            conclusion=$(echo "$json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("workflow_runs") or []; print(d[0].get("conclusion") or "" if d else "")')
+
+            if [ -n "$run_id" ] && [ "$status" = "completed" ]; then
+              echo "CI run $run_id completed with conclusion: $conclusion"
               break
             fi
-            echo "CI has not started yet (attempt $attempt/60)..."
+
+            echo "CI status: ${status:-not started} (attempt $attempt/60)"
             sleep 10
           done
 
-          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+          if [ -z "$run_id" ]; then
             echo "::error::No CI run found for ${{ github.sha }} after 10 minutes."
             exit 1
           fi
 
-          gh run watch "$run_id" --exit-status --interval 15 \
-            || { echo "::error::CI did not pass on ${{ github.sha }} — not deploying."; exit 1; }
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::CI concluded '$conclusion' on ${{ github.sha }} — not deploying."
+            exit 1
+          fi
 
           echo "CI is green. Proceeding to deploy."
 
