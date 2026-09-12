@@ -1,0 +1,28 @@
+# Keep the build context small and reproducible.
+#
+# Without this, `docker build` would copy the entire repo — including
+# node_modules (hundreds of MB across two frontends), bin/obj, and the local
+# .env files that hold real keys. Slower builds, and a real risk of baking a
+# secret into an image layer.
+
+**/node_modules
+**/dist
+**/bin
+**/obj
+**/.git
+**/.vs
+**/.vscode
+
+# Never ship local configuration or secrets into an image.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/appsettings.Development.json
+**/appsettings.*.local.json
+
+# Repo tooling that the API does not need at build time.
+ui-shots/
+menu/
+docs/
+.github/

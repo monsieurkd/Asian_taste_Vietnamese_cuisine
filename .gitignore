@@ -38,5 +38,18 @@ src/asian-taste-admin/.env.development
 .env.local
 .env.*.local
 
+# Real production values live in the host's own settings (Vercel env vars, Fly
+# secrets), never in the repo. These are listed because the two .development
+# entries above cover one filename each, so a real .env.production would
+# otherwise be committed by the next `git add .`. The .example templates stay
+# trackable (see the ! rules below, if any).
+.env.production
+.env.production.local
+src/asian-taste-customer/.env.production
+src/asian-taste-admin/.env.production
+src/asian-taste-customer/.env.development.local
+src/asian-taste-admin/.env.development.local
+
 # UI quality loop output (screenshots + judge report are artifacts, not source)
 ui-shots/
+.neon

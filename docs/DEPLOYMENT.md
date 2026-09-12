@@ -1,0 +1,296 @@
+# Deployment
+
+How Asian Taste gets from `git push` to production, and the one-time setup that
+makes it work.
+
+**Stack:** Fly.io (API) · Neon (PostgreSQL) · Vercel (customer app) · admin app
+deliberately not public yet.
+
+---
+
+## The shape of it
+
+```
+git push main
+   ↓
+CI            build + test + guardrails + frontend builds (+ UI loop)
+   ↓  (green)
+Deploy        await-ci  →  deploy-api (Fly)  →  smoke test
+                       →  deploy-customer (Vercel)
+```
+
+`deploy.yml` waits on the CI run for the **same commit**. A red CI run and a
+green deploy cannot diverge, because the deploy refuses to start.
+
+The admin app is not in the pipeline on purpose — see [Admin app](#admin-app).
+
+---
+
+## One-time setup
+
+These are the steps that cannot be automated from the repo. Run them in order;
+each one feeds the next.
+
+### 1. Neon (database)
+
+1. Create a project at <https://neon.tech>. Pick **Sydney** (`ap-southeast-2`) —
+   the API runs in `syd`, and a cross-region database adds ~150 ms to every
+   query, which is very visible on a menu page.
+2. Copy the **pooled** connection string (the host containing `-pooler`).
+   Serverless Postgres bills per connection and the API opens one per request;
+   the pooler is what makes that affordable.
+3. Keep it for step 2.
+
+> Free tier: 0.5 GB storage, no expiry, scales to zero when idle. The API runs
+> migrations on startup, so it will not stay asleep for long once traffic is real.
+> Watch the storage meter before going live — 0.5 GB is not a lot of orders.
+
+### 2. Fly.io (API)
+
+```bash
+# Install once
+brew install flyctl
+fly auth signup          # or: fly auth login
+
+# From the repo root
+fly launch --no-deploy   # accepts the existing fly.toml; say NO to a Postgres
+```
+
+If `fly launch` suggests a database, **decline** — you are using Neon.
+
+Then set the secrets. These are the ones the API refuses to start without:
+
+```bash
+fly secrets set \
+  ConnectionStrings__DefaultConnection="<neon pooled connection string>" \
+  Encryption__Key="$(openssl rand -base64 32)" \
+  Jwt__SecretKey="$(openssl rand -base64 48)"
+```
+
+Add these once the frontends exist (substitute your real Vercel URLs). Note the
+**indexed** syntax — a JSON array silently does not bind, see the note below:
+
+```bash
+fly secrets set \
+  Cors__AllowedOrigins__0="https://<customer-app>.vercel.app"
+```
+
+> **Use `__0`, `__1`, … not `'["https://..."]'`.** ASP.NET Core maps indexed
+> environment variables onto array elements; it does not parse a JSON string
+> into `string[]`. The JSON form looks correct, produces an empty list, and the
+> API starts happily — then every browser request is blocked by CORS with no
+> error in the API log. Verified against the real published build:
+>
+> ```
+> Cors__AllowedOrigins='["https://asian-taste.vercel.app"]'
+>   -> no Access-Control-Allow-Origin header
+> Cors__AllowedOrigins__0="https://asian-taste.vercel.app"
+>   -> Access-Control-Allow-Origin: https://asian-taste.vercel.app
+> ```
+
+And when you are ready for real payments (see [Going live](#going-live)):
+
+```bash
+fly secrets set \
+  Stripe__SecretKey="sk_live_..." \
+  Stripe__PublishableKey="pk_live_..." \
+  Stripe__WebhookSecret="whsec_..." \
+  Payment__UseMockGateway=false
+```
+
+Deploy and confirm:
+
+```bash
+fly deploy
+fly open /api/menu        # should return JSON with 82 items
+fly logs                  # watch the migration run on first boot
+```
+
+**The first deploy creates the schema automatically.** `DatabaseInitializationService`
+runs every migration on startup, and seeds the menu. Confirm with:
+
+```bash
+curl -s https://<your-app>.fly.dev/api/menu | python3 -m json.tool | head
+```
+
+> **`ASPNETCORE_ENVIRONMENT=production` is set in `fly.toml` and must stay that
+> way.** It is what disables the unauthenticated `/api/dev/db/{init,seed,reset}`
+> endpoints. Setting it to `Development` would put "wipe the database" and "dump
+> recent orders" on a public URL.
+
+> **Admin login:** the seed creates `admin` / `Admin123!`. Change it before the
+> app is reachable by anyone else. Rotate by updating the `admin_users` row
+> directly, or delete it and let the next boot re-seed with a password you
+> control — but note the re-seed only happens when **no** admin row exists.
+
+### 3. Vercel (customer app)
+
+Your repo is already connected, but a project pointed at the repo **root** will
+fail — there is no app there. Create (or fix) the project so that:
+
+| Setting | Value |
+|---|---|
+| Root Directory | `src/asian-taste-customer` |
+| Framework Preset | Vite |
+| Build Command | *(leave default)* |
+| Output Directory | `dist` |
+
+Set **Settings → General → Root Directory**. Setting it via `vercel.json` does
+not work reliably, which is the usual cause of "no framework detected" here.
+
+Then add the environment variables under
+**Settings → Environment Variables → Production**:
+
+| Name | Value |
+|---|---|
+| `VITE_API_BASE_URL` | `https://<your-app>.fly.dev/api` |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | `pk_live_...` or `pk_test_...` |
+
+> **These are inlined at build time, not read at runtime.** Changing a value in
+> the dashboard does nothing until the next deploy. This is the single most
+> common "but I set it!" moment with Vite.
+
+> **`VITE_API_BASE_URL` must include `/api`.** Pointing at a bare origin makes
+> every request 404 while the UI still renders, so the failure looks like an
+> empty menu rather than a broken config. `src/api/client.ts` detects it,
+> appends `/api`, and logs a warning — but set it correctly.
+
+### 4. GitHub (deploy automation)
+
+Under **Settings → Secrets and variables → Actions**:
+
+| Kind | Name | Where to get it |
+|---|---|---|
+| Secret | `FLY_API_TOKEN` | `fly tokens create deploy -x 999999h` |
+| Secret | `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
+| Secret | `VERCEL_ORG_ID` | `vercel link`, then read `.vercel/project.json` |
+| Secret | `VERCEL_CUSTOMER_PROJECT_ID` | same file |
+| Variable | `API_URL` | `https://<your-app>.fly.dev` |
+
+Until these exist, both deploy jobs **skip with a notice** rather than failing —
+so the workflow is green from the first push, and turns on the moment you add
+the secrets.
+
+> Vercel's own Git integration also deploys on push. Running both means two
+> deploys per commit. Pick one: either skip the GitHub Vercel secrets and let
+> Vercel handle the frontend, or turn off Vercel's automatic Git deployments in
+> the project settings. Keeping both is harmless but noisy and doubles build
+> minutes.
+
+---
+
+## Day-to-day
+
+| I want to… | Do this |
+|---|---|
+| Deploy everything | Push to `main` |
+| Deploy only the API | `fly deploy` from the repo root |
+| Watch a deploy | GitHub → Actions → Deploy |
+| See API logs | `fly logs` |
+| Set/change a secret | `fly secrets set KEY=value` (triggers a restart) |
+| Roll back the API | `fly releases` then `fly deploy --image <previous>` |
+| Roll back the frontend | Vercel → Deployments → ⋯ → Promote to Production |
+
+---
+
+## Why it is built this way
+
+**Why a separate `deploy.yml`.** `ci.yml` triggers on `pull_request` too. Putting
+deploy jobs in it would mean either deploying from PRs or guarding every job with
+an `if` that is easy to get wrong later. A separate file makes "deploys only from
+main" structural.
+
+**Why `await-ci` instead of re-running the tests.** CI already ran them on this
+commit. Re-running would double build minutes and prove nothing new. Waiting on
+the existing run is what makes the gate meaningful.
+
+**Why `concurrency` with `cancel-in-progress: false`.** Two commits landing close
+together would otherwise race, and the loser's deploy could finish last — leaving
+the API and frontend on different versions.
+
+**Why the health check hits `/api/menu`.** It is the one endpoint that exercises
+routing, DI, *and* a database round trip. A check that only proves the process is
+alive would pass while the database is unreachable and every order is failing.
+
+**Why the smoke test fails on an empty menu.** A 200 with zero items means the
+API is up but the database is not reachable or not seeded — a success code
+hiding a total outage.
+
+**Why `auto_stop_machines = "off"`.** The API is customer-facing and Stripe
+webhooks arrive unannounced. A machine that sleeps to save a few cents would drop
+a real order. This is the ~$2-3/month that buys reliability over a free tier.
+
+---
+
+## Admin app
+
+Not deployed. When you and the owner are ready, there are three options, cheapest
+first:
+
+1. **Vercel project with password protection** — same repo, Root Directory
+   `src/asian-taste-admin`, plus Vercel's password protection (a paid feature) or
+   an allowlist. Simplest.
+2. **Local-only** — run `npm run dev` on a laptop at the restaurant, pointed at
+   the production API. Zero cost, no public attack surface.
+3. **Public URL behind the app's own login** — free, but the login page becomes
+   internet-facing. If you take this, rotate the default password first and set
+   `Cors__AllowedOrigins` to include its origin.
+
+Whichever you choose, add its origin to `Cors__AllowedOrigins__1` on Fly or every
+request from it will be blocked by CORS.
+
+---
+
+## Going live
+
+Things that must change before real customers pay real money:
+
+- [ ] **Rotate the admin password** off `Admin123!`, or the admin app is open.
+- [ ] **Stripe live keys** set on Fly, and `Payment__UseMockGateway=false`.
+      While it is `true` the API approves payments without contacting Stripe, so
+      orders are accepted unpaid.
+- [ ] **Stripe webhook endpoint** pointing at `https://<api>/api/webhooks/stripe`,
+      with its signing secret in `Stripe__WebhookSecret`.
+- [ ] **`Cors__AllowedOrigins`** set to the real frontend origins, and localhost
+      removed.
+- [ ] **SendGrid** enabled so customers get confirmations
+      (`SendGrid__Enabled=true`), otherwise orders succeed silently with no email.
+- [ ] **Verify a real order end to end** — place one, pay, confirm it reaches the
+      admin dashboard.
+- [ ] **Back up the database.** Neon's free tier does not include automated
+      backups. Either upgrade before launch or schedule your own `pg_dump`.
+- [ ] **Vercel Hobby is non-commercial.** A restaurant taking orders is
+      commercial use. Move to Pro (~$20/mo) at launch, or host the frontends on
+      Cloudflare Pages (free, commercial use permitted, unlimited bandwidth).
+
+---
+
+## When something breaks
+
+| Symptom | Likely cause |
+|---|---|
+| Menu renders but is empty | `VITE_API_BASE_URL` missing `/api`, or CORS blocking |
+| Every request 404s, UI still renders | `VITE_API_BASE_URL` is a bare origin |
+| CORS error in the console | Origin not in `Cors__AllowedOrigins__N` on Fly, or a JSON array was used instead of the indexed form |
+| API deploy fails at startup | Missing `Encryption__Key` — the API throws by design |
+| `direct load of /menu/item/33` 404s | `vercel.json` rewrite missing in the deployed app |
+| API returns 200 but no items | Database unreachable — check `fly logs` |
+| Changes to an env var do nothing | Vite inlined it at build time; redeploy |
+| Orders succeed but no email | `SendGrid__Enabled=false` or the API key is unset |
+
+---
+
+## Cost
+
+| Piece | Cost |
+|---|---|
+| Fly.io API (256 MB, always on) | ~$2-3/month |
+| Neon Postgres (free tier) | $0 |
+| Vercel customer app (Hobby) | $0 (non-commercial — see above) |
+| Admin app | $0 (not deployed) |
+| **Total** | **~$2-3/month** |
+
+The cost that matters is not the hosting bill. A free tier that sleeps turns the
+first order of the day into a 30-60 second hang, and a paused database turns
+"we're quiet this week" into a restaurant that cannot take orders. The few
+dollars above are what avoid both.

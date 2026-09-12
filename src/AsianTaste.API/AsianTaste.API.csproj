@@ -10,6 +10,22 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+
+    <!-- Transitive pin: CVE-2026-49451 / GHSA-v5pm-xwqc-g5wc.
+         Microsoft.AspNetCore.OpenApi 10.0.2 depends on Microsoft.OpenApi 2.0.0,
+         which sits inside the affected range (>= 2.0.0-preview.11, <= 2.7.4) for a
+         stack-overflow DoS when parsing an OpenAPI document with circular schema
+         references. Every Microsoft.AspNetCore.OpenApi 10.0.x still pulls 2.0.0, so
+         pinning here is the only lever on .NET 10.
+
+         Real exposure in THIS service is low: it only GENERATES OpenAPI (Swagger UI)
+         and never parses an OpenAPI document supplied by a caller, which is the
+         documented attack path. The pin is applied anyway because it costs nothing
+         and keeps the build free of NU1903.
+
+         Exit condition: remove this once Microsoft.AspNetCore.OpenApi depends on a
+         patched Microsoft.OpenApi (>= 2.7.5) by itself. -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageReference Include="Npgsql" Version="8.0.5" />
     <PackageReference Include="Dapper" Version="2.1.35" />
     <PackageReference Include="BCrypt.Net-Next" Version="2.0.1" />

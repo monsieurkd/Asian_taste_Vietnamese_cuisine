@@ -1,6 +1,12 @@
 -- ============================================
 -- Asian Taste Seed Data
 -- Date: 2026-01-31
+--
+-- RE-RUNNABLE. This script is executed on every application start by
+-- DatabaseInitializationService.InitializeAsync, so every statement here must
+-- be idempotent. Getting this wrong is not theoretical: the menu_items INSERT
+-- used to be unguarded, so each restart appended all 82 dishes again under
+-- fresh ids. The customer menu then rendered every dish twice.
 -- ============================================
 
 -- ============================================
@@ -27,6 +33,11 @@ SELECT setval('categories_id_seq', (SELECT MAX(id) FROM categories));
 
 -- ============================================
 -- MENU ITEMS
+--
+-- No explicit `id` and no sequence is left behind: the id is generated, and the
+-- natural key (name, category_id) — backed by ux_menu_items_name_category — is
+-- what makes this re-runnable. Categories above supply explicit ids, so their
+-- sequence needs the setval below; this one does not.
 -- ============================================
 INSERT INTO menu_items (category_id, name, description, base_price, is_available, is_popular, is_gluten_free, is_vegetarian, is_vegan, spicy_level) VALUES
 -- Starters
@@ -137,6 +148,5 @@ INSERT INTO menu_items (category_id, name, description, base_price, is_available
 (13, 'Vegan curry (Green/Yellow)', NULL, 16.50, true, false, true, false, true, 1),
 
 -- Super Deals
-(14, 'Snack Super Deal', '2 spring rolls + 1 drink', 5.20, true, true, false, true, true, 0);
-
-SELECT setval('menu_items_id_seq', (SELECT MAX(id) FROM menu_items));
+(14, 'Snack Super Deal', '2 spring rolls + 1 drink', 5.20, true, true, false, true, true, 0)
+ON CONFLICT (name, category_id) DO NOTHING;

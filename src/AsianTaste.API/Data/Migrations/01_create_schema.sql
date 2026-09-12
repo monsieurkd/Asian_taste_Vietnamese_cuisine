@@ -211,6 +211,13 @@ CREATE INDEX IF NOT EXISTS idx_menu_items_is_available ON menu_items(is_availabl
 CREATE INDEX IF NOT EXISTS idx_menu_items_is_popular ON menu_items(is_popular) WHERE is_popular = TRUE;
 CREATE INDEX IF NOT EXISTS idx_menu_items_name ON menu_items USING GIN(to_tsvector('english', name));
 
+-- The natural-key UNIQUE INDEXES (ux_menu_items_name_category, ux_categories_name)
+-- deliberately do NOT live here. This script runs before the seed, and a database
+-- polluted by the old unguarded seed still holds duplicate dishes, so CREATE
+-- UNIQUE INDEX would abort this entire script and the API would not start. They
+-- are created by 12_add_natural_key_indexes.sql, once migration 11 has removed any
+-- duplicates. See DatabaseInitializationService.InitializeAsync.
+
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email_normalized);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_customers_customer_number ON customers(customer_number);

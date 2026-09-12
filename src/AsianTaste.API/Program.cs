@@ -139,15 +139,51 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(options =>
 
 builder.Services.AddControllers();
 
-// CORS - Allow frontend to communicate with API
+// CORS - Allow frontend to communicate with API.
+//
+// The allowed origins are configuration, not source. They used to be hardcoded
+// to localhost, which means a deployed frontend would have every request blocked
+// by CORS with no code path to fix it short of editing and redeploying the API.
+// Set Cors:AllowedOrigins in the environment (Fly secrets) to the deployed
+// frontend origins; the localhost entries remain as the development default so
+// nothing changes locally.
+//
+// AllowCredentials is required because the customer app sends the auth bearer
+// token, and it is also why origins must be listed explicitly — the CORS spec
+// forbids combining credentials with a wildcard origin.
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>();
+
+if (allowedOrigins is null || allowedOrigins.Length == 0)
+{
+    // A misconfigured CORS list is invisible from the API side: it starts
+    // normally, logs nothing, and every browser request is rejected before it
+    // reaches the app. The usual cause is a JSON array in the environment
+    // (Cors__AllowedOrigins='["https://..."]'), which does not bind to string[]
+    // — the indexed form (Cors__AllowedOrigins__0) is what works. So fall back
+    // to localhost AND say so, in production.
+    if (!builder.Environment.IsDevelopment())
+    {
+        Console.WriteLine(
+            "=== WARNING: Cors:AllowedOrigins is not configured. Falling back to localhost, " +
+            "so every request from the deployed frontend will be blocked by CORS. " +
+            "Set Cors__AllowedOrigins__0 (indexed form), not a JSON array. ===");
+    }
+
+    allowedOrigins =
+    [
+        "http://localhost:5173", // Customer app
+        "http://localhost:5174", // Admin app
+        "http://localhost:5175",
+    ];
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:5173", // Customer app
-                "http://localhost:5174", // Admin app
-                "http://localhost:5175")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -167,11 +203,57 @@ builder.Services.AddSwaggerDocument(options =>
 
 var app = builder.Build();
 
-// Initialize database on startup (auto-seeds if database is new)
-using (var scope = app.Services.CreateScope())
+// Initialize the database on startup (creates the schema and seeds a new database).
+//
+// This runs at boot, but a failure must NOT kill the process. It used to be an
+// unguarded `await`, so any database problem — a wrong or missing connection
+// string, Neon restarting, a network blip — threw before the HTTP listener was
+// up. The consequences were worse than an error message:
+//
+//   * On Fly the process aborted, so the machine restarted, threw again, and
+//     looped until it hit the restart limit. The crash loop was the symptom;
+//     the actual error ("Failed to connect to 127.0.0.1:5432") was buried in
+//     the restart spam and the app looked broken when it was simply misconfigured.
+//   * /healthz could never answer, because the process died before binding the
+//     port — which is why the liveness check has to be paired with this.
+//
+// So the failure is now logged with its full detail and the app still starts.
+// Requests that genuinely need the database return 500 with a clear message
+// (see the health endpoint below), which is a diagnosable failure instead of a
+// restart loop. A database that is merely slow to accept connections on a cold
+// start also gets a bounded retry first, which is the common case on a
+// serverless Postgres that has scaled to zero.
+const int databaseInitAttempts = 3;
+for (var attempt = 1; ; attempt++)
 {
-    var dbService = scope.ServiceProvider.GetRequiredService<IDatabaseInitializationService>();
-    await dbService.InitializeAsync();
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbService = scope.ServiceProvider.GetRequiredService<IDatabaseInitializationService>();
+        await dbService.InitializeAsync();
+        break;
+    }
+    catch (Exception ex) when (attempt < databaseInitAttempts)
+    {
+        app.Logger.LogWarning(
+            ex,
+            "Database initialization failed (attempt {Attempt}/{Total}). Retrying in 5s. " +
+            "Check ConnectionStrings__DefaultConnection.",
+            attempt, databaseInitAttempts);
+        await Task.Delay(TimeSpan.FromSeconds(5));
+    }
+    catch (Exception ex)
+    {
+        // Out of retries. Log loudly and start anyway — the API will report the
+        // problem on /health/db rather than disappearing into a restart loop.
+        app.Logger.LogError(
+            ex,
+            "Database initialization FAILED after {Total} attempts. The API is starting " +
+            "WITHOUT a working database. Check ConnectionStrings__DefaultConnection and " +
+            "that the database is reachable. GET /health/db for the current status.",
+            databaseInitAttempts);
+        break;
+    }
 }
 
 // Configure the HTTP request pipeline.
@@ -270,6 +352,48 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Liveness probe, used by the Fly health check (see fly.toml).
+//
+// Deliberately does NOT touch the database, and is paired with the guarded
+// startup above. A liveness check answers "is the process serving HTTP?", and
+// that is the only question whose "no" should get the machine killed and
+// restarted. When the equivalent check touched the database, a missing
+// connection-string secret made it fail, so Fly killed and restarted the machine
+// until it hit its restart limit — turning a one-line configuration error into a
+// crash loop that hid the actual error.
+//
+// Dependency health belongs in a readiness endpoint (below), where a failure is
+// *reported*, not in a liveness probe, where a failure destroys the evidence.
+app.MapGet("/healthz", () => Results.Ok(new { status = "healthy" }))
+   .AllowAnonymous();
+
+// Readiness: is the database actually reachable? Returns 503 when it is not, so
+// a monitoring tool (or a human with curl) gets a clear answer instead of a
+// restart loop. This is the endpoint to check when the menu is empty.
+app.MapGet("/health/db", async (IDbConnectionFactory dbFactory) =>
+{
+    try
+    {
+        using var connection = dbFactory.CreateConnection();
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM menu_items";
+        var count = Convert.ToInt64(cmd.ExecuteScalar());
+
+        return Results.Ok(new { status = "healthy", menuItems = count });
+    }
+    catch (Exception ex)
+    {
+        // The message is returned deliberately: this endpoint is diagnostic, and
+        // "database unreachable" without a reason is what made the original
+        // failure hard to find. It exposes no credentials — Npgsql's message
+        // names the host and port, never the password.
+        return Results.Json(
+            new { status = "unhealthy", error = ex.Message },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+}).AllowAnonymous();
 
 // Enable CORS
 app.UseCors("AllowFrontend");

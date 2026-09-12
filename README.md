@@ -9,7 +9,8 @@ Online ordering platform for Asian Taste Vietnamese Restaurant
 
 See [`Asian_Taste_PRD.md`](Asian_Taste_PRD.md) for full product requirements,
 [`MAJOR_UPDATE_PLAN.md`](MAJOR_UPDATE_PLAN.md) for the roadmap, and
-[`docs/SESSION_NOTES.md`](docs/SESSION_NOTES.md) for the current state and what's next.
+[`docs/SESSION_NOTES.md`](docs/SESSION_NOTES.md) for the current state and what's next,
+and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) to put it in production.
 
 ---
 

@@ -1,0 +1,99 @@
+# Production configuration for the Asian Taste API
+# ---------------------------------------------------------------------------
+# This file is a TEMPLATE. It is committed; real values are not.
+#
+# Where the real values go:
+#   Fly.io      -> `fly secrets set KEY=value`   (per app, encrypted at rest)
+#   Local dev   -> `dotnet user-secrets set "Key" "value"`
+#
+# Do NOT create an appsettings.Production.json with real secrets in it — that
+# file would be committed and the secrets would be in git history forever.
+# appsettings.json stays as the committed placeholder/defaults layer.
+#
+# ASP.NET Core maps `Section__Key` environment variables onto configuration
+# keys, which is the double-underscore convention below. `fly secrets set
+# Encryption__Key=...` sets `Encryption:Key`.
+# ---------------------------------------------------------------------------
+
+# --- Required: the API refuses to start without these -----------------------
+
+# PostgreSQL connection string. Neon gives you this; use the POOLED host
+# (...-pooler...) because serverless Postgres charges per connection and the
+# API opens one per request via Dapper.
+#   Fly secret name: ConnectionStrings__DefaultConnection
+# Example (Neon):
+#   Host=ep-xxx-pooler.ap-southeast-2.aws.neon.tech;Database=neondb;Username=xxx;Password=xxx;SSL Mode=Require
+ConnectionStrings__DefaultConnection=
+
+# 32-byte base64 key used to encrypt Lightspeed OAuth tokens at rest.
+# Generate: openssl rand -base64 32
+# The API THROWS at startup if this is missing (Program.cs), by design — an
+# unencrypted token store is worse than a failed deploy. Rotating this value
+# invalidates stored Lightspeed tokens; re-authorise after rotating.
+#   Fly secret name: Encryption__Key
+Encryption__Key=
+
+# JWT signing key for the admin dashboard. At least 32 characters.
+# Generate: openssl rand -base64 48
+# Changing this logs every admin out.
+#   Fly secret name: Jwt__SecretKey
+Jwt__SecretKey=
+
+# --- Required once payments go live -----------------------------------------
+
+# Stripe. Use LIVE keys (sk_live_/pk_live_) for real orders, test keys for a
+# staging app. The webhook secret comes from the Stripe dashboard endpoint.
+#   Fly secret names: Stripe__SecretKey, Stripe__PublishableKey, Stripe__WebhookSecret
+Stripe__SecretKey=
+Stripe__PublishableKey=
+Stripe__WebhookSecret=
+Stripe__Currency=aud
+
+# Must be false in production. true makes the API use a mock gateway that
+# approves payments without contacting Stripe — fine locally, catastrophic
+# in production because orders would be accepted unpaid.
+#   Fly secret name: Payment__UseMockGateway
+Payment__UseMockGateway=false
+
+# --- Required for the frontend to be able to call the API -------------------
+
+# CORS allowed origins. Without this the API defaults to localhost and every
+# browser request from the deployed site is blocked.
+#
+# Use the INDEXED syntax, not a JSON array. ASP.NET Core does not parse a JSON
+# string from an environment variable into a string[]; it maps each indexed
+# variable onto one element. A JSON value looks like it works and silently
+# yields an empty list, so the API starts fine and every browser request is
+# then blocked by CORS — verified against the real published build:
+#   Cors__AllowedOrigins='["https://..."]'     -> no Access-Control-Allow-Origin
+#   Cors__AllowedOrigins__0="https://..."      -> Access-Control-Allow-Origin: https://...
+#
+#   fly secrets set \
+#     Cors__AllowedOrigins__0="https://<customer-app>.vercel.app" \
+#     Cors__AllowedOrigins__1="https://<admin-app>.vercel.app"
+Cors__AllowedOrigins__0=
+
+# --- Optional: email ---------------------------------------------------------
+
+# Order confirmation emails. Enabled=false means orders are accepted and the
+# confirmation email is silently skipped.
+SendGrid__Enabled=true
+SendGrid__ApiKey=
+SendGrid__FromEmail=orders@asiantaste.com.au
+SendGrid__FromName=Asian Taste Vietnamese Restaurant
+
+# Public URL of the customer app, used to build links inside emails.
+App__BaseUrl=https://asian-taste.vercel.app
+
+# --- Optional: Lightspeed POS ------------------------------------------------
+
+# Leave blank to run without POS sync (the integration no-ops cleanly).
+Lightspeed__ClientId=
+Lightspeed__ClientSecret=
+Lightspeed__RedirectUri=
+
+# --- Set by fly.toml, listed here for completeness ---------------------------
+
+# MUST be "production" in production. Setting "Development" would expose the
+# unauthenticated /api/dev/db/{init,seed,reset} endpoints on a public URL.
+ASPNETCORE_ENVIRONMENT=production

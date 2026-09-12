@@ -1,0 +1,224 @@
+name: Deploy
+
+# Deploys on every push to main — the same event the CI workflow runs on, so a
+# red CI run and a green deploy cannot diverge.
+#
+# Why this is a separate file rather than jobs appended to ci.yml:
+#   ci.yml also triggers on pull_request, and a deploy job living there would
+#   either run on PRs (bad) or need an `if` on every job to stop it (easy to
+#   get wrong). Splitting the files makes "deploys only from main" structural
+#   rather than conditional.
+#
+# It does NOT re-run the test suite. CI is the gate: this workflow waits for CI
+# to be green on the same commit before deploying. Running the tests twice would
+# double build minutes for no extra safety.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: this workflow only needs to read the repo. No write scopes,
+# so a compromised action here cannot push commits or edit releases.
+permissions:
+  contents: read
+
+# One deploy at a time. If two commits land close together, the second waits
+# rather than racing the first — an interleaved deploy can leave the API and
+# the frontend running different versions.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Gate: wait for the CI workflow to pass on this exact commit.
+  # ---------------------------------------------------------------------------
+  await-ci:
+    name: Wait for CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the CI workflow to succeed on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Waiting for CI on ${{ github.sha }}..."
+          # `gh run watch` follows the run that matches this commit. If CI has
+          # not started yet (both workflows trigger on push, so ordering is not
+          # guaranteed), the loop waits for it to appear.
+          for attempt in $(seq 1 60); do
+            run_id=$(gh run list \
+              --workflow=ci.yml \
+              --commit "${{ github.sha }}" \
+              --limit 1 \
+              --json databaseId,status,conclusion \
+              --jq '.[0].databaseId' 2>/dev/null || true)
+
+            if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
+              echo "Found CI run $run_id"
+              break
+            fi
+            echo "CI has not started yet (attempt $attempt/60)..."
+            sleep 10
+          done
+
+          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+            echo "::error::No CI run found for ${{ github.sha }} after 10 minutes."
+            exit 1
+          fi
+
+          gh run watch "$run_id" --exit-status --interval 15 \
+            || { echo "::error::CI did not pass on ${{ github.sha }} — not deploying."; exit 1; }
+
+          echo "CI is green. Proceeding to deploy."
+
+  # ---------------------------------------------------------------------------
+  # API -> Fly.io
+  # ---------------------------------------------------------------------------
+  deploy-api:
+    name: Deploy API (Fly.io)
+    needs: await-ci
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the deploy token is configured
+        id: config
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::FLY_API_TOKEN is not set — skipping the API deploy. See docs/DEPLOYMENT.md."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.config.outputs.configured == 'true'
+
+      - name: Deploy
+        if: steps.config.outputs.configured == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        # --remote-only builds on Fly's builders, so the runner needs no Docker
+        # and no local image cache — faster and reproducible.
+        run: flyctl deploy --remote-only
+
+      - name: Smoke test the deployed API
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          # The API_URL repo variable holds e.g. https://asian-taste-api.fly.dev
+          base="${{ vars.API_URL }}"
+          if [ -z "$base" ]; then
+            echo "::warning::vars.API_URL is not set — skipping the smoke test."
+            exit 0
+          fi
+
+          # Two checks, because they answer different questions:
+          #   /healthz  — is the new process actually serving? (liveness)
+          #   /health/db — can it reach the database? (readiness)
+          # A deploy can pass the first and fail the second, which is exactly the
+          # state that caused a crash loop before the health endpoints existed.
+          #
+          # Retry: `fly deploy` can return before the new machine passes its check,
+          # so an immediate request may still hit the previous instance.
+          for i in $(seq 1 24); do
+            live=$(curl -s -o /dev/null -w '%{http_code}' "$base/healthz" || true)
+            if [ "$live" = "200" ]; then
+              echo "/healthz OK"
+              break
+            fi
+            echo "/healthz returned $live, retrying ($i/24)..."
+            sleep 5
+          done
+
+          if [ "$live" != "200" ]; then
+            echo "::error::$base/healthz never returned 200 — the deployed app is not serving."
+            exit 1
+          fi
+
+          db=$(curl -s -o /dev/null -w '%{http_code}' "$base/health/db" || true)
+          if [ "$db" != "200" ]; then
+            # Print the body: it names the concrete cause (unreachable host, bad
+            # credentials), which is the whole point of the endpoint.
+            echo "::error::/health/db returned $db — the API is up but cannot reach the database."
+            curl -s "$base/health/db" || true
+            exit 1
+          fi
+          echo "/health/db OK: $(curl -s "$base/health/db")"
+
+          # Finally, prove it serves real content — a healthy process with an
+          # empty menu would mean the seed did not run.
+          count=$(curl -s "$base/api/menu" | python3 -c 'import json,sys; print(sum(len(c["items"]) for c in json.load(sys.stdin)["categories"]))')
+          echo "Menu returned $count items."
+          if [ "$count" -lt 1 ]; then
+            echo "::error::The menu is empty — the database is reachable but not seeded."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Customer app -> Vercel. The admin app is deliberately NOT deployed here.
+  # ---------------------------------------------------------------------------
+  deploy-customer:
+    name: Deploy customer app (Vercel)
+    needs: await-ci
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the Vercel token is configured
+        id: config
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VERCEL_TOKEN is not set — skipping the frontend deploy."
+            echo "Vercel's own Git integration will deploy on push instead."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        if: steps.config.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install the Vercel CLI
+        if: steps.config.outputs.configured == 'true'
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings
+        if: steps.config.outputs.configured == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CUSTOMER_PROJECT_ID }}
+        # --environment=production pulls the Production env vars, which is what
+        # Vite inlines at build time. Pulling "preview" here would build the
+        # bundle against the wrong API URL and every request would 404.
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build
+        if: steps.config.outputs.configured == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CUSTOMER_PROJECT_ID }}
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy the prebuilt output
+        if: steps.config.outputs.configured == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CUSTOMER_PROJECT_ID }}
+        # --prebuilt reuses the artifact from the step above, so the bundle that
+        # was built against the Production env vars is exactly what ships.
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"

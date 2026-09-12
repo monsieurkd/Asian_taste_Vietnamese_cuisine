@@ -1,0 +1,72 @@
+# Fly.io app configuration for the Asian Taste API.
+#
+# NOTE: `fly launch` regenerates this file and strips the comments below. If you
+# re-run it, re-apply this file from git — the health check in particular is
+# deliberately not what fly launch generates (see below).
+
+app = 'asian-taste-api'
+
+# Sydney ("syd") is the closest Fly region to Adelaide — roughly 15-20 ms,
+# versus ~200 ms from a US region. Every menu load is a round trip to the API,
+# so the region is a user-visible decision, not a detail.
+primary_region = 'syd'
+
+[build]
+  # Build context is the repo root, not the project folder — the Dockerfile
+  # copies src/AsianTaste.API/ from there.
+  dockerfile = 'src/AsianTaste.API/Dockerfile'
+
+[env]
+  # Production, so the unauthenticated /api/dev/db/* endpoints stay disabled.
+  # This is the most important line in this file: Development would expose
+  # schema reset, seed, and raw order dumps on a public URL.
+  ASPNETCORE_ENVIRONMENT = 'production'
+
+  # Fly proxies to internal_port; the Dockerfile defaults here too.
+  ASPNETCORE_URLS = 'http://+:8080'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # Keep one machine always running. The ordering endpoint is customer-facing
+  # and Stripe webhooks arrive unannounced — a stopped machine drops both. This
+  # is the ~$2-3/month that buys reliability over a free tier that sleeps.
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  [http_service.concurrency]
+    type = 'requests'
+    soft_limit = 200
+    hard_limit = 250
+
+# A machine with 256 MB is the cheapest tier. The API is I/O-bound (Dapper over
+# Npgsql) and holds no large caches, so memory is not the constraint.
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'
+
+# Health check.
+#
+# This deliberately does NOT use /api/menu, which is what `fly launch` generates
+# and what this file said first. /api/menu hits the database, so a transient
+# database problem (Neon restarting, a network blip, a bad connection string)
+# makes the check fail, Fly concludes the machine is unhealthy and kills it —
+# turning a brief database hiccup into a full outage, and a misconfigured
+# connection string into an endless restart loop.
+#
+# That is not hypothetical: with no database secret set, /api/menu failed, the
+# machine was killed and restarted until it hit Fly's 10-restart limit. A
+# liveness check should answer "is the process serving HTTP?", not "is every
+# dependency healthy?" — dependency failures belong in metrics and alerts, where
+# they can be diagnosed instead of causing a crash loop.
+#
+# /healthz is mapped in Program.cs and touches nothing.
+[[http_service.checks]]
+  interval = '30s'
+  timeout = '10s'
+  grace_period = '20s'
+  method = 'GET'
+  path = '/healthz'
