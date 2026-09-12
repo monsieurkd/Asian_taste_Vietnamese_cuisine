@@ -146,55 +146,16 @@ jobs:
 
       - name: Smoke test the deployed API
         if: steps.config.outputs.configured == 'true'
-        run: |
-          # The API_URL repo variable holds e.g. https://asian-taste-api.fly.dev
-          base="${{ vars.API_URL }}"
-          if [ -z "$base" ]; then
-            echo "::warning::vars.API_URL is not set — skipping the smoke test."
-            exit 0
-          fi
+        env:
+          API_URL: ${{ vars.API_URL }}
+          CUSTOMER_URL: ${{ vars.CUSTOMER_URL }}
+        # Delegates to the same script a human runs by hand, so CI and a manual
+        # check agree on what "healthy" means. The script covers liveness,
+        # readiness, menu content, duplicate dishes, CORS, the production
+        # posture of the dev endpoints, and the customer site's SPA routes —
+        # all of which have been wrong at some point in this project's history.
+        run: ./scripts/check-deployment-health.sh
 
-          # Two checks, because they answer different questions:
-          #   /healthz  — is the new process actually serving? (liveness)
-          #   /health/db — can it reach the database? (readiness)
-          # A deploy can pass the first and fail the second, which is exactly the
-          # state that caused a crash loop before the health endpoints existed.
-          #
-          # Retry: `fly deploy` can return before the new machine passes its check,
-          # so an immediate request may still hit the previous instance.
-          for i in $(seq 1 24); do
-            live=$(curl -s -o /dev/null -w '%{http_code}' "$base/healthz" || true)
-            if [ "$live" = "200" ]; then
-              echo "/healthz OK"
-              break
-            fi
-            echo "/healthz returned $live, retrying ($i/24)..."
-            sleep 5
-          done
-
-          if [ "$live" != "200" ]; then
-            echo "::error::$base/healthz never returned 200 — the deployed app is not serving."
-            exit 1
-          fi
-
-          db=$(curl -s -o /dev/null -w '%{http_code}' "$base/health/db" || true)
-          if [ "$db" != "200" ]; then
-            # Print the body: it names the concrete cause (unreachable host, bad
-            # credentials), which is the whole point of the endpoint.
-            echo "::error::/health/db returned $db — the API is up but cannot reach the database."
-            curl -s "$base/health/db" || true
-            exit 1
-          fi
-          echo "/health/db OK: $(curl -s "$base/health/db")"
-
-          # Finally, prove it serves real content — a healthy process with an
-          # empty menu would mean the seed did not run.
-          count=$(curl -s "$base/api/menu" | python3 -c 'import json,sys; print(sum(len(c["items"]) for c in json.load(sys.stdin)["categories"]))')
-          echo "Menu returned $count items."
-          if [ "$count" -lt 1 ]; then
-            echo "::error::The menu is empty — the database is reachable but not seeded."
-            exit 1
-          fi
 
   # ---------------------------------------------------------------------------
   # Customer app -> Vercel. The admin app is deliberately NOT deployed here.
