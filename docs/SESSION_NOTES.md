@@ -204,6 +204,71 @@ not just built:
 
 ---
 
+## It is deployed
+
+| Piece | Where | Status |
+|---|---|---|
+| API | https://asian-taste-api.fly.dev (Fly, `syd`) | live, 82 items, connected to Neon |
+| Database | Neon `ap-southeast-2` (Sydney), pooled | live |
+| Customer app | https://asian-taste-customer.vercel.app | live, reaches the API |
+| Admin app | not deployed | by decision — see `docs/DEPLOYMENT.md` |
+
+**Proven end to end:** `git push` → CI (5 jobs green) → deploy gate → Fly deploy →
+smoke test against production → PASS. A real order was placed through the live API
+(`AT-130006-0008`, $17.00) and retrieved back from Neon. The live site renders
+82 cards, 82 distinct, 0 duplicates, and a dish modal opens with a working
+Add-to-Cart.
+
+`./scripts/check-deployment-health.sh` is the single command that answers "is
+production working?": liveness, readiness, menu content, **duplicate dishes**,
+CORS, the dev endpoints being 404, and the customer site's routes. It runs in CI
+after every API deploy, so CI and a human agree.
+
+### What went wrong on the way, and why
+
+1. **The API crash-looped on Fly.** `ConnectionStrings__DefaultConnection` was
+   never set, so it fell back to `appsettings.json`'s `Host=localhost` — inside a
+   container, itself. Startup then **aborted** on the failure, so Fly restarted
+   it, it aborted again, and it looped to the restart limit. The real error was
+   buried in restart spam.
+   Two fixes, and the second is the important one: the connection string had to
+   be converted from Neon's `postgresql://` URI form (which Npgsql rejects) into
+   key=value form; and startup no longer dies on a database problem — it retries
+   briefly, logs the cause, and starts anyway, with `/healthz` (liveness) and
+   `/health/db` (readiness, naming the cause) as separate endpoints.
+
+2. **The deploy gate never ran.** It used `gh run list --commit`, which works
+   interactively but returned nothing on the runner, and the stderr was
+   suppressed — so it hung for its full 10-minute timeout instead of failing. A
+   gate that hangs is worse than one that fails, because it looks like a slow
+   deploy. It now polls the Actions REST API and fails loudly, and the job needs
+   an explicit `actions: read`.
+
+3. **The replacement gate rejected valid responses.** Its error check grepped the
+   response body for `"message"`, which also matches the commit message inside a
+   perfectly good `workflow_run`. It now checks for the `workflow_runs` key.
+
+4. **The Vercel job is red and cannot be fixed from here.** The token is
+   team-scoped with no user identity, so the CLI rejects it
+   (`vercel whoami` → "User not found"; `vercel pull` → "Could not retrieve
+   Project Settings"). Reproduced locally, so it is token scope, not CI config.
+   It needs a token minted from **personal** Account Settings. The frontend is
+   not broken — Vercel's Git integration deploys it fine.
+
+### Still outstanding
+
+- **Rotate the Neon password.** It was pasted into a chat, so treat it as
+  compromised; re-running one `fly secrets set` from `docs/DEPLOYMENT.md` is the
+  whole fix.
+- **`VITE_STRIPE_PUBLISHABLE_KEY` is unset on Vercel**, so checkout fails with
+  "Please call Stripe() with your publishable key". Browsing and the API are fine.
+- The admin app is not deployed (deliberate), and `Payment__UseMockGateway` is
+  still `true`, so **orders are accepted without real payment**. Both must change
+  before real customers, along with the pre-launch checklist in
+  `docs/DEPLOYMENT.md`.
+
+---
+
 ## What's next (evidence, not memory)
 
 ### 1. Wire the Lightspeed order push — highest priority
