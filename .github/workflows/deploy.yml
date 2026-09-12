@@ -237,9 +237,16 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CUSTOMER_PROJECT_ID }}
+        # The CLI must run from the app's Root Directory: `vercel pull` writes a
+        # .vercel/ link file into the working directory, and the build has to
+        # happen where the project's package.json is. Running it from the repo
+        # root fails with "Could not retrieve Project Settings" because the
+        # project's root directory is src/asian-taste-customer.
+        #
         # --environment=production pulls the Production env vars, which is what
-        # Vite inlines at build time. Pulling "preview" here would build the
-        # bundle against the wrong API URL and every request would 404.
+        # Vite inlines at build time. Pulling "preview" here would bake the wrong
+        # API URL into the bundle and every request would 404.
+        working-directory: src/asian-taste-customer
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
       - name: Build
@@ -248,6 +255,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CUSTOMER_PROJECT_ID }}
+        working-directory: src/asian-taste-customer
         run: vercel build --prod --token="$VERCEL_TOKEN"
 
       - name: Deploy the prebuilt output
@@ -256,6 +264,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CUSTOMER_PROJECT_ID }}
+        working-directory: src/asian-taste-customer
         # --prebuilt reuses the artifact from the step above, so the bundle that
         # was built against the Production env vars is exactly what ships.
         run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"

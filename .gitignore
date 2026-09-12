@@ -50,6 +50,14 @@ src/asian-taste-admin/.env.production
 src/asian-taste-customer/.env.development.local
 src/asian-taste-admin/.env.development.local
 
+# Vercel CLI link metadata. Created by `vercel link` / `vercel pull`, and it
+# carries the project and org IDs plus the pulled env values — so it must never
+# be committed. CI recreates it per run.
+.vercel
+src/asian-taste-customer/.vercel
+src/asian-taste-admin/.vercel
+.vercelignore
+
 # UI quality loop output (screenshots + judge report are artifacts, not source)
 ui-shots/
 .neon
