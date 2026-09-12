@@ -158,17 +158,35 @@ jobs:
 
 
   # ---------------------------------------------------------------------------
-  # Customer app -> Vercel. The admin app is deliberately NOT deployed here.
+  # Customer app -> Vercel deploys itself; this job only verifies it.
+  #
+  # There is deliberately NO `vercel deploy` here, and this is a design decision
+  # rather than an omission:
+  #
+  #   Vercel's own Git integration already builds and deploys every push to main
+  #   — six consecutive READY deployments, one per commit, are visible in the
+  #   dashboard. A CLI deploy in this workflow would be a second, competing
+  #   deployer for the same project: two builds per commit, and a race over which
+  #   one ends up serving production.
+  #
+  # The CLI path was also not workable with the available credentials. `vercel
+  # pull/build/deploy` need a token carrying a user identity; a token minted
+  # under Team Settings is team-scoped, so `vercel whoami` returns "User not
+  # found" and every command fails with "Could not retrieve Project Settings".
+  # The REST API accepts that same token, which is what made it confusing.
+  #
+  # So this job does the part that was actually missing: it waits for Vercel's
+  # deployment of THIS commit to become READY, and fails if it does not. The
+  # pipeline therefore still gates the frontend without owning the deploy.
   # ---------------------------------------------------------------------------
-  deploy-customer:
-    name: Deploy customer app (Vercel)
+  verify-customer:
+    name: Verify customer app deployed
     needs: await-ci
     runs-on: ubuntu-latest
-    environment: production
+    permissions:
+      contents: read
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Check the Vercel token is configured
         id: config
         env:
@@ -176,56 +194,59 @@ jobs:
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::VERCEL_TOKEN is not set — skipping the frontend deploy."
-            echo "Vercel's own Git integration will deploy on push instead."
+            echo "::notice::VERCEL_TOKEN is not set — skipping the frontend verification. See docs/DEPLOYMENT.md."
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Setup Node
-        if: steps.config.outputs.configured == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install the Vercel CLI
-        if: steps.config.outputs.configured == 'true'
-        run: npm install --global vercel@latest
-
-      - name: Pull Vercel project settings
+      - name: Wait for Vercel to report READY for this commit
         if: steps.config.outputs.configured == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CUSTOMER_PROJECT_ID }}
-        # The CLI must run from the app's Root Directory: `vercel pull` writes a
-        # .vercel/ link file into the working directory, and the build has to
-        # happen where the project's package.json is. Running it from the repo
-        # root fails with "Could not retrieve Project Settings" because the
-        # project's root directory is src/asian-taste-customer.
-        #
-        # --environment=production pulls the Production env vars, which is what
-        # Vite inlines at build time. Pulling "preview" here would bake the wrong
-        # API URL into the bundle and every request would 404.
-        working-directory: src/asian-taste-customer
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        run: |
+          # Vercel's Git integration may still be building when this runs, so poll
+          # rather than checking once. 40 x 15s = 10 minutes, which comfortably
+          # covers a Vite build.
+          #
+          # The commit is matched via the deployment's githubCommitSha metadata, so
+          # this cannot pass on a stale deployment from an earlier commit.
+          for attempt in $(seq 1 40); do
+            state=$(curl -sS \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&limit=10" \
+              | python3 -c '
+          import json, sys
+          target = sys.argv[1]
+          try:
+              data = json.load(sys.stdin)
+          except Exception:
+              print("unparseable"); raise SystemExit
+          for d in data.get("deployments", []):
+              meta = d.get("meta") or {}
+              if (meta.get("githubCommitSha") or "") == target:
+                  print(d.get("state", "unknown")); raise SystemExit
+          print("not-found")
+          ' "${{ github.sha }}")
 
-      - name: Build
-        if: steps.config.outputs.configured == 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CUSTOMER_PROJECT_ID }}
-        working-directory: src/asian-taste-customer
-        run: vercel build --prod --token="$VERCEL_TOKEN"
+            case "$state" in
+              READY)
+                echo "Vercel deployment for ${{ github.sha }} is READY."
+                exit 0
+                ;;
+              ERROR|CANCELED)
+                echo "::error::Vercel deployment for ${{ github.sha }} ended in $state."
+                exit 1
+                ;;
+              not-found|unparseable)
+                echo "No Vercel deployment for this commit yet (attempt $attempt/40)..."
+                ;;
+              *)
+                echo "Vercel state: $state (attempt $attempt/40)..."
+                ;;
+            esac
+            sleep 15
+          done
 
-      - name: Deploy the prebuilt output
-        if: steps.config.outputs.configured == 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_CUSTOMER_PROJECT_ID }}
-        working-directory: src/asian-taste-customer
-        # --prebuilt reuses the artifact from the step above, so the bundle that
-        # was built against the Production env vars is exactly what ships.
-        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+          echo "::error::Vercel never reported READY for ${{ github.sha }} within 10 minutes."
+          exit 1

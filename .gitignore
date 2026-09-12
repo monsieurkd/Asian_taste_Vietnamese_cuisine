@@ -61,3 +61,7 @@ src/asian-taste-admin/.vercel
 # UI quality loop output (screenshots + judge report are artifacts, not source)
 ui-shots/
 .neon
+
+# Local shell secrets (see .secrets.local.example). The real file holds live
+# credentials and must never be committed.
+.secrets.local

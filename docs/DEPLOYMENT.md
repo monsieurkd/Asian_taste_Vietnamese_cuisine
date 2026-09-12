@@ -8,19 +8,72 @@ deliberately not public yet.
 
 ---
 
+## Where secrets live
+
+Read this before pasting any credential anywhere.
+
+| Secret | Lives in | How to set it |
+|---|---|---|
+| Neon connection string | Fly secret | `fly secrets set "ConnectionStrings__DefaultConnection=$NEON_CONNECTION_STRING"` |
+| `Encryption__Key`, `Jwt__SecretKey` | Fly secrets | same |
+| `Cors__AllowedOrigins__N` | Fly secrets | `fly secrets set Cors__AllowedOrigins__0=https://...` |
+| Fly deploy token | GitHub secret `FLY_API_TOKEN` | `gh secret set FLY_API_TOKEN` |
+| Vercel token / IDs | GitHub secrets | `gh secret set VERCEL_TOKEN` |
+| `VITE_API_BASE_URL` | Vercel project env vars | dashboard, or the API |
+| Stripe publishable key | Vercel project env vars | dashboard |
+| Stripe **secret** key | Fly secret | never in the frontend |
+
+**For your own machine**, use the pattern in `.secrets.local.example`:
+
+```bash
+cp .secrets.local.example .secrets.local   # gitignored
+$EDITOR .secrets.local                     # paste values here, once
+source .secrets.local                      # load into your shell
+fly secrets set "ConnectionStrings__DefaultConnection=$NEON_CONNECTION_STRING"
+```
+
+That file is the answer to "where do I paste my Neon password next time". It is
+gitignored, so it never enters history, and `source`-ing it means the value goes
+straight from the file into the `fly` command without passing through a chat, a
+terminal transcript, or a clipboard history you might not control.
+
+**Never** paste a live credential into an AI chat. Anything typed into a
+conversation should be treated as disclosed — it is stored, and it may be logged
+or backed up somewhere you cannot see. If it happens, **rotate the credential**
+rather than hoping; rotation is minutes, exposure is indefinite.
+
+---
+
 ## The shape of it
 
 ```
 git push main
-   ↓
-CI            build + test + guardrails + frontend builds (+ UI loop)
-   ↓  (green)
-Deploy        await-ci  →  deploy-api (Fly)  →  smoke test
-                       →  deploy-customer (Vercel)
+   │
+   ├─► CI (ci.yml)        build + test + guardrails + frontend builds
+   │
+   └─► Deploy (deploy.yml)
+          await-ci  ───── waits for the CI run on THIS commit
+             │
+             ├─► deploy-api        Fly deploy, then check-deployment-health.sh
+             └─► verify-customer   waits for Vercel's own deploy to be READY
 ```
 
-`deploy.yml` waits on the CI run for the **same commit**. A red CI run and a
-green deploy cannot diverge, because the deploy refuses to start.
+**Two workflows, and why they are separate.** `ci.yml` runs on pull requests
+too, so deploy jobs living there would either run on PRs or need an `if` on every
+job — easy to get wrong later. A separate file makes "deploys only from main"
+structural rather than conditional.
+
+**The gate.** `await-ci` polls the GitHub Actions API for the CI run on the same
+commit and refuses to continue unless it concluded `success`. This is why a red
+CI run cannot be followed by a green deploy. It queries the REST API directly
+rather than using `gh run list`, because that returned nothing on the runner
+(the default token lacks Actions-read) and — with its stderr suppressed — hung
+for its full timeout instead of failing. A gate that hangs is worse than one that
+fails: it looks like a slow deploy.
+
+**Who deploys what.** Fly is deployed *by* the pipeline. Vercel is deployed by
+its own Git integration, and the pipeline only *verifies* it. That is deliberate
+and covered in [Why it is built this way](#why-it-is-built-this-way).
 
 The admin app is not in the pipeline on purpose — see [Admin app](#admin-app).
 
@@ -227,17 +280,48 @@ the existing run is what makes the gate meaningful.
 together would otherwise race, and the loser's deploy could finish last — leaving
 the API and frontend on different versions.
 
-**Why the health check hits `/api/menu`.** It is the one endpoint that exercises
-routing, DI, *and* a database round trip. A check that only proves the process is
-alive would pass while the database is unreachable and every order is failing.
+**Why there are two health endpoints, and only one drives Fly.** `/healthz` is
+liveness and touches nothing; `/health/db` is readiness and reports the concrete
+database error. Only `/healthz` is wired to the Fly check, and that separation is
+load-bearing: a liveness probe that touches the database turns a transient
+database problem — or a bad connection string — into the machine being killed and
+restarted until it hits the restart limit. That is not hypothetical: it is
+exactly what happened, and the crash loop buried the real error ("Failed to
+connect to 127.0.0.1:5432") under restart spam. Dependency health belongs in a
+readiness endpoint, where a failure is *reported*, not in a liveness probe, where
+a failure destroys the evidence.
 
-**Why the smoke test fails on an empty menu.** A 200 with zero items means the
-API is up but the database is not reachable or not seeded — a success code
-hiding a total outage.
+**Why Vercel deploys itself and the pipeline only verifies it.** Vercel's Git
+integration already builds and deploys every push to `main`. A `vercel deploy` in
+the workflow would be a second deployer for the same project — two builds per
+commit, and a race over which one serves production. The CLI path was also not
+usable with a team-scoped token (see the table below), whereas the REST API
+accepts it. So `verify-customer` waits for that commit's deployment to become
+READY and fails otherwise, which gates the frontend without duplicating the work.
+
+**Why the smoke test fails on duplicate dishes.** The bug that started all of
+this served 164 rows for 82 dishes. A row count looked plausible; only comparing
+*distinct names* to the row count catches it, so the check does that.
 
 **Why `auto_stop_machines = "off"`.** The API is customer-facing and Stripe
 webhooks arrive unannounced. A machine that sleeps to save a few cents would drop
 a real order. This is the ~$2-3/month that buys reliability over a free tier.
+
+**Fly billing is a prerequisite, not an optimisation.** On Fly's free *trial*,
+machines are stopped after 5 minutes:
+
+```
+warn: Trial machine stopping. To run for longer than 5m0s, add a credit card
+      by visiting https://fly.io/trial.
+```
+
+The config above asks for an always-on machine and the trial timer overrides it,
+so the app alternates between running and stopped. Fly Doctor reports this as
+"App is not listening to the expected port" and blames your code — a **false
+positive**. The app binds correctly (`Now listening on: http://[::]:8080`, which
+is all interfaces on the expected `internal_port`), the health check passes while
+the machine is up, and the port is fine. The fix is a credit card on the Fly
+account, not a code change.
 
 ---
 
@@ -288,7 +372,8 @@ Things that must change before real customers pay real money:
 
 | Symptom | Likely cause |
 |---|---|
-| API deploy job fails: "Could not retrieve Project Settings" | `VERCEL_TOKEN` is team-scoped. Mint one from **personal** Account Settings, not Team Settings — the Vercel CLI needs a user identity, which a team-scoped token lacks. `vercel whoami` returning "User not found" is the tell. |
+| Fly Doctor says "not listening on the expected port", but requests work | Usually a **false positive**. Check `fly logs` for `Trial machine stopping` — on Fly's free trial, machines are killed after 5 minutes regardless of `auto_stop_machines`. Add a credit card. Confirm the port is genuinely fine with `fly logs | grep "Now listening"` (it should say `http://[::]:8080` or `http://0.0.0.0:8080`, never `127.0.0.1`). |
+| API deploy job fails: "Could not retrieve Project Settings" | `VERCEL_TOKEN` is team-scoped. Mint one from **personal** Account Settings, not Team Settings — the Vercel CLI needs a user identity, which a team-scoped token lacks. `vercel whoami` returning "User not found" is the tell. (No longer used by the pipeline, which only verifies via the REST API.) |
 | Deploy job hangs instead of deploying | The CI gate polls the Actions API. A hang means the call returns nothing — check the job has `actions: read`. |
 | API crash-loops on Fly | Check `/health/db` first: it names the concrete cause. A missing or malformed connection string is the usual one, and Neon's `postgresql://` URI form must be converted to Npgsql's key=value form. |
 | Menu renders but is empty | `VITE_API_BASE_URL` missing `/api`, or CORS blocking |
