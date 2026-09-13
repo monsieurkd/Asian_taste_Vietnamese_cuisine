@@ -214,7 +214,25 @@ not just built:
 | Admin app | not deployed | by decision — see `docs/DEPLOYMENT.md` |
 
 **Proven end to end:** `git push` → CI (5 jobs green) → deploy gate → Fly deploy →
-smoke test against production → PASS. A real order was placed through the live API
+smoke test against production → PASS. The Deploy workflow is **fully green**:
+CI gate, API deploy and frontend verification all pass.
+
+**No, wait — one caveat on Fly.** The app is correct and the port is fine, but the
+Fly account is on the free **trial**, which stops machines after 5 minutes:
+
+```
+warn: Trial machine stopping. To run for longer than 5m0s, add a credit card
+      by visiting https://fly.io/trial.
+```
+
+Fly Doctor reports this as "App is not listening to the expected port" and blames
+the code — a **false positive**. `fly logs` shows `Now listening on:
+http://[::]:8080` and the health check passing while the machine is up. Adding a
+credit card to the Fly account is required; no code change will fix it. Until
+then the app auto-starts on request, so it works but with a cold start each time.
+
+Read [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) for how all the pieces fit
+together. A real order was placed through the live API
 (`AT-130006-0008`, $17.00) and retrieved back from Neon. The live site renders
 82 cards, 82 distinct, 0 duplicates, and a dish modal opens with a working
 Add-to-Cart.
