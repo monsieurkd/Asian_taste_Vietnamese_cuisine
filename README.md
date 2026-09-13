@@ -9,8 +9,16 @@ Online ordering platform for Asian Taste Vietnamese Restaurant
 
 See [`Asian_Taste_PRD.md`](Asian_Taste_PRD.md) for full product requirements,
 [`MAJOR_UPDATE_PLAN.md`](MAJOR_UPDATE_PLAN.md) for the roadmap, and
-[`docs/SESSION_NOTES.md`](docs/SESSION_NOTES.md) for the current state and what's next,
-and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) to put it in production.
+[`docs/SESSION_NOTES.md`](docs/SESSION_NOTES.md) for the current state and what's next.
+
+**Running it:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) explains how the
+whole system fits together — what runs where, how a push reaches production, and
+why the pieces are the way they are. [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+has the setup commands.
+
+**It is live:** [asian-taste-customer.vercel.app](https://asian-taste-customer.vercel.app)
+(customer app) → [asian-taste-api.fly.dev](https://asian-taste-api.fly.dev/health/db) (API).
+Check it with `./scripts/check-deployment-health.sh`.
 
 ---
 
