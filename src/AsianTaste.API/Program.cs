@@ -440,6 +440,54 @@ app.MapGet("/health/db", async (IDbConnectionFactory dbFactory) =>
     }
 }).AllowAnonymous();
 
+// Readiness for POS sync: are any orders stuck?
+//
+// This exists because a stuck order was previously visible ONLY as a recurring
+// log line ("Retrying 1 failed order(s)" every 30 seconds) that was itself
+// misleading — it was emitted for an order the retrier had already given up on.
+// Nothing anywhere said "an order needs a human".
+//
+// Deliberately separate from /health/db and deliberately not an error status: a
+// stuck POS order must NOT make the API look unhealthy, because the API is fine
+// and the restaurant can keep taking orders. It reports; it does not gate.
+app.MapGet("/health/pos", async (IDbConnectionFactory dbFactory) =>
+{
+    try
+    {
+        using var connection = dbFactory.CreateConnection();
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = @"
+            SELECT
+                COUNT(*) FILTER (WHERE lightspeed_sync_status::text = 'Failed') AS failed,
+                COUNT(*) FILTER (WHERE lightspeed_sync_status::text = 'NotSynced') AS pending
+            FROM orders
+            WHERE lightspeed_sync_status IS NULL
+               OR lightspeed_sync_status::text <> 'Synced'";
+        using var reader = cmd.ExecuteReader();
+        reader.Read();
+        var failed = reader.GetInt64(0);
+        var pending = reader.GetInt64(1);
+
+        return Results.Ok(new
+        {
+            status = failed > 0 ? "attention" : "ok",
+            failedOrders = failed,
+            pendingOrders = pending,
+            note = failed > 0
+                ? "Orders have exhausted their POS retries and will not be retried again. "
+                  + "They are visible in the admin dashboard and can be completed there."
+                : "No orders need attention."
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(
+            new { status = "unknown", error = ex.Message },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+}).AllowAnonymous();
+
 // Enable CORS
 app.UseCors("AllowFrontend");
 

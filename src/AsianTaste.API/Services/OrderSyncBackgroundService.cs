@@ -213,7 +213,13 @@ public class OrderSyncBackgroundService : BackgroundService
         using var connection = dbConnectionFactory.CreateConnection();
         connection.Open();
 
-        // Get failed orders that haven't exceeded max retries
+        // Every order currently marked Failed.
+        //
+        // This does NOT filter by retry count, despite what the previous comment
+        // claimed: the count is parsed from the sync_error text, so it cannot be
+        // compared in SQL. The limit check happens per-order below instead. The
+        // practical effect was that a given-up order was selected forever and
+        // reported as "Retrying" on every polling interval.
         const string sql = @"
             SELECT id,
                    order_number as OrderNumber,
@@ -242,24 +248,44 @@ public class OrderSyncBackgroundService : BackgroundService
         var orders = failedOrders.AsList();
         if (orders.Count == 0)
         {
-            return; // No failed orders to retry
+            return; // Nothing marked Failed, so nothing to retry.
         }
 
-        _logger.LogInformation("Retrying {Count} failed order(s)", orders.Count);
+        // Separate orders that can still be retried from those that have given up,
+        // BEFORE logging anything.
+        //
+        // The old code logged "Retrying {Count} failed order(s)" using the raw query
+        // count and then skipped exhausted orders with a Debug-level message.
+        // Production logs at Information, so the skip was invisible: the "Retrying"
+        // line was emitted every 30 seconds for an order that was never retried,
+        // making the sync look busy when it had actually given up. That is the
+        // message this fix exists to stop.
+        var retryable = orders.Where(o => ParseRetryCount(o.SyncError) < maxRetries).ToList();
+        var exhausted = orders.Count - retryable.Count;
 
-        foreach (var order in orders)
+        if (exhausted > 0)
+        {
+            // Warning, not Debug: a given-up order needs a human, and this is the
+            // only place that says so.
+            _logger.LogWarning(
+                "{Exhausted} order(s) exceeded the retry limit of {MaxRetries} and will not be retried again. " +
+                "They need manual attention: see lightspeed_sync_status = 'Failed' in the orders table.",
+                exhausted, maxRetries);
+        }
+
+        if (retryable.Count == 0)
+        {
+            return; // Everything outstanding has already given up.
+        }
+
+        _logger.LogInformation("Retrying {Count} failed order(s)", retryable.Count);
+
+        foreach (var order in retryable)
         {
             if (ct.IsCancellationRequested)
                 break;
 
-            // Parse retry count from error message
             var retryCount = ParseRetryCount(order.SyncError);
-            if (retryCount >= maxRetries)
-            {
-                _logger.LogDebug("Order {OrderId} exceeded max retry count ({MaxRetries}), skipping",
-                    order.Id, maxRetries);
-                continue;
-            }
 
             try
             {
@@ -393,7 +419,15 @@ public class OrderSyncBackgroundService : BackgroundService
     /// <summary>
     /// Parses retry count from sync error message.
     /// </summary>
-    private int ParseRetryCount(string? errorMessage)
+    /// <summary>
+    /// Reads the attempt number back out of the stored error message.
+    ///
+    /// This is a round-trip through human-readable text rather than a column: the
+    /// writer stores $"Attempt {n}: {message}" and this parses the number back.
+    /// That is fragile — the format is the contract between the two — so it is
+    /// internal for tests, which pin both halves against each other.
+    /// </summary>
+    internal static int ParseRetryCount(string? errorMessage)
     {
         if (string.IsNullOrEmpty(errorMessage))
             return 0;
