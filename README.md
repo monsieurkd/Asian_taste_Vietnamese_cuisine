@@ -20,6 +20,9 @@ has the setup commands.
 (customer app) → [asian-taste-api.fly.dev](https://asian-taste-api.fly.dev/health/db) (API).
 Check it with `./scripts/check-deployment-health.sh`.
 
+**What's left:** [`docs/TODO.md`](docs/TODO.md) — the outstanding items, the
+decisions taken (and how to reverse each), and what is known to be missing.
+
 ---
 
 ## Tech stack
