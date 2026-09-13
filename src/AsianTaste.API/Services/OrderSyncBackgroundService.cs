@@ -21,6 +21,22 @@ public class OrderSyncBackgroundService : BackgroundService
     // Configuration defaults (can be overridden via appsettings)
     private readonly int _maxRetryAttempts = 3;
 
+    /// <summary>
+    /// The exhausted-order count the last warning was emitted for.
+    ///
+    /// The retry loop polls every 30 seconds and a stuck order is a permanent
+    /// condition, so warning on every pass would emit the same line ~2,880 times a
+    /// day and bury everything else in Fly's limited log retention. Warning only
+    /// when the count CHANGES means a new stuck order still announces itself while
+    /// an unchanged backlog stays quiet. -1 means "nothing reported yet", so the
+    /// first poll always reports.
+    ///
+    /// Deliberately in-memory: the count is re-derived from the database on every
+    /// poll, and a restart re-reporting an existing backlog is the desired
+    /// behaviour, since that is when someone is usually looking.
+    /// </summary>
+    private int _lastReportedExhaustedCount = -1;
+
     public OrderSyncBackgroundService(
         IServiceProvider serviceProvider,
         ILogger<OrderSyncBackgroundService> logger,
@@ -246,8 +262,17 @@ public class OrderSyncBackgroundService : BackgroundService
             new CommandDefinition(sql, new { Limit = batchSize }, cancellationToken: ct));
 
         var orders = failedOrders.AsList();
+
+        // Announce a cleared backlog BEFORE returning, and actually return here.
+        //
+        // The early return used to come first, which meant that fixing every stuck
+        // order produced no message at all and left the remembered count stale — so
+        // the next genuinely-stuck order could be compared against a count that no
+        // longer reflected reality. Confirming the clear is also the only signal
+        // that whatever needed doing was done.
         if (orders.Count == 0)
         {
+            ReportExhaustedCount(0, maxRetries);
             return; // Nothing marked Failed, so nothing to retry.
         }
 
@@ -263,15 +288,7 @@ public class OrderSyncBackgroundService : BackgroundService
         var retryable = orders.Where(o => ParseRetryCount(o.SyncError) < maxRetries).ToList();
         var exhausted = orders.Count - retryable.Count;
 
-        if (exhausted > 0)
-        {
-            // Warning, not Debug: a given-up order needs a human, and this is the
-            // only place that says so.
-            _logger.LogWarning(
-                "{Exhausted} order(s) exceeded the retry limit of {MaxRetries} and will not be retried again. " +
-                "They need manual attention: see lightspeed_sync_status = 'Failed' in the orders table.",
-                exhausted, maxRetries);
-        }
+        ReportExhaustedCount(exhausted, maxRetries);
 
         if (retryable.Count == 0)
         {
@@ -419,6 +436,46 @@ public class OrderSyncBackgroundService : BackgroundService
     /// <summary>
     /// Parses retry count from sync error message.
     /// </summary>
+    /// <summary>
+    /// Reports how many orders have given up, but only when that number changes.
+    ///
+    /// A stuck order is a permanent condition and this loop polls every 30 seconds,
+    /// so logging on every pass would emit the same line ~2,880 times a day and
+    /// bury everything else in Fly's limited log retention. Logging on CHANGE means
+    /// a newly stuck order still announces itself while a settled backlog stays
+    /// quiet, and clearing the backlog is confirmed rather than silent.
+    ///
+    /// This is the single place that decides what gets logged, so the empty-result
+    /// path and the non-empty one cannot drift apart — they did: the early return
+    /// previously skipped the clear message entirely, leaving the remembered count
+    /// stale and no confirmation that anything had been fixed.
+    /// </summary>
+    private void ReportExhaustedCount(int exhausted, int maxRetries)
+    {
+        if (exhausted == _lastReportedExhaustedCount)
+        {
+            return; // No change; already reported in this state.
+        }
+
+        if (exhausted > 0)
+        {
+            // Warning, not Debug: a given-up order needs a human, and this is the
+            // only thing that says so.
+            _logger.LogWarning(
+                "{Exhausted} order(s) exceeded the retry limit of {MaxRetries} and will not be retried again. " +
+                "They need manual attention: see lightspeed_sync_status = 'Failed' in the orders table.",
+                exhausted, maxRetries);
+        }
+        else if (_lastReportedExhaustedCount > 0)
+        {
+            // Only worth saying when there was something to clear. Logging "all
+            // clear" on the very first poll of a fresh start would be noise.
+            _logger.LogInformation("No orders are stuck; POS sync backlog is clear.");
+        }
+
+        _lastReportedExhaustedCount = exhausted;
+    }
+
     /// <summary>
     /// Reads the attempt number back out of the stored error message.
     ///
