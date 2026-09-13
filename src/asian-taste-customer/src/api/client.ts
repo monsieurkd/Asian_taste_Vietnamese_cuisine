@@ -2,13 +2,32 @@ import axios from 'axios';
 import { useCustomerAuthStore } from '@/stores/customerAuthStore';
 
 // API base URL.
-// Defaults to the relative '/api' path, which goes through the Vite dev proxy
-// (see vite.config.ts). VITE_API_BASE_URL may point at a deployed API, e.g.
-// https://api.asiantaste.com.au/api — it MUST include the /api segment.
 //
-// Guard: an env value of just an origin (http://localhost:5070) silently drops
-// the /api prefix, so every request 404s while the app still renders. That cost
-// us a real bug, so normalise it here rather than trusting the env file.
+// Defaults to the relative '/api' path, which goes through the Vite dev proxy
+// (see vite.config.ts). For a deployed API this MUST be a full origin including
+// the /api segment, e.g. https://asian-taste-api.fly.dev/api.
+//
+// Two guards, both from real outages:
+//
+// 1. An env value of just an origin (http://localhost:5070) silently drops the
+//    /api prefix, so every request 404s while the app still renders.
+//
+// 2. THIS ONE TOOK THE SITE DOWN. The customer app reads VITE_API_BASE_URL, but
+//    the Vercel project was only ever given VITE_API_URL — the name the ADMIN app
+//    uses. With no value, this fell back to the relative '/api', so the browser
+//    requested https://asian-taste-customer.vercel.app/api/menu (its own domain,
+//    404) and the menu rendered "No items found". The API was healthy the whole
+//    time and it reproduced on every load.
+//
+//    What made it hard to see: no request to the API host appears in the network
+//    tab at all, because the request never leaves the frontend's own origin. It
+//    looks like an empty database rather than a missing env var. The app's own
+//    .env.example documented VITE_API_URL, contradicting this file, which is how
+//    the wrong name got set in the first place.
+//
+//    Both names are now accepted; whichever is configured wins, and using the
+//    wrong one warns instead of failing silently.
+//
 // Exported for tests (src/api/client.test.ts).
 export function resolveApiBaseUrl(raw?: string): string {
   if (!raw) return '/api';
@@ -28,7 +47,38 @@ export function resolveApiBaseUrl(raw?: string): string {
   return trimmed;
 }
 
-export const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+/**
+ * Reads the configured API base URL, accepting either variable name.
+ *
+ * VITE_API_BASE_URL is the correct name for this app. VITE_API_URL is accepted
+ * because it was the only name configured on the Vercel project, where rejecting
+ * it produced a silent 404 on every request rather than a visible error.
+ * Supporting both turns a misnamed variable into "works, with a warning".
+ */
+export function resolveConfiguredApiBaseUrl(env: {
+  VITE_API_BASE_URL?: string;
+  VITE_API_URL?: string;
+}): string {
+  if (env.VITE_API_BASE_URL) {
+    return resolveApiBaseUrl(env.VITE_API_BASE_URL);
+  }
+
+  if (env.VITE_API_URL) {
+    console.warn(
+      'VITE_API_BASE_URL is not set; falling back to VITE_API_URL. This works, but note ' +
+        "VITE_API_URL is the ADMIN app's variable name. Set VITE_API_BASE_URL to the same " +
+        'value (including /api) on this project.'
+    );
+    return resolveApiBaseUrl(env.VITE_API_URL);
+  }
+
+  return resolveApiBaseUrl(undefined);
+}
+
+export const API_BASE_URL = resolveConfiguredApiBaseUrl({
+  VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+  VITE_API_URL: import.meta.env.VITE_API_URL,
+});
 
 // Create axios instance with default config
 export const apiClient = axios.create({
