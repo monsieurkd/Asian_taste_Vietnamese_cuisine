@@ -153,14 +153,23 @@ Ordered by how much they'd bite.
    not reflect it locally. Worth finishing before the first refund request.
 3. **No automated database backups.** Neon's free tier has none. Either upgrade
    or schedule a `pg_dump` to somewhere else.
-4. **Modifiers do not reach the POS — confirmed, not suspected.** I read
-   `BuildOrderPayload`: it sends `quantity` and `unitPrice` per line, and falls
-   back to a free-text `description` of the form `"Pad Thai x1"` when there's no
-   Lightspeed product id. Customisations ("no coriander", "extra chilli") are
-   **not** included at all, so the kitchen would see the dish without knowing
-   what was asked for. The customer pays the right amount — the API includes
-   modifier prices in its own total — but the ticket is incomplete. This needs
-   fixing before anyone relies on the POS screen, and it's the item I'd do next.
+4. ~~Modifiers do not reach the POS.~~ **Fixed, along with something worse.**
+   Chasing this found that `GetOrderByIdAsync` never loaded `Items` at all, so
+   *every* POS order was sent with `lines: []` — an order with no dishes on it,
+   for a customer who had just paid. Two further faults sat behind it:
+   `GetOrderItemsAsync` used `SELECT *` against snake_case columns, so item names
+   came back empty and prices 0 (the row count was right, which is why it looked
+   fine), and the payload omitted modifiers entirely.
+
+   All three are fixed and verified against a real order carrying modifiers:
+   the line now reads `Cold rolls (serve of 4) x1 @ 10.00` with three modifiers,
+   the unit price including the +$1.50 adjustment, and the live order detail
+   returns its line items. 8 unit tests pin the payload contract.
+
+   **What remains here:** the POS has never been exercised against a real
+   Lightspeed account, so the payload shape is unverified against their API — the
+   `product`, `description` and `note` fields are my reading of their docs. Worth
+   a careful first test order once credentials exist.
 5. **`SavePaymentMethod` is accepted and silently ignored.** It's declared in
    `CheckoutDto` and sent by the checkout, but nothing in the API reads it — I
    grepped and it appears only in that DTO. A customer who ticks "save my card"

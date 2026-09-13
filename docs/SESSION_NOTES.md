@@ -273,6 +273,35 @@ after every API deploy, so CI and a human agree.
    It needs a token minted from **personal** Account Settings. The frontend is
    not broken — Vercel's Git integration deploys it fine.
 
+### The POS push had a worse bug than the modifier gap
+
+Chasing "modifiers don't reach the POS" from the TODO found that the order being
+pushed had **no line items at all**:
+
+- `GetOrderByIdAsync` (and `GetOrderByNumberAsync`) never loaded `Items`. They run
+  one query against `orders` and return. `OrderService` pushes what
+  `CreateOrderAsync` returns, which calls `GetOrderByIdAsync` — so every POS order
+  went out as `lines: []`. Proven before fixing: `Items.Count = 0` for an order
+  with a row in `order_items`.
+- `GetOrderItemsAsync` used `SELECT *` against snake_case columns while `OrderItem`
+  is PascalCase, and Dapper's underscore mapping is not enabled on this connection.
+  So `menu_item_name` and `unit_price` mapped to nothing — empty names, price 0. The
+  **row count was correct**, which is precisely why it looked like it worked.
+- The payload then dropped modifiers, so "no coriander" never reached the kitchen.
+
+Fixed with explicit aliases (matching the rest of that file), `Items` loading in
+both getters, and a line description like
+`Pad Thai x1 (Extra chilli +$1.50, No coriander)` plus per-item notes on the line.
+
+Verified rather than assumed: against a real order with three modifiers,
+`Items.Count` went 0 → 1 and the line read `Cold rolls (serve of 4) x1 @ 10.00`
+with all three modifiers and the unit price including the +$1.50 adjustment; the
+live order detail returns its items; 8 unit tests pin the description contract
+(mutation-checked: 5 of 8 fail if modifier rendering is removed). Reverting the
+`Items` loading puts `Items.Count` back to 0.
+
+---
+
 ### Still outstanding
 
 - **Rotate the Neon password.** It was pasted into a chat, so treat it as
