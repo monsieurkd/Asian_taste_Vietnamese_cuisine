@@ -64,7 +64,13 @@ export function CheckoutPage() {
     }
 
     // Create pending order data (snapshot of current state)
-    const orderTotal = getSubtotal() * 1.1; // Including GST
+    // Prices already include GST (Australian convention — see README), and the
+    // API charges the same figure. This used to multiply by 1.1, which displayed
+    // a total 10% higher than the customer was actually charged. The API
+    // recomputes from database prices, so this was a display bug rather than an
+    // overcharge — but a checkout screen that disagrees with the receipt is its
+    // own kind of broken.
+    const orderTotal = getSubtotal();
 
     const pendingOrder: PendingOrderData = {
       customerName: checkout.customerName,
@@ -96,7 +102,13 @@ export function CheckoutPage() {
 
   const handleBackToCart = () => navigate('/cart');
 
-  const orderTotal = getSubtotal() * 1.1; // Including GST
+  // Prices already include GST (Australian convention — see README), and the
+  // API charges the same figure. This used to multiply by 1.1, which displayed
+  // a total 10% higher than the customer was actually charged. The API
+  // recomputes from database prices, so this was a display bug rather than an
+  // overcharge — but a checkout screen that disagrees with the receipt is its
+  // own kind of broken.
+  const orderTotal = getSubtotal();
 
   return (
     <div className="min-h-screen bg-cream pb-20">

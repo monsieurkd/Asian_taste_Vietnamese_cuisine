@@ -352,8 +352,23 @@ Things that must change before real customers pay real money:
 - [ ] **Stripe live keys** set on Fly, and `Payment__UseMockGateway=false`.
       While it is `true` the API approves payments without contacting Stripe, so
       orders are accepted unpaid.
-- [ ] **Stripe webhook endpoint** pointing at `https://<api>/api/webhooks/stripe`,
+- [ ] **Stripe webhook endpoint** pointing at `https://<api>/api/webhook/stripe`,
       with its signing secret in `Stripe__WebhookSecret`.
+
+      The route is `webhook` (singular). Subscribing Stripe to
+      `/api/webhooks/stripe` looks right and returns 404 — nothing arrives and no
+      error is raised anywhere, so payments appear to succeed while the order is
+      never marked paid.
+
+      Subscribe to exactly these four events; the API handles these and ignores
+      the rest:
+
+      | Event | Why |
+      |---|---|
+      | `payment_intent.succeeded` | the money arrived — marks the order paid |
+      | `payment_intent.payment_failed` | records the failure and its reason |
+      | `payment_intent.canceled` | the customer abandoned the payment |
+      | `charge.refunded` | a refund was issued outside this app |
 - [ ] **`Cors__AllowedOrigins`** set to the real frontend origins, and localhost
       removed.
 - [ ] **SendGrid** enabled so customers get confirmations

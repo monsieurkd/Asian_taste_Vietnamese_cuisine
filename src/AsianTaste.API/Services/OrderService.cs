@@ -3,6 +3,8 @@ using AsianTaste.API.Models.DTOs;
 using AsianTaste.API.Models.Enums;
 using AsianTaste.API.Repositories;
 using AsianTaste.API.Services.Email;
+using AsianTaste.API.Services.Lightspeed;
+using AsianTaste.API.Services.Payment.Interfaces;
 
 namespace AsianTaste.API.Services;
 
@@ -16,6 +18,8 @@ public class OrderService
     private readonly IEmailService _emailService;
     private readonly IOrderEmailQueue _emailQueue;
     private readonly IRestaurantSettingsRepository _settingsRepository;
+    private readonly IPaymentGatewayService _paymentGateway;
+    private readonly ILightspeedOrderService _lightspeed;
     private readonly ILogger<OrderService> _logger;
 
     public OrderService(
@@ -24,6 +28,8 @@ public class OrderService
         IEmailService emailService,
         IOrderEmailQueue emailQueue,
         IRestaurantSettingsRepository settingsRepository,
+        IPaymentGatewayService paymentGateway,
+        ILightspeedOrderService lightspeed,
         ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository;
@@ -31,6 +37,8 @@ public class OrderService
         _emailService = emailService;
         _emailQueue = emailQueue;
         _settingsRepository = settingsRepository;
+        _paymentGateway = paymentGateway;
+        _lightspeed = lightspeed;
         _logger = logger;
     }
 
@@ -115,19 +123,40 @@ public class OrderService
             _logger.LogError(ex, "Failed to queue order confirmation email for {OrderNumber}", orderNumber);
         }
 
-        // TODO: Send to Lightspeed K-Series
-        // TODO: Process payment if Card
+        // Payment. This is what makes "Paid online" true rather than an assertion.
+        //
+        // The order row is created first (above) because the charge needs an order
+        // reference for its metadata and idempotency key. The charge is then
+        // attempted BEFORE the customer is told the order succeeded, and a failed
+        // charge marks the order as failed rather than leaving it looking paid.
+        //
+        // The frontend creates the Stripe PaymentIntent and confirms it in the
+        // browser (3-D Secure needs the browser), then passes the intent id as
+        // PaymentToken for the server to verify against Stripe. Verifying rather
+        // than trusting is the point: without it, a caller could claim payment.
+        var paymentOutcome = await ProcessPaymentAsync(order, request, cancellationToken);
+
+        // Push to the POS. A failure here must NOT fail the order — the customer has
+        // paid, and the kitchen can work from the admin dashboard. The order is
+        // marked for retry instead, and OrderSyncBackgroundService picks it up.
+        await PushOrderToPosAsync(order, cancellationToken);
 
         var response = new CheckoutOrderResponseDto
         {
             OrderId = order.Id,
             OrderNumber = order.OrderNumber,
             Status = order.Status,
-            EstimatedReadyTime = order.RequestedTime.AddMinutes(20), // Default 20 minutes prep time
+            EstimatedReadyTime = order.RequestedTime.AddMinutes(pickupMinutes),
             Total = order.Total,
-            PaymentDisplay = request.PaymentMethod == PaymentMethod.Card
-                ? "Paid online"
-                : "Pay on pickup",
+            // Derived from what actually happened, not from what was requested. The
+            // earlier version printed "Paid online" for every card order whether or
+            // not a payment had been taken.
+            PaymentDisplay = paymentOutcome switch
+            {
+                PaymentOutcome.Paid => "Paid online",
+                PaymentOutcome.Failed => "Payment failed — please try again",
+                _ => "Pay on pickup",
+            },
             Items = new List<OrderItemDto>(),
             AccountCreated = accountCreated
         };
@@ -282,6 +311,156 @@ public class OrderService
     }
 
     /// <summary>
+    /// Takes payment for a card order and records the outcome.
+    ///
+    /// Returns what actually happened so the response can say "Paid online" only
+    /// when it is true. A failure never throws: the order exists, the customer is
+    /// standing at the counter, and the useful outcome is an order marked unpaid
+    /// with a reason — not a 500 that hides whether the charge went through.
+    /// </summary>
+    private async Task<PaymentOutcome> ProcessPaymentAsync(
+        Order order,
+        CreateCheckoutOrderDto request,
+        CancellationToken cancellationToken)
+    {
+        // Cash is paid at pickup, so there is nothing to take now.
+        if (request.PaymentMethod != PaymentMethod.Card)
+        {
+            _logger.LogInformation("Order {OrderNumber} is pay-on-pickup; no payment taken now.", order.OrderNumber);
+            return PaymentOutcome.PayOnPickup;
+        }
+
+        try
+        {
+            // The frontend confirms the PaymentIntent with Stripe (3-D Secure needs
+            // the browser), then sends the intent id as PaymentToken. The server
+            // verifies it with Stripe rather than trusting the client's word, so a
+            // forged request cannot produce a paid order.
+            var result = await _paymentGateway.AuthorizePaymentAsync(
+                new PaymentRequest
+                {
+                    OrderId = order.Id.ToString(),
+                    OrderNumber = order.OrderNumber,
+                    // Minor units. The API computes the total itself, so this is the
+                    // server's own figure and not a client-supplied amount.
+                    Amount = (int)Math.Round(order.Total * 100, MidpointRounding.AwayFromZero),
+                    Currency = "aud",
+                    PaymentMethodId = request.PaymentToken,
+                    PaymentMethodType = PaymentMethodType.Card,
+                    // The payment namespace declares its own OrderType with matching
+                    // members; map it rather than relying on an implicit conversion that
+                    // does not exist.
+                    OrderType = request.OrderType == Models.Enums.OrderType.DineIn
+                        ? Payment.Interfaces.OrderType.DineIn
+                        : Payment.Interfaces.OrderType.Pickup,
+                    CustomerEmail = order.CustomerEmail,
+                    CustomerPhone = order.CustomerPhone,
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["orderNumber"] = order.OrderNumber,
+                        ["orderId"] = order.Id.ToString(),
+                    },
+                    // Deterministic, so a retried request cannot double-charge.
+                    IdempotencyKey = $"order-{order.Id}-payment",
+                },
+                cancellationToken);
+
+            if (result.Success)
+            {
+                order.PaymentStatus = Models.Enums.PaymentStatus.Succeeded;
+                order.ExternalPaymentId = result.AuthorizationId;
+                order.PaidAmount = order.Total;
+                order.PaidAt = DateTime.UtcNow;
+                order.PaymentFailureReason = null;
+
+                await _orderRepository.UpdateOrderAsync(order, cancellationToken);
+
+                _logger.LogInformation(
+                    "Payment captured for order {OrderNumber}: {Amount} AUD, authorization {AuthorizationId}",
+                    order.OrderNumber, order.Total, result.AuthorizationId);
+
+                return PaymentOutcome.Paid;
+            }
+
+            order.PaymentStatus = Models.Enums.PaymentStatus.Failed;
+            order.PaymentFailureReason = result.ErrorMessage ?? "Payment was declined.";
+            await _orderRepository.UpdateOrderAsync(order, cancellationToken);
+
+            _logger.LogWarning(
+                "Payment declined for order {OrderNumber}: {Reason}",
+                order.OrderNumber, order.PaymentFailureReason);
+
+            return PaymentOutcome.Failed;
+        }
+        catch (Exception ex)
+        {
+            // A gateway outage must not lose the order. Mark it failed with the
+            // reason so it is visible in the dashboard and can be re-attempted.
+            order.PaymentStatus = Models.Enums.PaymentStatus.Failed;
+            order.PaymentFailureReason = $"Payment could not be processed: {ex.Message}";
+            await _orderRepository.UpdateOrderAsync(order, cancellationToken);
+
+            _logger.LogError(ex, "Payment attempt threw for order {OrderNumber}", order.OrderNumber);
+            return PaymentOutcome.Failed;
+        }
+    }
+
+    /// <summary>
+    /// Pushes a paid order to the POS, and records the outcome.
+    ///
+    /// This is the step that was missing entirely: a customer could pay and the
+    /// kitchen would never see the order, because the service was fully built but
+    /// never called from here.
+    ///
+    /// A POS failure does not fail the order. The customer has paid and the kitchen
+    /// can read the admin dashboard; the order is marked Pending and
+    /// OrderSyncBackgroundService retries it, which is what that service is for.
+    /// Throwing here would turn a POS hiccup into a lost order and a refund.
+    /// </summary>
+    private async Task PushOrderToPosAsync(Order order, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _lightspeed.CreateOrderAsync(order);
+
+            if (result.Success)
+            {
+                await _orderRepository.UpdateOrderSyncInfoAsync(
+                    order.Id,
+                    result.LightspeedOrderId?.ToString(),
+                    SyncStatus.Synced,
+                    DateTime.UtcNow,
+                    null,
+                    cancellationToken);
+
+                _logger.LogInformation(
+                    "Order {OrderNumber} pushed to Lightspeed as {LightspeedOrderId}.",
+                    order.OrderNumber, result.LightspeedOrderId);
+            }
+            else
+            {
+                // Marked Pending rather than Failed so the background sync retries
+                // it — a POS that is briefly unreachable is the common case, and it
+                // should heal itself without anyone intervening.
+                await _orderRepository.MarkOrderSyncPendingAsync(order.Id, cancellationToken);
+
+                _logger.LogWarning(
+                    "Order {OrderNumber} could not be pushed to Lightspeed ({Reason}); queued for retry.",
+                    order.OrderNumber, result.ErrorMessage ?? "unknown error");
+            }
+        }
+        catch (Exception ex)
+        {
+            await _orderRepository.MarkOrderSyncPendingAsync(order.Id, cancellationToken);
+
+            _logger.LogError(
+                ex,
+                "Pushing order {OrderNumber} to Lightspeed threw; queued for retry.",
+                order.OrderNumber);
+        }
+    }
+
+    /// <summary>
     /// Loads the restaurant settings used for emails and pickup estimates.
     /// </summary>
     private async Task<OrderServiceRestaurantSettings> LoadRestaurantSettingsAsync(CancellationToken cancellationToken)
@@ -314,6 +493,22 @@ public class OrderService
             return new OrderServiceRestaurantSettings();
         }
     }
+}
+
+/// <summary>
+/// What happened when payment was attempted, so the response can report the truth
+/// rather than assuming a card order succeeded.
+/// </summary>
+public enum PaymentOutcome
+{
+    /// <summary>Cash order — nothing is taken now; the customer pays at pickup.</summary>
+    PayOnPickup,
+
+    /// <summary>The charge succeeded and the order is paid.</summary>
+    Paid,
+
+    /// <summary>The charge was declined or could not be attempted; the order is unpaid.</summary>
+    Failed,
 }
 
 /// <summary>

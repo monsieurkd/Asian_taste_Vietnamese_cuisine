@@ -86,11 +86,34 @@ SendGrid__FromName=Asian Taste Vietnamese Restaurant
 App__BaseUrl=https://asian-taste.vercel.app
 
 # --- Optional: Lightspeed POS ------------------------------------------------
-
-# Leave blank to run without POS sync (the integration no-ops cleanly).
+#
+# Leave all three blank to run without POS sync. This is a supported state, not a
+# broken one: the API starts, orders succeed, and each order is logged as queued
+# for retry. Nothing else depends on Lightspeed being present.
+#
+# To turn it on:
+#   1. Register an app at https://developers.lightspeedhq.com (Lightspeed
+#      Retail / Restaurant). It gives you a Client ID and Client Secret.
+#   2. Set the redirect URI in that app to:
+#        https://asian-taste-api.fly.dev/api/oauth/callback
+#      It must match EXACTLY, including the scheme and the absence of a trailing
+#      slash, or Lightspeed rejects the callback with a redirect_uri_mismatch.
+#   3. Set the three secrets below.
+#   4. Complete the OAuth consent once — the API cannot do this for you, it needs
+#      a human to approve access:
+#        GET https://asian-taste-api.fly.dev/api/oauth/authorize
+#      That returns a URL; open it, approve, and the callback stores the tokens
+#      (encrypted with Encryption__Key).
+#   5. Check it worked:
+#        GET https://asian-taste-api.fly.dev/api/oauth/status
+#
+# The token is encrypted at rest with Encryption__Key, so rotating that key
+# invalidates the Lightspeed connection and step 4 must be repeated.
+#
+#   Fly secret names: Lightspeed__ClientId, Lightspeed__ClientSecret, Lightspeed__RedirectUri
 Lightspeed__ClientId=
 Lightspeed__ClientSecret=
-Lightspeed__RedirectUri=
+Lightspeed__RedirectUri=https://asian-taste-api.fly.dev/api/oauth/callback
 
 # --- Set by fly.toml, listed here for completeness ---------------------------
 
