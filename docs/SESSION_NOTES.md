@@ -3,6 +3,14 @@
 A running log of what changed, what's proven, and what's still open. Written to be
 read cold by whoever picks this up next (including future me).
 
+> **This file is historical.** It records the session that ended 2026-09-10 and the
+> numbers in it are from then (82 tests, admin app undeployed). Several things it
+> lists as outstanding were fixed later on 2026-09-13.
+>
+> **For current state, read [`docs/TODO.md`](TODO.md)** — it is the live list.
+> The stalest claims in this file are called out inline below, so nobody acts on
+> them by mistake.
+
 ---
 
 ## Where the project stands
@@ -15,7 +23,7 @@ read cold by whoever picks this up next (including future me).
 | Admin lint | **0 errors, 0 warnings** |
 | Customer lint | **0 errors, 0 warnings** |
 | Typechecks | both clean |
-| Tests | **82 passing** (71 API + 5 admin + 6 customer) |
+| Tests | **82 passing** (71 API + 5 admin + 6 customer) — *historical: 117 API + 11 admin + 12 customer as of 2026-09-13* |
 | Guardrails | **3/3 exit 0** |
 
 Start the app locally:
@@ -26,7 +34,7 @@ cd src/asian-taste-admin    && npm run dev                                     #
 cd src/asian-taste-customer && npm run dev                                     # :5173
 ```
 
-- Admin dashboard: http://localhost:5174 — `admin` / `Admin123!`
+- Admin dashboard: http://localhost:5174 — `admin` / `Admin123!` *(local dev only; the deployed password was changed 2026-09-13)*
 - API docs: http://localhost:5070/swagger
 - DB health: http://localhost:5070/api/dev/db/status
 
@@ -304,15 +312,24 @@ live order detail returns its items; 8 unit tests pin the description contract
 
 ### Still outstanding
 
-- **Rotate the Neon password.** It was pasted into a chat, so treat it as
-  compromised; re-running one `fly secrets set` from `docs/DEPLOYMENT.md` is the
-  whole fix.
-- **`VITE_STRIPE_PUBLISHABLE_KEY` is unset on Vercel**, so checkout fails with
-  "Please call Stripe() with your publishable key". Browsing and the API are fine.
-- The admin app is not deployed (deliberate), and `Payment__UseMockGateway` is
-  still `true`, so **orders are accepted without real payment**. Both must change
-  before real customers, along with the pre-launch checklist in
-  `docs/DEPLOYMENT.md`.
+> **All three items below were resolved on 2026-09-13.** Kept for the record;
+> see `docs/TODO.md` for what is actually open now.
+
+- ~~Rotate the Neon password~~ — **done**. `/health/db` returns
+  `{"status":"healthy","menuItems":82}`.
+- ~~`VITE_STRIPE_PUBLISHABLE_KEY` is unset on Vercel~~ — **done**, and a second,
+  larger bug in the same area was found and fixed: the *customer* app's API
+  variable (`VITE_API_BASE_URL`) was missing while only the *admin* app's
+  (`VITE_API_URL`) was set, so every request 404'd against the site's own domain
+  and the menu showed "No items found". See `docs/DEPLOYMENT.md` → symptom table.
+- ~~The admin app is not deployed~~ and ~~`Payment__UseMockGateway` is still
+  `true`~~ — **both fixed**. The admin app is live at
+  `asian-taste-vietnamese-cuisine-wq44.vercel.app`, and the mock gateway was the
+  most serious bug found: it was **still enabled in production** on 2026-09-13,
+  approving every card order without contacting Stripe. `appsettings.json` now
+  defaults to the real gateway and `Program.cs` refuses to start the mock outside
+  Development. This warning was accurate and nobody had acted on it — worth
+  noting, because a stale-looking line was hiding a live problem.
 
 ---
 
