@@ -9,8 +9,9 @@ is sorted, the Neon password is rotated, and Stripe keys are in place — but se
 item 1, because the gateway was running in **test mode** and the mock gateway was
 enabled in production until this session fixed it.
 
-**Left to do:** one secret change (item 2), then talk to the owner about
-Lightspeed (item 4). Everything else is future work, listed at the bottom.
+**What needs you:** deploy the admin dashboard (item 4 — about two minutes of
+clicking), then talk to the owner about Lightspeed (item 5). Everything else is
+future work, listed at the bottom.
 
 ---
 
@@ -28,45 +29,67 @@ While checking them I found something serious, now fixed — see item 3.
 
 ---
 
-## 2. Switch Stripe to live keys when you're ready to take real money
+## 2. Switch Stripe from test to live — and it costs nothing to do
 
-**Your current key is a test key** (`sk_test_...`). That's the right choice while
-testing, but it means **no real money moves**: a test-mode payment succeeds and
-the order is marked paid without any money changing hands.
+**Your setup right now:** `sk_test_...` on the API and `pk_test_...` on Vercel.
+Both correct for testing. The live site loads with **zero console errors**, and
+a card order goes through real Stripe in test mode.
 
-The app now says which mode it's in at startup, so this can't be forgotten:
+### You are not "wasting money" by testing
 
-```
-=== STRIPE PAYMENT GATEWAY ENABLED IN TEST MODE (sk_test_...).
-    Card payments will succeed without real money moving. ===
-```
+Stripe charges **per transaction, not per key**. Test mode moves no money and
+costs nothing — there is no fee for having test keys, and no fee for switching.
+You pay 2.2% + 30¢ only when a *real* card is charged. So the switch itself is
+free; the first real order costs the same either way.
 
-**What I need from you, when you're ready to go live:**
+| Step | Cost | Risk |
+|---|---|---|
+| Keep testing on `sk_test_` | $0 | None |
+| Activate the Stripe account (business details) | $0 | None |
+| Create live keys + a live webhook endpoint | $0 | None |
+| **Swap the secrets** | **$0** | ⚠️ **real cards now get charged** |
 
-```bash
-fly secrets set Stripe__SecretKey="sk_live_..." Stripe__WebhookSecret="whsec_..."
-```
+The only real consideration is the last row: once live keys are in, order #1
+takes real money. Do it deliberately.
 
-and on Vercel, update `VITE_STRIPE_PUBLISHABLE_KEY` to the matching `pk_live_...`,
-then redeploy the frontend (Vite bakes it in at build time).
+### The sequence
 
-**Also confirm these are still right:**
+1. **Activate the Stripe account** (Dashboard → activate). Needs business details
+   and a bank account. No charge.
+2. **Create live keys** (Developers → API keys, toggle to Live).
+3. **Create a live webhook endpoint** at
+   `https://asian-taste-api.fly.dev/api/webhook/stripe` with the four events.
+   It has a **different signing secret** to the test one.
+4. **Set the secrets** — all three must change together, or payments break:
 
-- **Webhook endpoint** — the route is `webhook` (**singular**):
+   ```bash
+   fly secrets set \
+     Stripe__SecretKey="sk_live_..." \
+     Stripe__WebhookSecret="whsec_..."        # the LIVE endpoint's secret
+   ```
 
-  ```
-  https://asian-taste-api.fly.dev/api/webhook/stripe
-  ```
+   On Vercel, update `VITE_STRIPE_PUBLISHABLE_KEY` to `pk_live_...` and
+   **redeploy** — Vite inlines it at build time, so changing the value alone
+   does nothing.
 
-  Subscribing to `/api/webhooks/stripe` returns 404 by default and nothing
-  reports an error, so payments would succeed while orders stayed unpaid.
+5. **Confirm the mode switched.** The app now says which mode it is in at startup:
 
-- **Four events subscribed:** `payment_intent.succeeded`,
-  `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded`.
+   ```bash
+   fly logs -a asian-taste-api | grep STRIPE
+   ```
 
-- **The webhook signing secret in Stripe must match** the `whsec_...` on Fly.
-  Test-mode and live-mode endpoints have *different* secrets; swapping to live
-  keys means updating this too.
+   `STRIPE PAYMENT GATEWAY ENABLED (live keys)` is what you want. If it still
+   says `IN TEST MODE`, the secret did not take.
+
+### Proving it works, cheaply
+
+Place one real order yourself with your own card, confirm it appears in the admin
+dashboard, then refund it from the Stripe dashboard. That is one Stripe fee
+(about 50¢ on an $8.50 order) rather than a guess.
+
+**Why I would not do it yet:** everything except the live charge is already
+verified. There is nothing to gain from switching before you are ready to take a
+real order — test mode exercises the same code path.
 
 ---
 
@@ -114,7 +137,62 @@ you want me to remove the test orders.
 
 ---
 
-## 4. Lightspeed POS — deferred until you talk to the owner
+## 4. Deploy the admin dashboard (needs you: ~2 minutes in Vercel)
+
+**Status: not deployed anywhere.** I checked — only one Vercel project exists
+(`asian-taste-customer`). So there is currently no admin dashboard to access, and
+your tablet decision depends on it.
+
+**Why I cannot do this one.** Your Vercel token is read-only and team-scoped:
+
+| Endpoint | Result |
+|---|---|
+| read projects | ✅ 200 |
+| `POST /v11/projects` (create) | ❌ 403 forbidden |
+| `/v2/user` | ❌ 404 — the token has no user identity |
+
+So I can inspect your setup but not create anything. This is the same token-scope
+limitation that made the old CLI deploy job fail.
+
+### What to click
+
+1. **vercel.com/new** → import `Asian_taste_Vietnamese_cuisine` (same repo, second project)
+2. **Root Directory** → `src/asian-taste-admin` ← the step that matters
+3. Framework auto-detects **Vite**
+4. Add environment variables:
+
+   | Name | Value |
+   |---|---|
+   | `VITE_API_URL` | `https://asian-taste-api.fly.dev/api` |
+   | `VITE_WS_URL` | `wss://asian-taste-api.fly.dev` |
+
+   **`VITE_API_URL`, not `VITE_API_BASE_URL`** — the admin app uses a different
+   variable name to the customer app. The wrong name falls back to `/api` and
+   every request 404s. I added a guard that warns about a missing `/api`, but the
+   name itself has to be right.
+
+   **`VITE_WS_URL` is needed** for live order updates. Without it the app derives
+   `wss://` from its own page origin, which points at Vercel rather than the API,
+   and the connection silently never establishes — orders would appear only on
+   refresh.
+
+5. Deploy, then **send me the URL** and I will:
+   - add it to `Cors__AllowedOrigins__1` on Fly (without this the browser blocks
+     every request)
+   - verify login, the order list, and a status change end to end
+
+### Once it is up
+
+- **Log in** with the seeded admin account: `admin` / `Admin123!`
+- **Change that password immediately.** It is documented in this repo, so anyone
+  who reads it can reach your dashboard.
+- **Decide on exposure.** It is a public URL with a login page. Options in
+  `docs/DEPLOYMENT.md` → Admin app: Vercel password protection (paid feature), a
+  non-public URL, or accept the login page as the only barrier.
+
+---
+
+## 5. Lightspeed POS — deferred until you talk to the owner
 
 **Where this stands:** the integration is written, tested and deployed. Feeding it
 a real order is the only step left, and it's blocked on a conversation rather than
@@ -173,7 +251,7 @@ works.
 
 ---
 
-## 5. Decisions I made for you
+## 6. Decisions I made for you
 
 Each is reversible. I picked the option that keeps things cheapest and safest;
 say the word and I'll change any of them.
@@ -189,25 +267,23 @@ say the word and I'll change any of them.
 | **Cash orders** | No gateway call, `Pay on pickup` | Nothing to charge at order time | — |
 | **GST** | Prices include it; total = subtotal | Australian convention, matches the printed menu | — |
 | **Pickup estimate** | From restaurant settings (15 min default) | Was hardcoded to 20 min | Change in the admin settings |
-| **Kitchen's order view** | A tablet running the admin dashboard, alongside Uber Eats | Your call — works now, needs no POS API | Deploy the admin app, below |
+| **Kitchen's order view** | A tablet running the admin dashboard, alongside Uber Eats | Your call — works now, needs no POS API | Item 4 deploys it |
 | **Cash / pay-in-store** | Handled in Lightspeed, not this app | Your call — POS is configured later | Wire it when Lightspeed credentials exist |
-| **POS sync** | Deferred, not removed | Needs the owner conversation | Item 4 |
+| **POS sync** | Deferred, not removed | Needs the owner conversation | Item 5 |
 | **Custom domain** | Not now | Your call — customers here don't mind | Point DNS at Vercel when wanted |
 | **Hosting the frontend** | Staying on Vercel for now | Your call — keeping it simple | Cloudflare Pages is the alternative (free, commercial use allowed) |
 | **Editing the menu** | Future work | Your call | Not built; the menu lives in the seed today |
 
 ---
 
-## 6. Future work, in the order I'd do it
+## 7. Future work, in the order I'd do it
 
 You've said most of this is for later, so it's recorded rather than recommended.
 The order below is by how much it would bite, not by effort.
 
-1. **Deploy the admin app.** The kitchen's tablet has nothing to point at yet.
-   This is the one item that follows directly from your tablet decision, so it's
-   first. It needs a conversation about exposure — see `docs/DEPLOYMENT.md` →
-   Admin app. Options: Vercel with password protection (paid feature), or a
-   non-public URL.
+1. ~~Deploy the admin app.~~ Moved to item 4, since your tablet decision makes it
+   the blocking one. What remains after deploying: decide its exposure (Vercel
+   password protection, a non-public URL, or accept the login page).
 2. **Refunds via the UI.** `POST /api/payments/{paymentId}/refund` works but
    nothing calls it, so refunds happen in the Stripe dashboard. The endpoint also
    carries a `// TODO: Update order with refund status`, so a refunded order may
@@ -233,12 +309,12 @@ The order below is by how much it would bite, not by effort.
 
 ---
 
-## 7. Questions still open
+## 8. Questions still open
 
 Only the ones still unanswered. The rest moved into the decisions table.
 
 - **Does Lightspeed expose an API on the restaurant's plan?** This is the one that
-  decides whether item 4 is a week of work or a non-starter. Ask alongside which
+  decides whether item 5 is a week of work or a non-starter. Ask alongside which
   product it is.
 - **Are there existing menu photos?** The menu renders without images by design —
   the only files in the repo are photos of a printed menu board, which would
