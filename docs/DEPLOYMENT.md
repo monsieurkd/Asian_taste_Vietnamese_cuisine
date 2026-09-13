@@ -394,9 +394,9 @@ Things that must change before real customers pay real money:
 | API deploy job fails: "Could not retrieve Project Settings" | `VERCEL_TOKEN` is team-scoped. Mint one from **personal** Account Settings, not Team Settings — the Vercel CLI needs a user identity, which a team-scoped token lacks. `vercel whoami` returning "User not found" is the tell. (No longer used by the pipeline, which only verifies via the REST API.) |
 | Deploy job hangs instead of deploying | The CI gate polls the Actions API. A hang means the call returns nothing — check the job has `actions: read`. |
 | API crash-loops on Fly | Check `/health/db` first: it names the concrete cause. A missing or malformed connection string is the usual one, and Neon's `postgresql://` URI form must be converted to Npgsql's key=value form. |
-| Menu renders but is empty | `VITE_API_BASE_URL` missing `/api`, or CORS blocking |
-| Every request 404s, UI still renders | `VITE_API_BASE_URL` is a bare origin |
-| CORS error in the console | Origin not in `Cors__AllowedOrigins__N` on Fly, or a JSON array was used instead of the indexed form |
+| **Menu renders "No items found", API is healthy** | **The variable is named wrong.** The customer app reads `VITE_API_BASE_URL`; the admin app reads `VITE_API_URL`. Setting only `VITE_API_URL` on the customer project leaves it with no value, so requests go to the site's OWN domain (`asian-taste-customer.vercel.app/api/menu`) and 404. **The tell:** no request to the API host appears in the network tab at all, because it never leaves the frontend's origin. This looks exactly like an empty database and has caused a full outage here. Check with `curl -s https://asian-taste-customer.vercel.app/<bundle>.js \| grep fly.dev` — if the API host is absent from the bundle, the variable was missing at build time. |
+| Every request 404s, UI still renders | `VITE_API_BASE_URL` is a bare origin (missing `/api`), or the variable is misnamed as above |
+| CORS error, not a 404 | Origin missing from `Cors__AllowedOrigins__N` on Fly, or a JSON array was used instead of the indexed form |
 | API deploy fails at startup | Missing `Encryption__Key` — the API throws by design |
 | `direct load of /menu/item/33` 404s | `vercel.json` rewrite missing in the deployed app |
 | API returns 200 but no items | Run `./scripts/check-deployment-health.sh` — it distinguishes a dead database from an unseeded one |

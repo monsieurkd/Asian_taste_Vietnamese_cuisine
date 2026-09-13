@@ -521,6 +521,57 @@ will turn it on and print the pairing code.
 
 ---
 
+## Fixed: the customer site showing "No items found"
+
+**This was not Fly, and it was not Neon.** Both were healthy the whole time —
+`fly status` showed `started` with the health check passing, and `/health/db`
+returned `{"status":"healthy","menuItems":82}` on every attempt.
+
+**The actual cause: a variable name.** The Vercel project had `VITE_API_URL`,
+which is the **admin** app's variable. The customer app reads
+`VITE_API_BASE_URL`. With no value, the app fell back to a relative path, so the
+browser requested:
+
+```
+https://asian-taste-customer.vercel.app/api/menu   -> 404
+```
+
+...against the frontend's **own** domain. The API was never contacted.
+
+**Why it was so hard to spot, and why it kept happening:** no request to the API
+host appears in the network tab at all, because the request never leaves the
+frontend's origin. It looks like an empty database. And the app's own
+`.env.example` documented `VITE_API_URL`, contradicting the code — so anyone
+setting up the project would reasonably set the wrong name.
+
+**What I changed:**
+
+- Set `VITE_API_BASE_URL` on the Vercel project (all three environments).
+- The client now accepts **either** name, preferring the correct one, and warns
+  when it falls back. A wrong name now degrades to "works, with a warning" instead
+  of a silent 404 loop.
+- Corrected `.env.example`, which was the trap.
+- Corrected the symptom table in `docs/DEPLOYMENT.md` — its entry for this symptom
+  named the wrong cause, which is why the fix never stuck.
+- 6 tests, mutation-checked: removing the fallback fails 4 of them.
+
+**Verified live:** 82 dish cards on `/menu`, 7 on the homepage, and the full
+add-to-cart path works at $8.50 — zero console errors.
+
+**If it ever happens again, check this first:**
+
+```bash
+# Is the API host actually in the deployed bundle?
+curl -s https://asian-taste-customer.vercel.app/ \
+  | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' | head -1 \
+  | xargs -I{} curl -s https://asian-taste-customer.vercel.app{} \
+  | grep -c 'asian-taste-api.fly.dev'
+```
+
+Zero means the variable was missing at build time. That is this bug.
+
+---
+
 ## Verifying anything
 
 ```bash
