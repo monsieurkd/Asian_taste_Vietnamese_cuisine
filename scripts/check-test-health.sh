@@ -149,38 +149,35 @@ if [ -n "${TEST_RESULTS_DIR:-}" ]; then
     # not execute (e.g. [Fact(Skip = "...")]) lands in `notExecuted`. When that
     # counter is absent, total - executed is the same quantity, and it is what
     # the "Skipped:" column of the console summary reports in local mode.
-    read -r passed failed skipped total < <(awk '
-      function attr(s, name,   m) {
-        if (match(s, name "=\"[0-9]+\"")) {
-          m = substr(s, RSTART, RLENGTH)
-          sub(/^[^"]*"/, "", m); sub(/"$/, "", m)
-          return m
-        }
-        return 0
-      }
-      {
-        line = $0
-        while (match(line, /<Counters[^>]*>/)) {
-          c = substr(line, RSTART, RLENGTH)
-          total    += attr(c, "total")       + 0
-          executed += attr(c, "executed")    + 0
-          passed   += attr(c, "passed")      + 0
-          failed   += attr(c, "failed")      + 0
-          notrun   += attr(c, "notExecuted") + 0
-          line = substr(line, RSTART + RLENGTH)
-        }
-      }
-      END {
-        if (total == 0 && executed > 0) total = executed + failed + notrun
-        n = notrun
-        if (n == 0 && total > executed) n = total - executed
-        printf "%d %d %d %d\n", passed + 0, failed + 0, n + 0, total + 0
-      }
-    ' "${TRX_FILES[@]}" 2>/dev/null) || true
+    counters="$(grep -ho '<Counters[^>]*>' "${TRX_FILES[@]}" 2>/dev/null || true)"
 
-    if [ -z "${total:-}" ]; then
-      fail "could not parse any <Counters> from the TRX — the result files are not readable, so the run cannot be trusted"
+    if [ -z "$counters" ]; then
+      fail "no <Counters> element in any TRX under '$TEST_RESULTS_DIR' — the results are unreadable, so the run cannot be trusted"
     else
+      read -r passed failed skipped total < <(printf '%s\n' "$counters" | awk '
+        function attr(s, name,   m) {
+          if (match(s, name "=\"[0-9]+\"")) {
+            m = substr(s, RSTART, RLENGTH)
+            sub(/^[^"]*"/, "", m); sub(/"$/, "", m)
+            return m
+          }
+          return 0
+        }
+        {
+          total    += attr($0, "total")       + 0
+          executed += attr($0, "executed")    + 0
+          passed   += attr($0, "passed")      + 0
+          failed   += attr($0, "failed")      + 0
+          notrun   += attr($0, "notExecuted") + 0
+        }
+        END {
+          if (total == 0 && executed > 0) total = executed + failed + notrun
+          n = notrun
+          if (n == 0 && total > executed) n = total - executed
+          printf "%d %d %d %d\n", passed + 0, failed + 0, n + 0, total + 0
+        }
+      ')
+
       printf '  passed=%s failed=%s skipped=%s total=%s\n' "$passed" "$failed" "$skipped" "$total"
 
       [ "$failed" -eq 0 ]  || fail "$failed test(s) FAILED — the suite is not green"
