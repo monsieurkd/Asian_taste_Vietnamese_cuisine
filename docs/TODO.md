@@ -572,12 +572,66 @@ Zero means the variable was missing at build time. That is this bug.
 
 ---
 
+## What that recurring Fly log line was (and how it's fixed)
+
+You pasted this repeating every 30 seconds:
+
+```
+info: AsianTaste.API.Services.OrderSyncBackgroundService[0]
+      Retrying 1 failed order(s)
+```
+
+**It was misleading, and that was the bug.** The retry loop counted every order
+marked `Failed`, logged that count, and only *then* checked each order against the
+retry limit — skipping exhausted ones with a `Debug`-level message. Production logs
+at `Information`, so the skip was invisible: the line was emitted every 30 seconds
+for an order that was **never retried**.
+
+So POS sync looked busy and working when it had actually given up. One of your real
+orders had been sitting in that state for hours.
+
+**Three fixes:**
+
+1. **The log is now honest.** Only genuinely retryable orders are counted; given-up
+   ones produce a warning that names the number and where to look.
+2. **It no longer repeats.** A stuck order is permanent, so warning every 30 seconds
+   would emit ~2,880 identical lines a day and bury real messages. It now fires
+   only when the count **changes** — a newly stuck order still announces itself,
+   and clearing the backlog is confirmed instead of silent.
+3. **`/health/pos` reports it** without failing anything, since a stuck POS order
+   means the kitchen should use the dashboard, not that the site is down.
+
+**Verified in production:** the last warning was at `10:25:47`; it's now `10:32:41`
+with the count steady at 2 and nothing further emitted. That window previously
+produced ~14 duplicate lines.
+
+### The two orders it was complaining about
+
+Both are **real orders**, both fully paid, both complete. They only failed to *sync
+to Lightspeed*, which was never configured:
+
+| Order | Amount | Status |
+|---|---|---|
+| `AT-131302-0C8B` | $24.00 | Pending |
+| `AT-131949-0C4F` | $48.00 | Completed, card payment succeeded |
+
+**Nothing is broken and no action is needed.** They are visible in the admin
+dashboard and the kitchen can work from there. They will sync automatically once
+Lightspeed credentials exist (item 7).
+
+If you'd rather not see them flagged, `lightspeed_sync_status` can be set to
+`Synced` directly — but it's better to leave them, since they're an accurate record
+that POS sync never happened.
+
+---
+
 ## Verifying anything
 
 ```bash
-./scripts/check-deployment-health.sh    # is production working? (14 checks)
-dotnet test                             # 108 tests
+./scripts/check-deployment-health.sh    # is production working? (includes POS backlog)
+dotnet test                             # 117 tests
 fly logs -a asian-taste-api             # what the API is doing
+curl -s https://asian-taste-api.fly.dev/health/pos   # any orders stuck on POS sync?
 ```
 
 `docs/ARCHITECTURE.md` explains how all the pieces fit together.
