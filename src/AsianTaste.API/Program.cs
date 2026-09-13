@@ -57,15 +57,38 @@ builder.Services.AddSingleton<IEncryptionService>(sp =>
 builder.Services.AddScoped<ILightspeedRepository, LightspeedRepository>();
 builder.Services.AddScoped<ILightspeedAuthService, LightspeedAuthService>();
 
-// Payment gateway services - Stripe is now the primary payment provider
-if (builder.Configuration.GetValue<bool>("Payment:UseMockGateway", false))
+// Payment gateway services. Stripe is the default; the mock must be asked for.
+//
+// This block used to be inverted in a way that cost real money: appsettings.json
+// (which applies to EVERY environment, production included) shipped
+// "UseMockGateway": true, so a deployment that did not explicitly set
+// Payment__UseMockGateway=false would run the mock gateway — which approves every
+// charge without contacting Stripe. Card orders came back "Paid online" and were
+// recorded as paid while no money moved. Nothing errored; it looked like it worked.
+//
+// Two changes prevent that class of failure:
+//   * appsettings.json now defaults to false, so the real gateway is what you get
+//     by default and the mock must be opted into.
+//   * The mock is REFUSED outside Development, below, so even an explicit
+//     UseMockGateway=true cannot turn a production deployment free.
+var useMockGateway = builder.Configuration.GetValue<bool>("Payment:UseMockGateway", false);
+
+if (useMockGateway && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "Payment:UseMockGateway is true but the environment is " +
+        $"'{builder.Environment.EnvironmentName}'. The mock gateway approves payments " +
+        "without contacting Stripe, so every order would be accepted unpaid. Set " +
+        "Payment__UseMockGateway=false, or remove it to use the default.");
+}
+
+if (useMockGateway)
 {
     builder.Services.AddScoped<IPaymentGatewayService, MockPaymentGateway>();
     Console.WriteLine("=== MOCK PAYMENT GATEWAY ENABLED - No real payments will be processed ===");
 }
 else
 {
-    // Stripe is the default payment provider
     // Configure and register StripeConfiguration as a scoped service
     builder.Services.Configure<StripeConfiguration>(
         builder.Configuration.GetSection("Stripe"));
@@ -74,7 +97,26 @@ else
     builder.Services.AddScoped<IPaymentGatewayService, StripePaymentGateway>();
     builder.Services.AddScoped<IWebhookService, StripeWebhookService>();
 
-    Console.WriteLine("=== STRIPE PAYMENT GATEWAY ENABLED ===");
+    // Say which mode the real gateway is in. A live deployment running on a
+    // test key would take no money, and that is worth noticing immediately
+    // rather than when the first customer cannot pay.
+    var secretKey = builder.Configuration["Stripe:SecretKey"];
+    if (string.IsNullOrWhiteSpace(secretKey))
+    {
+        Console.WriteLine(
+            "=== STRIPE PAYMENT GATEWAY ENABLED, BUT Stripe:SecretKey IS NOT SET. " +
+            "Card payments will fail. Set Stripe__SecretKey. ===");
+    }
+    else if (secretKey.StartsWith("sk_test_", StringComparison.Ordinal))
+    {
+        Console.WriteLine(
+            "=== STRIPE PAYMENT GATEWAY ENABLED IN TEST MODE (sk_test_...). " +
+            "Card payments will succeed without real money moving. ===");
+    }
+    else
+    {
+        Console.WriteLine("=== STRIPE PAYMENT GATEWAY ENABLED (live keys) ===");
+    }
 }
 
 // Order sync services (Phase 3)
