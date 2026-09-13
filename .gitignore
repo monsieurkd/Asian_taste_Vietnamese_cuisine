@@ -65,3 +65,7 @@ ui-shots/
 # Local shell secrets (see .secrets.local.example). The real file holds live
 # credentials and must never be committed.
 .secrets.local
+
+# Test artifacts (dotnet test produces TestResults/*.trx on every run).
+TestResults/
+*.trx
