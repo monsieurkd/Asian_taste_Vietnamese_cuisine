@@ -18,6 +18,11 @@
 # discovered test count against a floor recorded in .test-baseline so that a
 # shrinking suite is a build failure rather than a silent regression.
 #
+# Judging a run does not require performing one:
+#   TEST_RESULTS_DIR=/path/to/trx  -> read results CI already produced and do
+#                                     NOT re-run the suite (see section 2).
+#   TEST_RESULTS_DIR unset         -> run the suite here. Local default.
+#
 # Exit 0 = the suite genuinely ran. Exit 1 = it did not, or it shrank.
 
 set -uo pipefail
@@ -98,43 +103,135 @@ fi
 
 # ---------------------------------------------------------------------------
 # 2. The suite must actually execute a non-trivial number of tests.
+#
+#    Two modes, because running the suite and judging it are separate jobs:
+#
+#      consumer — TEST_RESULTS_DIR is set. CI already ran the suite in its
+#        "Test" step and wrote TRX there. Re-running `dotnet test` here would
+#        pay for the entire build + suite a second time for a signal that
+#        already exists on disk, so this script judges the artefact instead of
+#        reproducing it.
+#
+#      local — TEST_RESULTS_DIR is unset, so there is no artefact to judge and
+#        the script runs the suite itself. This is the documented local
+#        workflow (`./scripts/check-test-health.sh`).
+#
+#    Consumer mode never degrades into "assume it passed": a missing or
+#    unreadable TRX is a hard failure. A guardrail that shrugs is the exact
+#    false-green this script exists to prevent.
 # ---------------------------------------------------------------------------
 hdr "Execution (the tests must really run)"
 
-RUN_LOG="$(mktemp)"
-trap 'rm -f "$RUN_LOG"' EXIT
+RUN_LOG=""
+run_status=0
+passed=""; failed=""; skipped=""; total=""
 
-if command -v dotnet >/dev/null 2>&1; then
-  dotnet test "$TEST_PROJ" --nologo --verbosity minimal > "$RUN_LOG" 2>&1
-  run_status=$?
+if [ -n "${TEST_RESULTS_DIR:-}" ]; then
+  printf '  mode     consumer — reading TRX from %s (the suite is NOT re-run)\n' "$TEST_RESULTS_DIR"
+
+  declare -a TRX_FILES=()
+  if [ -d "$TEST_RESULTS_DIR" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      TRX_FILES+=("$f")
+    done < <(find "$TEST_RESULTS_DIR" -type f -name '*.trx' 2>/dev/null | sort)
+  fi
+
+  if [ "${#TRX_FILES[@]}" -eq 0 ]; then
+    fail "no *.trx under '$TEST_RESULTS_DIR' — the suite produced no results, so nothing here is trustworthy"
+  else
+    printf '  trx      %s file(s): %s\n' "${#TRX_FILES[@]}" "${TRX_FILES[*]}"
+
+    # Each TRX carries a `<Counters>` element for one test run. Sum across files
+    # so a solution with more than one test project still yields a true total.
+    #
+    # `skipped` is not a standard TRX attribute on current SDKs: a test that did
+    # not execute (e.g. [Fact(Skip = "...")]) lands in `notExecuted`. When that
+    # counter is absent, total - executed is the same quantity, and it is what
+    # the "Skipped:" column of the console summary reports in local mode.
+    read -r passed failed skipped total < <(awk '
+      function attr(s, name,   m) {
+        if (match(s, name "=\"[0-9]+\"")) {
+          m = substr(s, RSTART, RLENGTH)
+          sub(/^[^"]*"/, "", m); sub(/"$/, "", m)
+          return m
+        }
+        return 0
+      }
+      {
+        line = $0
+        while (match(line, /<Counters[^>]*>/)) {
+          c = substr(line, RSTART, RLENGTH)
+          total    += attr(c, "total")       + 0
+          executed += attr(c, "executed")    + 0
+          passed   += attr(c, "passed")      + 0
+          failed   += attr(c, "failed")      + 0
+          notrun   += attr(c, "notExecuted") + 0
+          line = substr(line, RSTART + RLENGTH)
+        }
+      }
+      END {
+        if (total == 0 && executed > 0) total = executed + failed + notrun
+        n = notrun
+        if (n == 0 && total > executed) n = total - executed
+        printf "%d %d %d %d\n", passed + 0, failed + 0, n + 0, total + 0
+      }
+    ' "${TRX_FILES[@]}" 2>/dev/null) || true
+
+    if [ -z "${total:-}" ]; then
+      fail "could not parse any <Counters> from the TRX — the result files are not readable, so the run cannot be trusted"
+    else
+      printf '  passed=%s failed=%s skipped=%s total=%s\n' "$passed" "$failed" "$skipped" "$total"
+
+      [ "$failed" -eq 0 ]  || fail "$failed test(s) FAILED — the suite is not green"
+      [ "$skipped" -eq 0 ] || fail "$skipped test(s) SKIPPED — skipped tests hide broken behaviour"
+      [ "$total" -gt 0 ]   || fail "0 tests ran — a suite that runs nothing reports success"
+    fi
+  fi
 else
-  fail "dotnet SDK not found on PATH — cannot verify the suite runs"
-  run_status=127
+  printf '  mode     local — TEST_RESULTS_DIR is unset, so running the suite here\n'
+
+  RUN_LOG="$(mktemp)"
+  trap 'rm -f "$RUN_LOG"' EXIT
+
+  if command -v dotnet >/dev/null 2>&1; then
+    dotnet test "$TEST_PROJ" --nologo --verbosity minimal > "$RUN_LOG" 2>&1
+    run_status=$?
+  else
+    fail "dotnet SDK not found on PATH — cannot verify the suite runs"
+    run_status=127
+  fi
+
+  # Parse the summary line: "Passed!  - Failed:     0, Passed:    45, Skipped:     0, Total:    45"
+  summary="$(grep -Eo '(Passed|Failed)![[:space:]]*-[[:space:]]*Failed:[[:space:]]*[0-9]+,[[:space:]]*Passed:[[:space:]]*[0-9]+,[[:space:]]*Skipped:[[:space:]]*[0-9]+,[[:space:]]*Total:[[:space:]]*[0-9]+' "$RUN_LOG" | tail -1)"
+
+  if [ -z "$summary" ]; then
+    fail "could not parse a test summary — the suite did not report results (did it build?)"
+    printf '  %sraw tail:%s\n' "$YELLOW" "$RESET"
+    tail -15 "$RUN_LOG" | sed 's/^/    /'
+  else
+    failed=$(printf '%s' "$summary"  | sed -E 's/.*Failed:[[:space:]]*([0-9]+).*/\1/')
+    passed=$(printf '%s' "$summary"  | sed -E 's/.*Passed:[[:space:]]*([0-9]+).*/\1/')
+    skipped=$(printf '%s' "$summary" | sed -E 's/.*Skipped:[[:space:]]*([0-9]+).*/\1/')
+    total=$(printf '%s' "$summary"   | sed -E 's/.*Total:[[:space:]]*([0-9]+).*/\1/')
+
+    printf '  passed=%s failed=%s skipped=%s total=%s\n' "$passed" "$failed" "$skipped" "$total"
+
+    [ "$failed" -eq 0 ]  || fail "$failed test(s) FAILED — the suite is not green"
+    [ "$skipped" -eq 0 ] || fail "$skipped test(s) SKIPPED — skipped tests hide broken behaviour"
+    [ "$total" -gt 0 ]   || fail "0 tests ran — a suite that runs nothing reports success"
+  fi
 fi
 
-# Parse the summary line: "Passed!  - Failed:     0, Passed:    45, Skipped:     0, Total:    45"
-summary="$(grep -Eo '(Passed|Failed)![[:space:]]*-[[:space:]]*Failed:[[:space:]]*[0-9]+,[[:space:]]*Passed:[[:space:]]*[0-9]+,[[:space:]]*Skipped:[[:space:]]*[0-9]+,[[:space:]]*Total:[[:space:]]*[0-9]+' "$RUN_LOG" | tail -1)"
-
-if [ -z "$summary" ]; then
-  fail "could not parse a test summary — the suite did not report results (did it build?)"
-  printf '  %sraw tail:%s\n' "$YELLOW" "$RESET"
-  tail -15 "$RUN_LOG" | sed 's/^/    /'
-else
-  failed=$(printf '%s' "$summary"  | sed -E 's/.*Failed:[[:space:]]*([0-9]+).*/\1/')
-  passed=$(printf '%s' "$summary"  | sed -E 's/.*Passed:[[:space:]]*([0-9]+).*/\1/')
-  skipped=$(printf '%s' "$summary" | sed -E 's/.*Skipped:[[:space:]]*([0-9]+).*/\1/')
-  total=$(printf '%s' "$summary"   | sed -E 's/.*Total:[[:space:]]*([0-9]+).*/\1/')
-
-  printf '  passed=%s failed=%s skipped=%s total=%s\n' "$passed" "$failed" "$skipped" "$total"
-
-  [ "$failed" -eq 0 ]  || fail "$failed test(s) FAILED — the suite is not green"
-  [ "$skipped" -eq 0 ] || fail "$skipped test(s) SKIPPED — skipped tests hide broken behaviour"
-  [ "$total" -gt 0 ]   || fail "0 tests ran — a suite that runs nothing reports success"
-
-  # ---------------------------------------------------------------------
-  # 3. The suite must not shrink. A shrinking count means coverage was lost
-  #    (deleted tests, a project dropped from the run, a bad filter).
-  # ---------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 3. The suite must not shrink. A shrinking count means coverage was lost
+#    (deleted tests, a project dropped from the run, a bad filter).
+#
+#    Skipped when mode 2 could not produce a count: an unparseable run is
+#    already a failure above, and comparing against a floor would be invented
+#    evidence on top of it.
+# ---------------------------------------------------------------------------
+if [ -n "${total:-}" ]; then
   hdr "Suite size (must not shrink)"
   if [ -f "$BASELINE_FILE" ]; then
     baseline="$(grep -Eo '[0-9]+' "$BASELINE_FILE" | head -1)"

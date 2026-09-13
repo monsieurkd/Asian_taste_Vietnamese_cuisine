@@ -626,14 +626,43 @@ public class OrderRepository : IOrderRepository
 
         var whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
 
-        // Cast enum columns to text to avoid Npgsql enum mapping issues
+        // Alias every column to the C# property name, matching GetOrderByIdAsync.
+        //
+        // Without these aliases Dapper maps by exact name: order_number does not
+        // match OrderNumber, so the admin order list returned OrderNumber = ""
+        // and CustomerName = "" for EVERY row. The list still rendered, with
+        // correct totals and empty Order # and Customer columns, so it looked like
+        // missing data rather than a mapping bug. A kitchen cannot work from a
+        // list where no order has a number.
+        //
+        // Dapper's underscore matching is deliberately left off: enabling it
+        // globally would change mapping for every query in this file at once,
+        // including ones that currently work, so the fix stays local to the query
+        // that was broken. Cast enum columns to text to avoid Npgsql enum issues.
         var sql = $@"
-            SELECT id, order_number, customer_id, customer_name, customer_phone, customer_email,
-                   order_type::text as order_type, requested_time, status::text as status,
-                   payment_method::text as payment_method, subtotal, tax, total,
-                   payment_intent_id, payment_failure_reason, square_payment_id, square_order_id,
-                   third_party_reference, lightspeed_sent_at, email_confirmation_sent,
-                   notes, created_at, updated_at
+            SELECT id,
+                   order_number as OrderNumber,
+                   customer_id as CustomerId,
+                   customer_name as CustomerName,
+                   customer_phone as CustomerPhone,
+                   customer_email as CustomerEmail,
+                   order_type::text as OrderType,
+                   requested_time as RequestedTime,
+                   status::text as Status,
+                   payment_method::text as PaymentMethod,
+                   subtotal as Subtotal,
+                   tax as Tax,
+                   total as Total,
+                   payment_intent_id as PaymentIntentId,
+                   payment_failure_reason as PaymentFailureReason,
+                   square_payment_id as SquarePaymentId,
+                   square_order_id as SquareOrderId,
+                   third_party_reference as ThirdPartyReference,
+                   lightspeed_sent_at as LightspeedSentAt,
+                   email_confirmation_sent as EmailConfirmationSent,
+                   notes as Notes,
+                   created_at as CreatedAt,
+                   updated_at as UpdatedAt
             FROM orders
             {whereClause}
             ORDER BY created_at DESC

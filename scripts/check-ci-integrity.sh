@@ -16,6 +16,15 @@
 #   rewrites a critical file wholesale, hides its own bugs regardless of what the
 #   tests say. Large diffs get flagged loudly, not silently merged.
 #
+# Modes:
+#   (default)       everything, including the commit-diff size tripwire. This is
+#                   what CI runs.
+#   --static-only   validate the working tree only (guardrail steps present, not
+#                   disarmed, scripts runnable, no guardrail script deleted) and
+#                   skip the size tripwire. That tripwire compares a commit
+#                   against its base, so mid-edit it would fail on somebody
+#                   else's commit. This is what .githooks/pre-commit runs.
+#
 # Exit 0 = guardrails intact and the diff is reviewable. Exit 1 = a guardrail was
 # weakened, or the change is too large/lopsided to trust.
 
@@ -23,6 +32,22 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
+
+STATIC_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --static-only) STATIC_ONLY=1 ;;
+    -h|--help)
+      printf 'usage: %s [--static-only]\n' "${0##*/}"
+      printf '  --static-only  pre-commit mode: working-tree checks only, no diff size tripwire\n'
+      exit 0
+      ;;
+    *)
+      printf 'unknown argument: %s (try --help)\n' "$arg" >&2
+      exit 2
+      ;;
+  esac
+done
 
 RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
 [ -t 1 ] || { RED=""; GREEN=""; YELLOW=""; BOLD=""; RESET=""; }
@@ -133,7 +158,13 @@ fi
 
 # ---------------------------------------------------------------------------
 # 3. Diff size: a change too large to review fails loudly.
+#    Skipped in --static-only mode (pre-commit): it measures a committed diff
+#    against its base, which is not a claim a pre-commit hook can make.
 # ---------------------------------------------------------------------------
+if [ "$STATIC_ONLY" -eq 1 ]; then
+  hdr "Change size (skipped: --static-only)"
+  note "--static-only: the commit-diff size tripwire did not run. CI runs it on the branch."
+else
 hdr "Change size (must stay reviewable)"
 
 # Determine the diff base. On GitHub PRs, GITHUB_BASE_REF identifies the target.
@@ -185,12 +216,40 @@ else
     fi
   fi
 fi
+fi   # end: change size (section 3)
 
 # ---------------------------------------------------------------------------
 # 4. Guardrail scripts must not be deleted by the change under test.
+#
+#    In --static-only mode there is no committed change to inspect yet, so this
+#    asks the working tree instead: the guardrail files must exist on disk and
+#    must not be staged for deletion. Deleting a guardrail is the single most
+#    dangerous commit this repo can make, so the pre-commit tier still refuses
+#    it rather than deferring the entire check to CI.
 # ---------------------------------------------------------------------------
 hdr "Guardrail scripts survive the change"
-if [ -n "$base" ]; then
+if [ "$STATIC_ONLY" -eq 1 ]; then
+  declare -a GUARDED=(scripts/check-test-wiring.sh scripts/check-test-health.sh scripts/check-ci-integrity.sh)
+  missing=0
+  for g in "${GUARDED[@]}"; do
+    if [ ! -e "$g" ]; then
+      fail "guardrail script is gone from the working tree: $g"
+      missing=1
+    fi
+  done
+
+  # `git diff --cached --name-status HEAD` is the index vs the last commit: a
+  # staged `D` means this very commit removes the file.
+  while IFS= read -r line; do
+    case "$line" in
+      D*scripts/check-*.sh)
+        fail "this commit is staged to delete a guardrail script: ${line#D}"
+        ;;
+    esac
+  done <<< "$(git diff --cached --name-status HEAD 2>/dev/null || true)"
+
+  [ "$missing" -eq 1 ] || printf '  ok       all guardrail scripts present and none staged for deletion\n'
+elif [ -n "$base" ]; then
   while IFS= read -r line; do
     case "$line" in
       D*scripts/check-*.sh)
