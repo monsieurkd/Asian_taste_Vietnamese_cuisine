@@ -51,8 +51,18 @@ public class OrderRepository : IOrderRepository
             FROM orders
             WHERE order_number = @OrderNumber";
 
-        return await connection.QueryFirstOrDefaultAsync<Order>(
+        var order = await connection.QueryFirstOrDefaultAsync<Order>(
             new CommandDefinition(sql, new { OrderNumber = orderNumber }, cancellationToken: cancellationToken));
+
+        // Load the line items (with their modifiers). Without this the order carries
+        // an empty Items list, and anything that consumes it -- the POS push, the
+        // confirmation email -- silently sees an order with no dishes on it.
+        if (order is not null)
+        {
+            order.Items = await GetOrderItemsAsync(order.Id, cancellationToken);
+        }
+
+        return order;
     }
 
     public async Task<Order?> GetOrderByIdAsync(int orderId, CancellationToken cancellationToken = default)
@@ -89,8 +99,18 @@ public class OrderRepository : IOrderRepository
             FROM orders
             WHERE id = @OrderId";
 
-        return await connection.QueryFirstOrDefaultAsync<Order>(
+        var order = await connection.QueryFirstOrDefaultAsync<Order>(
             new CommandDefinition(sql, new { OrderId = orderId }, cancellationToken: cancellationToken));
+
+        // Items and their modifiers are a separate query rather than a join, because
+        // Dapper would otherwise map the flattened rows onto one OrderItem each.
+        // See GetOrderByNumberAsync for why this matters.
+        if (order is not null)
+        {
+            order.Items = await GetOrderItemsAsync(order.Id, cancellationToken);
+        }
+
+        return order;
     }
 
     public async Task<Order> CreateOrderAsync(CreateCheckoutOrderDto request, string orderNumber, CancellationToken cancellationToken = default)
@@ -372,8 +392,23 @@ public class OrderRepository : IOrderRepository
         using var connection = _dbConnectionFactory.CreateConnection();
         connection.Open();
 
+        // Column aliases, not `SELECT *`. Dapper matches by property name and this
+        // connection does not enable underscore-to-PascalCase mapping, so the
+        // snake_case columns (menu_item_name, unit_price) map to nothing and every
+        // OrderItem comes back with an empty name and a price of 0. That is silent:
+        // the row count is right, so it looked like it worked. The rest of this file
+        // aliases for the same reason.
         const string sql = @"
-            SELECT *
+            SELECT id,
+                   order_id as OrderId,
+                   menu_item_id as MenuItemId,
+                   menu_item_name as MenuItemName,
+                   quantity as Quantity,
+                   unit_price as UnitPrice,
+                   total_price as TotalPrice,
+                   special_instructions as SpecialInstructions,
+                   lightspeed_product_id as LightspeedProductId,
+                   created_at as CreatedAt
             FROM order_items
             WHERE order_id = @OrderId
             ORDER BY id ASC";
@@ -386,8 +421,13 @@ public class OrderRepository : IOrderRepository
         // Fetch modifiers for each item
         foreach (var item in itemsList)
         {
+            // Aliased for the same reason as the item query above.
             const string modifiersSql = @"
-                SELECT *
+                SELECT id,
+                       order_item_id as OrderItemId,
+                       modifier_id as ModifierId,
+                       modifier_name as ModifierName,
+                       price_adjustment as PriceAdjustment
                 FROM order_item_modifiers
                 WHERE order_item_id = @OrderItemId
                 ORDER BY id ASC";

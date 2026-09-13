@@ -442,7 +442,7 @@ public class OrderServicePaymentAndPosTests
 
         var response = await h.Service.CreateOrderAsync(CardRequest());
 
-        Assert.Equal(1, h.Orders.MarkedPending.Count);
+        Assert.Single(h.Orders.MarkedPending);
         Assert.Empty(h.Orders.SyncUpdates);
         Assert.StartsWith("AT-", response.OrderNumber); // the order still succeeded
     }

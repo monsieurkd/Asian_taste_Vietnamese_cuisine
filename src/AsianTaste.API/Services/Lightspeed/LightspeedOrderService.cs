@@ -347,6 +347,8 @@ public class LightspeedOrderService : ILightspeedOrderService
             var line = new Dictionary<string, object?>
             {
                 ["quantity"] = item.Quantity,
+                // Includes modifier price adjustments, because the API computed
+                // UnitPrice from base price + modifiers when the order was created.
                 ["unitPrice"] = item.UnitPrice
             };
 
@@ -355,10 +357,21 @@ public class LightspeedOrderService : ILightspeedOrderService
             {
                 line["product"] = new { ID = itemWithProduct.LightspeedProductId };
             }
-            else
+
+            // Always send a description, even alongside a product id.
+            //
+            // Lightspeed's line item has no free-text "modifiers" field, so the
+            // customisations have to travel as text or they are lost. Without this
+            // the kitchen sees "Pad Thai" and never learns about "no coriander" —
+            // and the customer paid extra for some of those choices.
+            var description = BuildLineDescription(item);
+            line["description"] = description;
+
+            // Special instructions are per-item, not per-order, so they belong on
+            // the line rather than in the order note.
+            if (!string.IsNullOrWhiteSpace(item.SpecialInstructions))
             {
-                // Fallback: use note to describe the item
-                line["description"] = $"{item.MenuItemName} x{item.Quantity}";
+                line["note"] = item.SpecialInstructions;
             }
 
             lines.Add(line);
@@ -390,6 +403,35 @@ public class LightspeedOrderService : ILightspeedOrderService
             note = BuildOrderNote(order),
             payments = payments.Count > 0 ? payments : null
         };
+    }
+
+    /// <summary>
+    /// Builds a line description that carries the chosen customisations.
+    ///
+    /// Format: "Pad Thai x1 (Extra chilli, No coriander, +$2.00)".
+    ///
+    /// The price delta is included on purpose. Some modifiers cost money and some
+    /// do not, and a kitchen reading a ticket cannot tell which without it — while
+    /// the customer's total already reflects them. Showing it keeps the ticket
+    /// reconcilable against the receipt.
+    /// </summary>
+    private static string BuildLineDescription(OrderItem item)
+    {
+        var description = new StringBuilder($"{item.MenuItemName} x{item.Quantity}");
+
+        if (item.Modifiers.Count == 0)
+        {
+            return description.ToString();
+        }
+
+        var choices = item.Modifiers.Select(m =>
+            m.PriceAdjustment == 0
+                ? m.ModifierName
+                : $"{m.ModifierName} +${m.PriceAdjustment:0.00}");
+
+        description.Append($" ({string.Join(", ", choices)})");
+
+        return description.ToString();
     }
 
     /// <summary>
