@@ -1,6 +1,7 @@
 # Apple Pay integration plan
 
-Status: **researched, not implemented.** Written 2026-09-13.
+Status: **code changes applied; blocked on a domain and a dashboard toggle.**
+Updated 2026-09-13.
 
 ## The headline
 
@@ -85,6 +86,37 @@ enabled in your Stripe dashboard, not just Apple Pay. Enable Apple Pay and Googl
 Pay, and leave everything else off, or customers will see payment options the
 restaurant cannot reconcile.
 
+## Verified against the live Stripe account (important)
+
+I queried the payment method configuration Stripe returned for a real test-mode
+PaymentIntent. Doing the second change (below) does not just enable Apple Pay — it
+lets through **whatever is switched on in the dashboard**, and your account has more
+enabled than expected:
+
+| Method | State | Would an Adelaide customer see it? |
+|---|---|---|
+| `apple_pay` | **ON** | Yes, on Apple devices in Safari |
+| `card` | ON | Yes |
+| `google_pay` | **off** | No — needs switching on |
+| `klarna` | ON | **Yes** — BNPL, active in AU |
+| `zip` | ON | **Yes** — BNPL, active in AU |
+| `link` | ON | **Yes** — Stripe's wallet, AU |
+| `bancontact` | ON | No (Belgium) |
+| `blik` | ON | No (Poland) |
+| `eps` | ON | No (Austria) |
+
+Five of the six extras are harmless in Australia, but **Klarna, Zip and Link will
+appear at checkout for real customers.** That is a change in what the restaurant
+offers, not a technical side effect, and the till has no way to reconcile them.
+
+This is not new risk created by the code — before the change,
+`PaymentMethodTypes = ["card"]` forced card-only, which is exactly why nobody
+noticed those dashboard settings. Removing the restriction revealed them.
+
+**So the dashboard step is not optional tidiness.** Before taking real orders:
+turn **off** Klarna, Zip, Link, Bancontact, BLIK and EPS, and turn **on**
+Google Pay. Leave Card and Apple Pay on.
+
 ## What to change
 
 | # | Change | Where | Blocked by |
@@ -92,13 +124,14 @@ restaurant cannot reconcile.
 | 1 | Point a real domain at the customer app | DNS + Vercel | Buying the domain |
 | 2 | Register the domain for payment-method domains, test + live | Stripe API | #1 |
 | 3 | Confirm `apple_pay.status == "active"` | Stripe API | #2 |
-| 4 | Replace `PaymentMethodTypes` with `AutomaticPaymentMethods` | `StripePaymentGateway.cs` ×2 | Nothing |
-| 5 | Enable Apple Pay + Google Pay, disable the rest | Stripe dashboard | Nothing |
+| 4 | ~~Replace `PaymentMethodTypes` with `AutomaticPaymentMethods`~~ **DONE** | `StripePaymentGateway.cs` ×2 | — |
+| 5 | Enable Google Pay; **disable Klarna, Zip, Link, Bancontact, BLIK, EPS** | Stripe dashboard | Nothing |
 | 6 | Add `VITE_STRIPE_PUBLISHABLE_KEY` for the new domain's deployment | Vercel | #1 |
 | 7 | Test on a real Apple device in Safari | manual | #1–#6 |
 
-Changes **4 and 5 need no domain and can be done now**, so the integration is
-ready the moment a domain exists.
+Change **4 is done** (108 tests, verified accepted by Stripe's API). Change 5 is a
+dashboard toggle and is now *load-bearing* rather than tidy-up: see the verified
+findings above for what currently leaks through to customers.
 
 ## Testing: the part that catches people out
 

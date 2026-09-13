@@ -59,7 +59,23 @@ public class StripePaymentGateway : IPaymentGatewayService
                 };
             }
 
-            // Create Stripe PaymentIntent for card payments
+            // Create Stripe PaymentIntent.
+            //
+            // AutomaticPaymentMethods rather than an explicit
+            // PaymentMethodTypes = ["card"] list. Apple Pay and Google Pay are
+            // wallets that sit ON TOP of card, so restricting the intent to the
+            // "card" method type means Stripe never offers them — registering the
+            // domain is not enough on its own. `automatic_payment_methods` lets
+            // Stripe offer every method enabled in the dashboard, which is what
+            // makes the wallets appear.
+            //
+            // The two options are mutually exclusive: sending both is an error.
+            //
+            // Consequence worth knowing: this also means anything switched on in
+            // the Stripe dashboard appears at checkout with no code change and no
+            // review. Enable Apple Pay and Google Pay there; leave the rest off,
+            // or customers will be offered payment methods the restaurant cannot
+            // reconcile against a till.
             var options = new PaymentIntentCreateOptions
             {
                 Amount = request.Amount,
@@ -70,11 +86,19 @@ public class StripePaymentGateway : IPaymentGatewayService
                     { "order_number", request.OrderNumber ?? "" }
                 },
                 Description = $"Order {request.OrderNumber}",
-                PaymentMethodTypes = new List<string> { "card" },
+                AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
+                {
+                    Enabled = true,
+                },
                 CaptureMethod = "automatic" // Capture immediately (for pickup/delivery)
             };
 
-            // Add customer email if provided
+            // Add customer email if provided.
+            //
+            // This is set before the create call because Apple Pay reads it for
+            // the receipt and the wallet sheet. It used to be attached after the
+            // PaymentIntent was created, which would have produced wallet payments
+            // with no email attached — and no order confirmation.
             if (!string.IsNullOrEmpty(request.CustomerEmail))
             {
                 options.ReceiptEmail = request.CustomerEmail;
@@ -195,7 +219,16 @@ public class StripePaymentGateway : IPaymentGatewayService
                 };
             }
 
-            // Create PaymentIntent with captureMethod=manual for later capture
+            // Create PaymentIntent with captureMethod=manual for later capture.
+            //
+            // Wallets enabled here too (see the note on the other create call):
+            // dine-in is where Apple Pay matters most, since the customer is
+            // standing at the counter and a wallet tap is the whole point of
+            // offering it.
+            //
+            // Caveat for testing: manual capture AUTHORISES without charging, so a
+            // dine-in Apple Pay payment will not show as money moved until it is
+            // captured. Do not read that as a failure.
             var options = new PaymentIntentCreateOptions
             {
                 Amount = request.Amount,
@@ -206,7 +239,10 @@ public class StripePaymentGateway : IPaymentGatewayService
                     { "order_number", request.OrderNumber ?? "" }
                 },
                 Description = $"Order {request.OrderNumber}",
-                PaymentMethodTypes = new List<string> { "card" },
+                AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
+                {
+                    Enabled = true,
+                },
                 CaptureMethod = "manual", // Don't capture immediately, for dine-in
                 SetupFutureUsage = "off_session" // Allow future captures
             };

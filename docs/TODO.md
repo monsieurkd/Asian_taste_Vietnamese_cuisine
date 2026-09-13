@@ -4,14 +4,19 @@ Everything I could do without you is done. This is what's left, ordered so that
 each item unblocks the next. Every item says what I need from you, or which
 decision I've made for now and how to change it.
 
-**Where things stand:** the API, database and customer site are live. Fly billing
-is sorted, the Neon password is rotated, and Stripe keys are in place — but see
-item 1, because the gateway was running in **test mode** and the mock gateway was
-enabled in production until this session fixed it.
+**Where things stand:** the API, database, customer site **and admin dashboard**
+are live and working. Fly billing is sorted, the Neon password is rotated, Stripe
+keys are in place, and Apple Pay is one dashboard toggle and one domain away.
 
-**What needs you:** deploy the admin dashboard (item 4 — about two minutes of
-clicking), then talk to the owner about Lightspeed (item 5). Everything else is
-future work, listed at the bottom.
+**What needs you, in this order:**
+
+| # | Item | Effort | Why it matters |
+|---|---|---|---|
+| **2** | Turn off the extra payment methods | ~2 min in Stripe | **Klarna, Zip and Link would be offered to customers today.** Do this before taking real orders |
+| **4** | Decide admin-dashboard exposure | a decision | It is a public URL with a login page |
+| **5** | Talk to the owner about Lightspeed | a conversation | The last POS blocker |
+| **6** | Buy a domain | ~$15/yr | Apple Pay cannot work without one |
+| **7** | Switch Stripe to live keys | ~10 min | Only when you want real money |
 
 ---
 
@@ -29,11 +34,114 @@ While checking them I found something serious, now fixed — see item 3.
 
 ---
 
-## 2. Switch Stripe from test to live — and it costs nothing to do
+## 2. Turn off the payment methods you don't want (do this first — ~2 min)
+
+**This one is urgent and it is my doing.** Enabling wallets for Apple Pay required
+removing a card-only restriction on the PaymentIntent, and that restriction was
+hiding your Stripe dashboard's payment-method settings. I queried the account and
+found **six methods enabled that the restaurant cannot reconcile**:
+
+| Method | State | Shows to an Adelaide customer? |
+|---|---|---|
+| `apple_pay` | **ON** ✅ | Yes — this is what we wanted |
+| `card` | **ON** ✅ | Yes |
+| `google_pay` | **off** | No — switch it on |
+| `klarna` | ON ⚠️ | **Yes** — buy-now-pay-later |
+| `zip` | ON ⚠️ | **Yes** — buy-now-pay-later |
+| `link` | ON ⚠️ | **Yes** — Stripe's own wallet |
+| `bancontact` | ON | No (Belgium) |
+| `blik` | ON | No (Poland) |
+| `eps` | ON | No (Austria) |
+
+The last three are harmless here — they only appear to customers in those
+countries. **Klarna, Zip and Link are not**: they are all active in Australia, so
+they would appear as payment options at checkout.
+
+**Nothing has gone wrong in production yet**, because production is still on test
+keys. But once live keys go in, a customer could pay with Klarna and the till
+would have no record of it.
+
+### What to do
+
+Stripe Dashboard → **Settings → Payments → Payment methods**:
+
+1. **Turn OFF:** Klarna, Zip, Link, Bancontact, BLIK, EPS
+2. **Turn ON:** Google Pay
+3. **Leave ON:** Card, Apple Pay
+
+Then tell me and I'll re-query the account to confirm the final list matches.
+
+**Why this wasn't caught earlier:** with the old card-only setting, none of these
+ever rendered, so nobody had reason to look. Removing that restriction is correct
+for Apple Pay, but it means the Stripe dashboard is now part of the payment surface
+— anything switched on there appears at checkout with no code change and no review.
+
+---
+
+## 3. Apple Pay: ready except for a domain
+
+**Code is done. The blocker is a domain, not code.**
+
+### What I changed
+
+Both Stripe PaymentIntent calls passed `PaymentMethodTypes = ["card"]` — a hard
+allow-list. Apple Pay and Google Pay are wallets that sit **on top of** card, so
+Stripe would never have offered them, no matter what else was configured. Both now
+use `automatic_payment_methods`. That is the whole code change; there is no
+frontend work, because the checkout already uses Stripe's `PaymentElement`, which
+renders the Apple Pay button itself.
+
+Also fixed while in there: the customer email was being attached *after* the
+PaymentIntent was created, so wallet payments would have arrived with no email and
+no order confirmation. It is now set before the create call.
+
+**108 tests** (4 new, mutation-checked: reverting either call to the card-only list
+fails 3 of them). Verified against Stripe's live API that the new shape is
+accepted — `automatic_payment_methods: {"enabled": true}` came back on a real
+test-mode intent.
+
+### What is left — and it needs a domain
+
+**Apple Pay requires a registered domain.** Apple insists on proof that the site
+taking the payment owns its domain. `asian-taste-customer.vercel.app` is a
+Vercel-owned host we do not control, so **it cannot be registered**.
+
+That makes the custom domain a *prerequisite* rather than a nice-to-have. This is
+the honest answer to "what does Apple Pay cost": about **$15/year for a domain**,
+plus a Stripe dashboard toggle. Not a subscription, not a sandbox fee.
+
+**When you have a domain:**
+
+1. Point it at the customer app in Vercel
+2. Register it with Stripe (one API call — I can run this for you):
+   `POST https://api.stripe.com/v1/payment_method_domains -d domain_name=yourdomain.com`
+3. Tell me and I will confirm `apple_pay.status == "active"` — a domain can exist
+   while the wallet is still inactive, and that is the state behind most
+   "registered it and it still doesn't work" reports.
+4. Register in **test and live mode separately** — they are different registrations
+5. Add the new origin to `Cors__AllowedOrigins__N` on Fly, or the browser blocks
+   every request. The variable is indexed; the JSON-array form fails silently.
+
+### How it will be tested (and why the current checks can't)
+
+**Apple Pay cannot be tested in Chrome, on Windows, or on localhost.** It needs
+Safari on an Apple device with a card in Wallet, over HTTPS. So the headless
+checks and the nightly UI loop **cannot detect an Apple Pay regression** — a
+passing UI loop is not evidence it works. Verification has to be a manual pass on
+a real iPhone or Mac.
+
+Full detail: `docs/research/apple-pay/PLAN.md`.
+
+---
+
+## 4. Switch Stripe from test to live — and it costs nothing to do
 
 **Your setup right now:** `sk_test_...` on the API and `pk_test_...` on Vercel.
 Both correct for testing. The live site loads with **zero console errors**, and
 a card order goes through real Stripe in test mode.
+
+**Do item 2 first.** Switching to live while Klarna, Zip and Link are enabled
+means real customers can pay in ways the till cannot reconcile.
 
 ### You are not "wasting money" by testing
 
@@ -81,6 +189,43 @@ takes real money. Do it deliberately.
    `STRIPE PAYMENT GATEWAY ENABLED (live keys)` is what you want. If it still
    says `IN TEST MODE`, the secret did not take.
 
+### How we verify the live switch actually worked
+
+You asked whether to change the live Stripe API to verify. **Not necessary — and
+there is nothing to "toggle to live" on my side.** Here is what actually happens
+and how to check it:
+
+**The switch is just three secret values.** Fly and Vercel hold them; nothing in
+the code branches on live versus test. So "verifying" means confirming the values
+took effect, not flipping a mode.
+
+**What I can verify for you, on request:**
+
+| Check | How | What it proves |
+|---|---|---|
+| Which mode the API is running | `fly logs \| grep STRIPE` | `ENABLED (live keys)` vs `IN TEST MODE` |
+| A real PaymentIntent is charged | Place a $1 test order with your own card | Money actually moves |
+| The webhook is live and signing correctly | Stripe dashboard → Webhooks → recent deliveries | Events arrive and are not rejected |
+| The publishable key matches the secret | Compare `pk_live_` in the deployed bundle with `sk_live_` on Fly | A mismatch breaks checkout silently |
+
+The third row is the one people skip and it is the one that bites: **test-mode and
+live-mode webhook endpoints have different signing secrets.** If `whsec_` on Fly
+belongs to the test endpoint, live payments will succeed while orders stay
+`Pending` — the customer is charged, the kitchen never sees the order, and nothing
+raises an error.
+
+**So the honest order of operations is:**
+
+1. Do item 2 first (turn off Klarna, Zip, Link).
+2. Create the live webhook endpoint and note its `whsec_`.
+3. Set all three secrets, update Vercel, redeploy.
+4. **Tell me, and I will run the four checks above** and report what I find.
+5. You place one real order, then refund it (~50¢).
+
+**What I cannot do for you:** create the live keys or the live webhook endpoint.
+Those need your Stripe dashboard login. I can do every verification step the moment
+they exist.
+
 ### Proving it works, cheaply
 
 Place one real order yourself with your own card, confirm it appears in the admin
@@ -93,7 +238,7 @@ real order — test mode exercises the same code path.
 
 ---
 
-## 3. ✅ Fixed: production was accepting card orders unpaid
+## 5. ✅ Fixed: production was accepting card orders unpaid
 
 **What was wrong.** While verifying your Stripe setup I placed a card order in
 production with a token real Stripe would reject. It came back `"Paid online"`.
@@ -137,65 +282,56 @@ you want me to remove the test orders.
 
 ---
 
-## 4. Deploy the admin dashboard (needs you: ~2 minutes in Vercel)
+## 6. Admin dashboard is live — decide its exposure
 
-**Status: not deployed anywhere.** I checked — only one Vercel project exists
-(`asian-taste-customer`). So there is currently no admin dashboard to access, and
-your tablet decision depends on it.
+**Done and verified.** The URL is:
 
-**Why I cannot do this one.** Your Vercel token is read-only and team-scoped:
+```
+https://asian-taste-vietnamese-cuisine-wq44.vercel.app
+```
 
-| Endpoint | Result |
-|---|---|
-| read projects | ✅ 200 |
-| `POST /v11/projects` (create) | ❌ 403 forbidden |
-| `/v2/user` | ❌ 404 — the token has no user identity |
+Log in as `admin` with the password you chose. It is deliberately not recorded
+here; keep it somewhere safe.
 
-So I can inspect your setup but not create anything. This is the same token-scope
-limitation that made the old CLI deploy job fail.
+**What I verified end to end, in a real browser:** login → dashboard → order list →
+live order push. Two bugs were found and fixed in the process:
 
-### What to click
+- **New orders never reached the kitchen.** `BroadcastNewOrderAsync` was fully
+  implemented but nothing called it, so an order appeared only on refresh. Since
+  the tablet is the kitchen's whole view, that defeated the point. Now pushes, and
+  verified against production.
+- **The order list showed blank Order # and Customer columns** for every row —
+  the same snake_case/PascalCase mapping bug as the POS payload. The table
+  rendered, with correct totals and row counts, so it looked like missing data.
+  A kitchen cannot work from a list with no order numbers.
 
-1. **vercel.com/new** → import `Asian_taste_Vietnamese_cuisine` (same repo, second project)
-2. **Root Directory** → `src/asian-taste-admin` ← the step that matters
-3. Framework auto-detects **Vite**
-4. Add environment variables:
+Also fixed the CORS block that produced your `net::ERR_FAILED` — the admin origin
+is now `Cors__AllowedOrigins__1` on Fly. Worth knowing: my earlier guess that you
+needed `VITE_WS_URL` was wrong. Your env vars were correct; the WebSocket derives
+`wss://` from `VITE_API_URL` and connects fine.
 
-   | Name | Value |
-   |---|---|
-   | `VITE_API_URL` | `https://asian-taste-api.fly.dev/api` |
-   | `VITE_WS_URL` | `wss://asian-taste-api.fly.dev` |
+### The decision that is still yours
 
-   **`VITE_API_URL`, not `VITE_API_BASE_URL`** — the admin app uses a different
-   variable name to the customer app. The wrong name falls back to `/api` and
-   every request 404s. I added a guard that warns about a missing `/api`, but the
-   name itself has to be right.
+**It is a public URL with a login page.** Anyone who knows the address reaches a
+login form, and the app can see every order and change its status. Options:
 
-   **`VITE_WS_URL` is needed** for live order updates. Without it the app derives
-   `wss://` from its own page origin, which points at Vercel rather than the API,
-   and the connection silently never establishes — orders would appear only on
-   refresh.
+| Option | Cost | Trade-off |
+|---|---|---|
+| Accept the login page as the only barrier | $0 | Fine if the password stays private; the URL is guessable-ish but not listed anywhere |
+| Vercel password protection | paid feature | A second prompt before the app loads |
+| Keep it unlisted and unlinked | $0 | Security by obscurity — weakest, but the URL is not published anywhere |
 
-5. Deploy, then **send me the URL** and I will:
-   - add it to `Cors__AllowedOrigins__1` on Fly (without this the browser blocks
-     every request)
-   - verify login, the order list, and a status change end to end
+**My suggestion:** accept the login page for now and revisit if the URL ever gets
+shared more widely. The password is strong and not in the repo.
 
-### Once it is up
+### For the tablet
 
-- **Log in** — the password is the one you chose (`nhahangvietnam` on the deployed
-  database). It is deliberately NOT recorded here any more; keep it somewhere safe.
-- The **seed still creates `admin` / `Admin123!`** for a fresh database. That
-  applies to local development only, because the deployed database's password has
-  been changed away from it. Anyone standing up a new environment must change it
-  before exposing it.
-- **Decide on exposure.** It is a public URL with a login page. Options in
-  `docs/DEPLOYMENT.md` → Admin app: Vercel password protection (paid feature), a
-  non-public URL, or accept the login page as the only barrier.
+Point the tablet's browser at the URL and log in once. Nothing else is needed —
+no app install, no POS API. Set the browser to remember the session.
 
 ---
 
-## 5. Lightspeed POS — deferred until you talk to the owner
+## 7. Lightspeed POS — deferred until you talk to the owner
 
 **Where this stands:** the integration is written, tested and deployed. Feeding it
 a real order is the only step left, and it's blocked on a conversation rather than
@@ -254,7 +390,7 @@ works.
 
 ---
 
-## 6. Decisions I made for you
+## 8. Decisions I made for you
 
 Each is reversible. I picked the option that keeps things cheapest and safest;
 say the word and I'll change any of them.
@@ -264,7 +400,7 @@ say the word and I'll change any of them.
 | **Where the API runs** | Fly.io, Sydney | Closest region to Adelaide (~15–20 ms), always-on cheaply | Replace with Railway/Render; the Dockerfile is host-agnostic |
 | **Database** | Neon, Sydney, pooled | Free tier with no expiry; scales to zero | Any Postgres; it's one connection string |
 | **Who deploys the frontend** | Vercel's Git integration | It already deployed every push; a CLI deploy would race it | Add a personal-scope `VERCEL_TOKEN` and turn off Vercel's auto-deploy |
-| **Admin app** | Deployed at `asian-taste-vietnamese-cuisine-wq44.vercel.app` | Your Vercel project; it was correctly set up, only CORS was missing | Decide exposure — see item 4 |
+| **Admin app** | Deployed at `asian-taste-vietnamese-cuisine-wq44.vercel.app` | Your Vercel project; it was correctly set up, only CORS was missing | Decide exposure — see item 6 |
 | **Payment display** | `paid_amount`/`paid_at` set only on real capture | So "Paid online" can't lie | — |
 | **POS failure handling** | Queue and retry, never fail the order | The customer has paid; the kitchen can work from the dashboard | Make it blocking if you'd rather refuse orders when the POS is down |
 | **Cash orders** | No gateway call, `Pay on pickup` | Nothing to charge at order time | — |
@@ -272,7 +408,7 @@ say the word and I'll change any of them.
 | **Pickup estimate** | From restaurant settings (15 min default) | Was hardcoded to 20 min | Change in the admin settings |
 | **Kitchen's order view** | A tablet running the admin dashboard, alongside Uber Eats | Your call — it is deployed and working | Point the tablet's browser at the admin URL |
 | **Cash / pay-in-store** | Handled in Lightspeed, not this app | Your call — POS is configured later | Wire it when Lightspeed credentials exist |
-| **POS sync** | Deferred, not removed | Needs the owner conversation | Item 5 |
+| **POS sync** | Deferred, not removed | Needs the owner conversation | Item 7 |
 | **Custom domain** | Not now | Your call — customers here don't mind | Point DNS at Vercel when wanted |
 | **Hosting the frontend** | Staying on Vercel for now | Your call — keeping it simple | Cloudflare Pages is the alternative (free, commercial use allowed) |
 | **Editing the menu** | Future work | Your call | Not built; the menu lives in the seed today |
@@ -280,14 +416,13 @@ say the word and I'll change any of them.
 
 ---
 
-## 7. Future work, in the order I'd do it
+## 9. Future work, in the order I'd do it
 
 You've said most of this is for later, so it's recorded rather than recommended.
 The order below is by how much it would bite, not by effort.
 
-1. ~~Deploy the admin app.~~ Moved to item 4, since your tablet decision makes it
-   the blocking one. What remains after deploying: decide its exposure (Vercel
-   password protection, a non-public URL, or accept the login page).
+1. ~~Deploy the admin app.~~ Done — it is live and verified. What remains is the
+   exposure decision, in item 6.
 2. **Refunds via the UI.** `POST /api/payments/{paymentId}/refund` works but
    nothing calls it, so refunds happen in the Stripe dashboard. The endpoint also
    carries a `// TODO: Update order with refund status`, so a refunded order may
@@ -313,12 +448,12 @@ The order below is by how much it would bite, not by effort.
 
 ---
 
-## 8. Questions still open
+## 10. Questions still open
 
 Only the ones still unanswered. The rest moved into the decisions table.
 
 - **Does Lightspeed expose an API on the restaurant's plan?** This is the one that
-  decides whether item 5 is a week of work or a non-starter. Ask alongside which
+  decides whether item 7 is a week of work or a non-starter. Ask alongside which
   product it is.
 - **Are there existing menu photos?** The menu renders without images by design —
   the only files in the repo are photos of a printed menu board, which would
@@ -328,14 +463,70 @@ Only the ones still unanswered. The rest moved into the decisions table.
   the prices in `Menu.md`. If the board differs, the board wins and the seed needs
   updating.
 - **Who changes prices once it's live?** Today it needs a deploy. This decides how
-  urgent item 4 (menu editing) becomes.
+  urgent menu editing becomes.
+
+## 11. Using Paseo from your phone — free, and here is why
+
+**Short answer: you do not need to pay anything, and leaving your laptop open is
+exactly the right setup.**
+
+I checked your machine rather than guessing:
+
+```
+Local Daemon      running
+Listen            127.0.0.1:6767
+Relay             disabled
+```
+
+That tells the whole story. The daemon only listens on **loopback** (127.0.0.1),
+which by definition only your own machine can reach. Your phone cannot see it
+directly. The piece that bridges that gap is the **relay**, and it is currently
+off.
+
+**Turning it on is a setting, not a purchase:**
+
+```bash
+paseo daemon pair --relay     # prints the pairing QR code for your phone
+```
+
+So: laptop open, daemon running, relay enabled, scan the QR once. After that you
+write a prompt on your phone and review the diff on your phone — which is exactly
+what you described wanting. No sandbox subscription is involved, and you are right
+that your laptop can serve as its own sandbox.
+
+**Why "leave the laptop open" is the correct model here, not a compromise:** the
+work happens on your machine, in this repo, with your toolchain and your git
+history. A cloud sandbox would be a *different* machine that would need the repo
+cloned, dependencies installed, and the production credentials absent by default.
+Your laptop already has all of it. The trade is only that the laptop must stay
+awake — set it not to sleep on power, or the phone session dies.
+
+**What I would check before relying on it**, in order:
+
+1. **Confirm the relay is free.** If `paseo daemon pair --relay` asks for an
+   account or a plan, stop and tell me rather than entering card details —
+   everything up to that point is free, and there may be a self-hosted alternative.
+2. **Decide whether it works on `main` or on branches.** Two sessions pushing to
+   `main` is how changes get silently lost. Branches cost one extra tap.
+3. **Read `docs/research/paseo/PLAN.md`** — it lists what is safe to do from a
+   phone versus what needs you at the keyboard. The important one: the agent
+   environment can read `~/.fly` and the Vercel CLI config, so a remote session can
+   **deploy production and change its secrets with no second prompt**. Deploying and
+   rotating secrets should stay keyboard-only.
+
+**One thing I did not do:** I did not enable the relay. It changes what can reach
+your machine, and that felt like your call rather than mine. Say the word and I
+will turn it on and print the pairing code.
+
+---
 
 ## Verifying anything
 
 ```bash
 ./scripts/check-deployment-health.sh    # is production working? (14 checks)
-dotnet test                             # 97 tests
+dotnet test                             # 108 tests
 fly logs -a asian-taste-api             # what the API is doing
 ```
 
 `docs/ARCHITECTURE.md` explains how all the pieces fit together.
+`docs/research/` holds the Apple Pay, CI timing and Paseo write-ups.
