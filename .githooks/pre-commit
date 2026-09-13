@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# Pre-commit: run the fast guardrails before a commit lands.
+#
+# The full CI set is three guardrails plus two frontend builds plus an xUnit
+# suite. Two of those three guardrails are static — they read the working tree and
+# finish in well under a second:
+#
+#   check-test-wiring.sh    ~0.25s
+#   check-ci-integrity.sh   ~0.16s in --static-only mode
+#
+# check-test-health.sh is excluded on purpose. It runs `dotnet test`, so it is
+# seconds to minutes; a hook that slow is one people bypass, and CI still runs it
+# on every push. The principle here is one check, one tier.
+#
+# Install with:
+#
+#   git config core.hooksPath .githooks
+#
+# It is opt-in rather than committed to .git/hooks, because core.hooksPath is
+# per-clone configuration and cannot be set by the repository.
+
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT" || exit 1
+
+RED=$'\033[31m'; GREEN=$'\033[32m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
+[ -t 1 ] || { RED=""; GREEN=""; BOLD=""; RESET=""; }
+
+# Nothing to guard if a guardrail script is not even present.
+for s in scripts/check-test-wiring.sh scripts/check-ci-integrity.sh; do
+  if [ ! -x "$s" ]; then
+    printf '\n%s%sBLOCKED%s  %s is missing or not executable.\n' "$BOLD" "$RED" "$RESET" "$s"
+    printf 'A guardrail that cannot run is worse than none. Restore it, or commit with --no-verify if that is deliberate.\n'
+    exit 1
+  fi
+done
+
+failed=0
+
+printf '%s==> test wiring (static)%s\n' "$BOLD" "$RESET"
+if ! ./scripts/check-test-wiring.sh; then
+  failed=1
+fi
+
+printf '\n%s==> CI integrity (static-only)%s\n' "$BOLD" "$RESET"
+if ! ./scripts/check-ci-integrity.sh --static-only; then
+  failed=1
+fi
+
+if [ "$failed" -ne 0 ]; then
+  printf '\n%s%sBLOCKED: a fast guardrail failed, so this commit was not created.%s\n' "$BOLD" "$RED" "$RESET"
+  printf 'Fix the finding above. To commit anyway: git commit --no-verify\n'
+  printf 'The suite itself (check-test-health.sh) runs in CI, not here — it is too slow for a hook.\n'
+  exit 1
+fi
+
+printf '\n%s%sfast guards passed%s — the suite itself runs in CI.\n' "$BOLD" "$GREEN" "$RESET"
+exit 0
