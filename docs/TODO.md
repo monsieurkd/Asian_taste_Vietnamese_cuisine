@@ -13,10 +13,11 @@ keys are in place, and Apple Pay is one dashboard toggle and one domain away.
 | # | Item | Effort | Why it matters |
 |---|---|---|---|
 | **2** | Turn off the extra payment methods | ~2 min in Stripe | **Klarna, Zip and Link would be offered to customers today.** Do this before taking real orders |
-| **4** | Decide admin-dashboard exposure | a decision | It is a public URL with a login page |
-| **5** | Talk to the owner about Lightspeed | a conversation | The last POS blocker |
-| **6** | Buy a domain | ~$15/yr | Apple Pay cannot work without one |
-| **7** | Switch Stripe to live keys | ~10 min | Only when you want real money |
+| **3** | Buy a domain, enable Google Pay | ~$15/yr | The only thing standing between you and Apple Pay |
+| **6** | Decide admin-dashboard exposure | a decision | It is a public URL with a login page |
+| **7** | Talk to the owner about Lightspeed | a conversation | The last POS blocker |
+| **4** | Switch Stripe to live keys | ~10 min | Only when you want real money — and only after item 2 |
+| **11** | Try Paseo from your phone | ~5 min | Free; your laptop is the sandbox. Nothing is switched on until you say so |
 
 ---
 
