@@ -171,7 +171,9 @@ curl -s https://<your-app>.fly.dev/api/menu | python3 -m json.tool | head
 > endpoints. Setting it to `Development` would put "wipe the database" and "dump
 > recent orders" on a public URL.
 
-> **Admin login:** the seed creates `admin` / `Admin123!`. Change it before the
+> **Admin login:** the seed creates `admin` / `Admin123!` for a fresh database. That is a
+> starting credential, not a deployed one — the production database's password has been
+> changed away from it. Change it before exposing any new environment:
 > app is reachable by anyone else. Rotate by updating the `admin_users` row
 > directly, or delete it and let the next boot re-seed with a password you
 > control — but note the re-seed only happens when **no** admin row exists.
@@ -348,7 +350,8 @@ request from it will be blocked by CORS.
 
 Things that must change before real customers pay real money:
 
-- [ ] **Rotate the admin password** off `Admin123!`, or the admin app is open.
+- [x] **Rotate the admin password** off `Admin123!` — done for the deployed database.
+      Do it again for any new environment before exposing the admin app.
 - [ ] **Stripe live keys** set on Fly, and `Payment__UseMockGateway=false`.
       While it is `true` the API approves payments without contacting Stripe, so
       orders are accepted unpaid.

@@ -183,9 +183,12 @@ limitation that made the old CLI deploy job fail.
 
 ### Once it is up
 
-- **Log in** with the seeded admin account: `admin` / `Admin123!`
-- **Change that password immediately.** It is documented in this repo, so anyone
-  who reads it can reach your dashboard.
+- **Log in** — the password is the one you chose (`nhahangvietnam` on the deployed
+  database). It is deliberately NOT recorded here any more; keep it somewhere safe.
+- The **seed still creates `admin` / `Admin123!`** for a fresh database. That
+  applies to local development only, because the deployed database's password has
+  been changed away from it. Anyone standing up a new environment must change it
+  before exposing it.
 - **Decide on exposure.** It is a public URL with a login page. Options in
   `docs/DEPLOYMENT.md` → Admin app: Vercel password protection (paid feature), a
   non-public URL, or accept the login page as the only barrier.
@@ -261,18 +264,19 @@ say the word and I'll change any of them.
 | **Where the API runs** | Fly.io, Sydney | Closest region to Adelaide (~15–20 ms), always-on cheaply | Replace with Railway/Render; the Dockerfile is host-agnostic |
 | **Database** | Neon, Sydney, pooled | Free tier with no expiry; scales to zero | Any Postgres; it's one connection string |
 | **Who deploys the frontend** | Vercel's Git integration | It already deployed every push; a CLI deploy would race it | Add a personal-scope `VERCEL_TOKEN` and turn off Vercel's auto-deploy |
-| **Admin app** | Not deployed | Needs your conversation with the owner about exposure | `docs/DEPLOYMENT.md` → Admin app |
+| **Admin app** | Deployed at `asian-taste-vietnamese-cuisine-wq44.vercel.app` | Your Vercel project; it was correctly set up, only CORS was missing | Decide exposure — see item 4 |
 | **Payment display** | `paid_amount`/`paid_at` set only on real capture | So "Paid online" can't lie | — |
 | **POS failure handling** | Queue and retry, never fail the order | The customer has paid; the kitchen can work from the dashboard | Make it blocking if you'd rather refuse orders when the POS is down |
 | **Cash orders** | No gateway call, `Pay on pickup` | Nothing to charge at order time | — |
 | **GST** | Prices include it; total = subtotal | Australian convention, matches the printed menu | — |
 | **Pickup estimate** | From restaurant settings (15 min default) | Was hardcoded to 20 min | Change in the admin settings |
-| **Kitchen's order view** | A tablet running the admin dashboard, alongside Uber Eats | Your call — works now, needs no POS API | Item 4 deploys it |
+| **Kitchen's order view** | A tablet running the admin dashboard, alongside Uber Eats | Your call — it is deployed and working | Point the tablet's browser at the admin URL |
 | **Cash / pay-in-store** | Handled in Lightspeed, not this app | Your call — POS is configured later | Wire it when Lightspeed credentials exist |
 | **POS sync** | Deferred, not removed | Needs the owner conversation | Item 5 |
 | **Custom domain** | Not now | Your call — customers here don't mind | Point DNS at Vercel when wanted |
 | **Hosting the frontend** | Staying on Vercel for now | Your call — keeping it simple | Cloudflare Pages is the alternative (free, commercial use allowed) |
 | **Editing the menu** | Future work | Your call | Not built; the menu lives in the seed today |
+| **Payment integration style** | Staying on Payment Intents | Your decision. Stripe's own guidance recommends Checkout Sessions, but that advice targets new integrations — you already have a working, tested Payment Intent flow, and a rewrite buys nothing except Stripe-calculated tax and easier wallet buttons | Revisit only for a specific feature, not for its own sake |
 
 ---
 

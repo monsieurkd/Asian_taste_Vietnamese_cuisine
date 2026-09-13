@@ -122,7 +122,9 @@ cd src/asian-taste-customer && npm run dev
 cd src/asian-taste-admin && npm run dev
 ```
 
-**Admin login (seeded):** username `admin` / password `Admin123!`
+**Admin login (seeded):** username `admin` / password `Admin123!` — **local development
+only.** The deployed database's password has been changed away from this default. A new
+environment must change it before being exposed; the value is not recorded in this repo.
 
 > If a port is stuck: `lsof -ti:5070 | xargs kill -9`
 
