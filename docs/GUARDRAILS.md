@@ -28,6 +28,62 @@ Run all three locally:
 ./scripts/check-ci-integrity.sh
 ```
 
+## Checks are tiered by cost, and each check lives in exactly one tier
+
+The slow part of a guardrail set is almost never the guardrail. Of the two above that
+are static, one takes 0.09s and the other 0.06s; the third runs the whole suite. So the
+tiers are:
+
+| Tier | Where it runs | What is in it | Budget |
+|---|---|---|---|
+| Fast | `.githooks/pre-commit`, on every commit | `check-test-wiring.sh`, `check-ci-integrity.sh --static-only` | ~0.7s wall |
+| Mid | CI, on every push and PR | the full suite (`dotnet test`) once, `check-test-health.sh` judging that run, frontend lint + test + build | minutes |
+| Slow | `ui-quality.yml`, nightly at 18:00 UTC or on dispatch | the UI quality loop: PostgreSQL, the API, two dev servers, screenshots, the vision judge | tens of minutes |
+
+Three rules keep it that way:
+
+1. **Judge the run, do not repeat it.** `check-test-health.sh` reads the TRX that CI's
+   `Test` step already wrote when `TEST_RESULTS_DIR` is set. Unset, it runs the suite
+   itself, which is the local workflow. The guardrail used to re-run `dotnet test` after
+   the `Test` step had just done so — the same signal, paid for twice, and rebuilding
+   because it had no `--no-build`.
+2. **Nondeterministic and expensive checks stay off the blocking path.** The vision
+   judge has roughly ±2 points of run-to-run variance, so a hard gate would fail
+   unrelated PRs. It reports on a schedule; a human reads it.
+3. **A check that only ever runs in CI gets bypassed.** That is the argument for the
+   fast tier existing at all — see below.
+
+## The fast tier (opt-in)
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This is per-clone configuration, which is why it is a documented command rather than
+something the repository sets for you. Note that `core.hooksPath` means *only*
+`.githooks` is consulted: the hook calls `scripts/check-*.sh` by absolute repo path so
+one clone cannot poison it, and `git commit --no-verify` skips the tier entirely.
+
+`check-test-health.sh` is deliberately **not** in the hook. It runs the suite, and a hook
+slow enough to interrupt work is one people learn to bypass — which is worse than not
+having the hook. It runs in CI, where waiting is expected.
+
+`--static-only` exists for this tier: the diff-size tripwire measures a committed change
+against its base, which is not a claim a pre-commit hook can make, so the hook validates
+the working tree instead. It still refuses to let a guardrail script be deleted.
+
+## Where the time actually went (before this was tiered)
+
+Measured on the API job:
+
+| | Before | After |
+|---|---|---|
+| Suite runs per CI run | 2 (`Test`, then `check-test-health.sh`) | 1 |
+| `check-test-health.sh` local cost | 7.55s (rebuild + run) | ~0.05s (reads TRX) |
+| UI quality loop | every push **and** every PR | nightly + manual |
+| NuGet restore | cold, every job | cached, keyed on the project files |
+| A `ui-shots/`-only push | full API + frontend build | no run at all |
+
 ## Anti-vacuity
 
 A guardrail that silently passes is worse than none. All three:
@@ -74,17 +130,24 @@ not style rules. Raise them only with a reason.
 
 Being explicit about the gaps matters as much as the coverage:
 
-- **Frontend behaviour is untested.** Neither app has a `test` script or a test runner
-  installed. `npm run build` (typecheck) is the strongest frontend check that exists.
-  Adding Vitest is the durable fix.
-- **Lint is non-blocking by design** (`continue-on-error: true`) because of pre-existing debt
-  (admin 6 errors, customer 11 problems) tracked as item A8 in `MAJOR_UPDATE_PLAN.md`. The
-  CI-integrity guardrail allows this specific case but would fail if a *guardrail* step were
-  made non-blocking.
+- **Frontend behaviour is mostly untested.** Both apps now have a `test` script and a runner
+  (see `src/asian-taste-admin/src/**/*.test.ts` and the customer app), and CI runs `npm test`,
+  but the suites are thin — three test files across both apps. `npm run build` (typecheck) is
+  still the strongest frontend check that exists.
+- **Lint is blocking in CI.** The earlier `continue-on-error` and the debt behind it (item A8)
+  were cleared when the UI work landed, so a lint error now fails the build. The CI-integrity
+  guardrail rejects `continue-on-error` on any guardrail step; lint is a normal blocking step.
+- **The pre-commit tier can be bypassed** with `git commit --no-verify`, and it only runs for
+  clones that opted in via `core.hooksPath`. It is a fast-feedback convenience, not a control —
+  CI is the control, and it runs on everything that reaches the remote.
 - **Guardrail scripts have not run on Linux in CI yet.** They avoid bash-4+ features, but the
-  first GitHub Actions run is the real test.
+  first GitHub Actions run is the real test. `--static-only` and the TRX-reading path in
+  `check-test-health.sh` are both new and are the parts most worth watching on that run.
 - **No integration tests.** `Repositories/*.cs` (including the 1000-line `OrderRepository`)
   need a database; no strategy exists yet.
+- **Nothing runs the UI loop before a merge.** It is nightly, so a UI regression introduced
+  today is reported tomorrow unless someone dispatches the workflow by hand. That is the
+  deliberate trade for taking tens of minutes off every PR.
 
 ## Agents
 
