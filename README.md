@@ -174,7 +174,27 @@ exercises the mock payment gateway.
 ./scripts/check-ci-integrity.sh   # guardrails intact; change is reviewable
 ```
 
-See [`docs/GUARDRAILS.md`](docs/GUARDRAILS.md).
+See [`docs/GUARDRAILS.md`](docs/GUARDRAILS.md) for what each one catches and why they
+are tiered by cost.
+
+Checks run at three speeds, and each check lives in exactly one tier:
+
+| Tier | When | What |
+|---|---|---|
+| Fast | on commit, via `.githooks/pre-commit` | the two static guardrails (~0.7s) |
+| Mid | every push and PR | the API suite once, `check-test-health.sh` judging that run, frontend lint + test + build |
+| Slow | nightly + manual dispatch | `ui-quality.yml`: the screenshot-and-vision-judge loop |
+
+Enable the fast tier once per clone (it is `core.hooksPath`, which a repository cannot
+set for you):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`check-test-health.sh` reads the TRX that CI's test step wrote when `TEST_RESULTS_DIR`
+is set, so the suite is not run twice. Unset, it runs the suite itself — that is the
+command above.
 
 ### UI quality loop (frontend equivalent of a test suite)
 
