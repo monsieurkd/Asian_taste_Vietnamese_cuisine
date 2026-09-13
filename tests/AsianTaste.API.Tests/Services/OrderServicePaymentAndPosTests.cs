@@ -1,3 +1,4 @@
+using AsianTaste.API.WebSockets;
 using AsianTaste.API.Models.DTOs;
 using AsianTaste.API.Models.Entities;
 using AsianTaste.API.Models.Enums;
@@ -237,12 +238,37 @@ public class OrderServicePaymentAndPosTests
         OrderService Service,
         RecordingPaymentGateway Payment,
         RecordingLightspeed Lightspeed,
-        RecordingOrderRepository Orders);
+        RecordingOrderRepository Orders,
+        IOrderNotifier Notifier,
+        RecordingOrderNotifier? Pushes);
 
-    private static Harness CreateHarness(PaymentMethod method = PaymentMethod.Card, decimal total = 17.00m, string? paymentToken = "pi_confirmed_abc")
+    /// <summary>
+    /// Records order pushes rather than opening WebSocket connections.
+    ///
+    /// This is the seam that was missing: BroadcastNewOrderAsync was defined but
+    /// never called, so a customer's order reached the kitchen only on refresh.
+    /// </summary>
+    private sealed class RecordingOrderNotifier : IOrderNotifier
+    {
+        public List<object> NewOrders { get; } = [];
+
+        public Task BroadcastNewOrderAsync(object orderData)
+        {
+            NewOrders.Add(orderData);
+            return Task.CompletedTask;
+        }
+
+        public Task BroadcastStatusUpdateAsync(int orderId, string status, string? reason = null)
+            => Task.CompletedTask;
+
+        public Task BroadcastDashboardUpdateAsync(object statsData) => Task.CompletedTask;
+    }
+
+    private static Harness CreateHarness(PaymentMethod method = PaymentMethod.Card, decimal total = 17.00m, string? paymentToken = "pi_confirmed_abc", IOrderNotifier? notifier = null)
     {
         var payment = new RecordingPaymentGateway();
         var lightspeed = new RecordingLightspeed();
+        notifier ??= new RecordingOrderNotifier();
         var orders = new RecordingOrderRepository
         {
             OrderToReturn = new Order
@@ -269,9 +295,12 @@ public class OrderServicePaymentAndPosTests
             new StubSettingsRepository(),
             payment,
             lightspeed,
+            // Records pushes instead of opening WebSockets, so these tests stay
+            // focused on payment and POS behaviour.
+            notifier,
             NullLogger<OrderService>.Instance);
 
-        return new Harness(service, payment, lightspeed, orders);
+        return new Harness(service, payment, lightspeed, orders, notifier, notifier as RecordingOrderNotifier);
     }
 
     private static CreateCheckoutOrderDto CardRequest(string? paymentToken = "pi_confirmed_abc") => new()
@@ -282,6 +311,16 @@ public class OrderServicePaymentAndPosTests
         OrderType = OrderType.Pickup,
         PaymentMethod = PaymentMethod.Card,
         PaymentToken = paymentToken,
+        Items = [new CheckoutOrderItemDto { MenuItemId = 1, Quantity = 2 }],
+    };
+
+    private static CreateCheckoutOrderDto CashRequest() => new()
+    {
+        CustomerName = "Test",
+        CustomerEmail = "test@example.com",
+        CustomerPhone = "0400000000",
+        OrderType = OrderType.Pickup,
+        PaymentMethod = PaymentMethod.Cash,
         Items = [new CheckoutOrderItemDto { MenuItemId = 1, Quantity = 2 }],
     };
 
@@ -470,5 +509,84 @@ public class OrderServicePaymentAndPosTests
         await h.Service.CreateOrderAsync(CardRequest());
 
         Assert.Equal(1, h.Lightspeed.CreateOrderCallCount);
+    }
+
+    // ── Admin dashboard push ─────────────────────────────────────────────────
+    //
+    // Regression context: BroadcastNewOrderAsync was implemented and documented
+    // on OrderWebSocketHandler but no code ever called it, so an order placed by
+    // a customer only appeared in the admin dashboard when someone refreshed the
+    // page. That is invisible while watching a single screen — the order does
+    // appear, just late — and it matters most for the kitchen tablet, where the
+    // whole point is to be told about an order without touching anything.
+
+    [Fact]
+    public async Task A_new_order_is_pushed_to_admin_dashboards()
+    {
+        // Without this call the kitchen learns about an order only on refresh.
+        var h = CreateHarness();
+
+        await h.Service.CreateOrderAsync(CardRequest());
+
+        Assert.Single(h.Pushes!.NewOrders);
+    }
+
+    [Fact]
+    public async Task The_push_carries_the_fields_a_dashboard_needs_to_act()
+    {
+        // A push that arrives without an order number or total cannot be acted on,
+        // so assert on the payload rather than only on the count.
+        var h = CreateHarness();
+
+        var response = await h.Service.CreateOrderAsync(CardRequest());
+
+        var payload = h.Pushes!.NewOrders.Single();
+        var json = System.Text.Json.JsonSerializer.Serialize(payload);
+
+        Assert.Contains(response.OrderNumber, json);
+        Assert.Contains("total", json);
+        Assert.Contains("estimatedReadyTime", json);
+    }
+
+    [Fact]
+    public async Task A_cash_order_is_pushed_too()
+    {
+        // Cash orders skip the payment gateway entirely, so they travel a
+        // different path through CreateOrderAsync. They are the most important
+        // ones to push, since nothing else tells the counter about them.
+        var h = CreateHarness(PaymentMethod.Cash);
+
+        await h.Service.CreateOrderAsync(CashRequest());
+
+        Assert.Single(h.Pushes!.NewOrders);
+    }
+
+    [Fact]
+    public async Task A_failing_push_does_not_lose_the_order()
+    {
+        // The customer has already committed by this point. A notification
+        // problem must degrade to "the kitchen finds out on refresh", never to
+        // "the order failed".
+        var h = CreateHarness(notifier: new ThrowingOrderNotifier());
+
+        var response = await h.Service.CreateOrderAsync(CardRequest());
+
+        Assert.StartsWith("AT-", response.OrderNumber);
+        // The order was created and returned to the customer normally — proof the
+        // failing push did not roll it back or throw.
+        Assert.Equal(response.OrderNumber, h.Orders.OrderToReturn.OrderNumber);
+        // Nothing was pushed, because pushing is what failed.
+        Assert.Null(h.Pushes);
+    }
+
+    private sealed class ThrowingOrderNotifier : IOrderNotifier
+    {
+        public Task BroadcastNewOrderAsync(object orderData)
+            => throw new InvalidOperationException("dashboard push unavailable");
+
+        public Task BroadcastStatusUpdateAsync(int orderId, string status, string? reason = null)
+            => Task.CompletedTask;
+
+        public Task BroadcastDashboardUpdateAsync(object statsData) => Task.CompletedTask;
     }
 }

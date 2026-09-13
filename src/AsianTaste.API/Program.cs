@@ -137,6 +137,9 @@ builder.Services.AddHttpClient("Lightspeed", client =>
 
 // WebSocket handler for real-time updates (singleton to maintain connections)
 builder.Services.AddSingleton<OrderWebSocketHandler>();
+// Services announce events through the interface rather than the concrete
+// handler, so they do not have to depend on JWT validation to send a push.
+builder.Services.AddSingleton<IOrderNotifier>(sp => sp.GetRequiredService<OrderWebSocketHandler>());
 
 // JWT Authentication
 var jwtSecretKey = builder.Configuration["Jwt:SecretKey"] ?? "AsianTasteSecretKey2025ForJWTTokenGenerationMin32Chars";

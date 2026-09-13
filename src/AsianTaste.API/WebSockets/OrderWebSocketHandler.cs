@@ -9,7 +9,7 @@ namespace AsianTaste.API.WebSockets;
 /// <summary>
 /// WebSocket handler for real-time order updates to admin dashboard clients.
 /// </summary>
-public class OrderWebSocketHandler
+public class OrderWebSocketHandler : IOrderNotifier
 {
     private readonly ConcurrentDictionary<string, WebSocket> _connections = new();
     private readonly ILogger<OrderWebSocketHandler> _logger;

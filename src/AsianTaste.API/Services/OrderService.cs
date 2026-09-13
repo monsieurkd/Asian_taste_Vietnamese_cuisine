@@ -6,6 +6,8 @@ using AsianTaste.API.Services.Email;
 using AsianTaste.API.Services.Lightspeed;
 using AsianTaste.API.Services.Payment.Interfaces;
 
+using AsianTaste.API.WebSockets;
+
 namespace AsianTaste.API.Services;
 
 /// <summary>
@@ -20,6 +22,7 @@ public class OrderService
     private readonly IRestaurantSettingsRepository _settingsRepository;
     private readonly IPaymentGatewayService _paymentGateway;
     private readonly ILightspeedOrderService _lightspeed;
+    private readonly IOrderNotifier _orderNotifier;
     private readonly ILogger<OrderService> _logger;
 
     public OrderService(
@@ -30,6 +33,7 @@ public class OrderService
         IRestaurantSettingsRepository settingsRepository,
         IPaymentGatewayService paymentGateway,
         ILightspeedOrderService lightspeed,
+        IOrderNotifier orderNotifier,
         ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository;
@@ -39,6 +43,7 @@ public class OrderService
         _settingsRepository = settingsRepository;
         _paymentGateway = paymentGateway;
         _lightspeed = lightspeed;
+        _orderNotifier = orderNotifier;
         _logger = logger;
     }
 
@@ -65,6 +70,36 @@ public class OrderService
 
         // Create order
         var order = await _orderRepository.CreateOrderAsync(request, orderNumber, cancellationToken);
+
+        // Tell any connected admin dashboards that a new order has arrived.
+        //
+        // This is what makes the kitchen tablet work without anyone refreshing:
+        // BroadcastNewOrderAsync existed and was documented but nothing ever
+        // called it, so an order placed by a customer only appeared once someone
+        // reloaded the page. Orders are accepted visually as "sent", which made
+        // that easy to miss.
+        //
+        // A failure here must not fail the order — the customer has already
+        // committed, and the dashboard polls the list anyway, so a missed push
+        // delays the kitchen rather than losing the order.
+        try
+        {
+            await _orderNotifier.BroadcastNewOrderAsync(new
+            {
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                customerName = order.CustomerName,
+                orderType = order.OrderType.ToString(),
+                total = order.Total,
+                paymentMethod = order.PaymentMethod?.ToString(),
+                estimatedReadyTime = order.RequestedTime.AddMinutes(pickupMinutes),
+                createdAt = order.CreatedAt
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to broadcast new order {OrderNumber} to admin dashboards", orderNumber);
+        }
 
         // Handle account creation if requested
         bool accountCreated = false;
