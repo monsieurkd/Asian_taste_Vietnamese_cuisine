@@ -755,6 +755,12 @@
     color: var(--color-gf);
     font-weight: 700;
   }
+  /* A closed shop must not render in the "open" green — a customer who reads
+     "Open now" and then finds the door locked is the worst version of this. */
+  .store-closed {
+    color: var(--color-deal);
+    font-weight: 700;
+  }
   .store-hero img {
     width: 100%;
     height: auto;

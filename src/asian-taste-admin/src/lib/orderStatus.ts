@@ -7,14 +7,7 @@
  * `statusKey` normalises it, and every screen goes through that one function
  * rather than each lowercasing on its own.
  */
-export type StatusKey =
-  | "placed"
-  | "confirmed"
-  | "preparing"
-  | "ready"
-  | "delivery"
-  | "completed"
-  | "cancelled"
+export type StatusKey = "placed" | "confirmed" | "ready" | "cancelled"
 
 export interface StatusMeta {
   key: StatusKey
@@ -31,26 +24,21 @@ export const STATUS_META: Record<StatusKey, StatusMeta> = {
     desc: "Waiting for the kitchen to accept",
     cls: "status-placed",
   },
+  // Accepted and being cooked are ONE stage. The kitchen starts as soon as it
+  // accepts, so a separate "Preparing" button would never be pressed and the
+  // ticket would sit in a column that lies about where it is.
   confirmed: {
     key: "confirmed",
     label: "Confirmed",
-    desc: "Accepted, not started yet",
+    desc: "Accepted and being cooked",
     cls: "status-confirmed",
   },
-  preparing: {
-    key: "preparing",
-    label: "Preparing",
-    desc: "On the wok right now",
-    cls: "status-preparing",
+  ready: {
+    key: "ready",
+    label: "Ready",
+    desc: "Packed and waiting to be collected",
+    cls: "status-ready",
   },
-  ready: { key: "ready", label: "Ready", desc: "Packed and waiting", cls: "status-ready" },
-  delivery: {
-    key: "delivery",
-    label: "Out for delivery",
-    desc: "With the driver",
-    cls: "status-delivery",
-  },
-  completed: { key: "completed", label: "Completed", desc: "Handed over", cls: "status-completed" },
   cancelled: {
     key: "cancelled",
     label: "Cancelled",
@@ -59,26 +47,29 @@ export const STATUS_META: Record<StatusKey, StatusMeta> = {
   },
 };
 
-/** The six stages a live order moves through, in order. */
-export const STATUS_ORDER: StatusKey[] = [
-  "placed",
-  "confirmed",
-  "preparing",
-  "ready",
-  "delivery",
-  "completed",
-];
+/**
+ * The stages a live order moves through, in order — pickup only.
+ *
+ * The journey ends at Ready: the customer collects, and no further state is
+ * recorded. "Out for delivery" and "Completed" were removed with the v1 scope.
+ */
+export const STATUS_ORDER: StatusKey[] = ["placed", "confirmed", "ready"];
 
+/**
+ * Every value the API can hold, folded onto the three stages.
+ *
+ * `preparing` reads as `confirmed` (they are the same moment) and `completed`
+ * reads as `ready` — an older order that reached the old terminal state must
+ * not appear to be mid-flight, and must not vanish from the board either.
+ */
 const LOOKUP: Record<string, StatusKey> = {
   pending: "placed",
   placed: "placed",
   new: "placed",
   confirmed: "confirmed",
-  preparing: "preparing",
+  preparing: "confirmed",
   ready: "ready",
-  delivery: "delivery",
-  outfordelivery: "delivery",
-  completed: "completed",
+  completed: "ready",
   cancelled: "cancelled",
   canceled: "cancelled",
 };
@@ -99,30 +90,23 @@ export function statusMeta(status: string | null | undefined): StatusMeta {
   return STATUS_META[statusKey(status)];
 }
 
-/** The stage to move to next, or null when the order is done. */
+/**
+ * The stage to move to next, or null when there is nowhere further to go.
+ *
+ * Ready is terminal for pickup — the customer collects and the ticket closes.
+ */
 export function nextStatus(status: string | null | undefined): StatusKey | null {
   const key = statusKey(status);
-  if (key === "completed" || key === "cancelled") return null;
+  if (key === "ready" || key === "cancelled") return null;
   const index = STATUS_ORDER.indexOf(key);
   return STATUS_ORDER[Math.min(STATUS_ORDER.length - 1, index + 1)] ?? null;
 }
 
-/**
- * The API's own value for a stage key, which is what a status update sends.
- *
- * `delivery` maps back to `Ready`: the booking API has six values and no
- * separate "out for delivery", so the console's fifth stage is a presentation
- * of Ready rather than a state the kitchen can store. That is deliberate — an
- * invented API value would be rejected, and showing progress the backend never
- * recorded would make the customer's tracker lie.
- */
+/** The API's own value for a stage key, which is what a status update sends. */
 const API_VALUE: Record<StatusKey, string> = {
   placed: "Pending",
   confirmed: "Confirmed",
-  preparing: "Preparing",
   ready: "Ready",
-  delivery: "Ready",
-  completed: "Completed",
   cancelled: "Cancelled",
 };
 
@@ -130,14 +114,8 @@ export function apiStatusValue(key: StatusKey): string {
   return API_VALUE[key];
 }
 
-/** Stages the API itself can hold. `delivery` is a view of `ready`. */
-export const API_STAGES: StatusKey[] = [
-  "placed",
-  "confirmed",
-  "preparing",
-  "ready",
-  "completed",
-];
+/** Every stage the console can set. Same list as STATUS_ORDER, kept named. */
+export const API_STAGES: StatusKey[] = STATUS_ORDER;
 
 export function serviceLabel(type: string | null | undefined): string {
   if (!type) return "—";

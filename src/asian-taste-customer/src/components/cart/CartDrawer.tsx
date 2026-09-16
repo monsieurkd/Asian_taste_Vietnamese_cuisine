@@ -192,7 +192,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                 <path d="M6 8h12l-1 12H7zM9 8V6a3 3 0 0 1 6 0v2" />
               )}
             </svg>
-            {meta.fulfil}
+            {meta.note}
           </p>
 
           <button

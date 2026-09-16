@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCartStore } from '@/stores/cartStore';
 import { useCheckoutStore } from '@/stores/checkoutStore';
-import { useServiceStore } from '@/stores/serviceStore';
-import { SERVICES, money } from '@/lib/site';
+import { isOrderable, useServiceStore } from '@/stores/serviceStore';
+import { SERVICES, SITE, money } from '@/lib/site';
 import type { PendingOrderData } from '@/stores/checkoutStore';
 import { Panel, PanelBody, PanelFoot, PanelHead, RowLine, SumRow } from '@/components/ui/Panel';
 import { StateBlock } from '@/components/ui/State';
@@ -49,6 +49,7 @@ export function CheckoutPage() {
   const navigate = useNavigate();
   const items = useCartStore((s) => s.items);
   const service = useServiceStore((s) => s.service);
+  const setService = useServiceStore((s) => s.setService);
   const orderType = useServiceStore((s) => s.orderType());
   const checkout = useCheckoutStore();
 
@@ -63,6 +64,10 @@ export function CheckoutPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof DetailsForm, string>>>({});
 
   const meta = SERVICES[service];
+  // Only pickup completes a checkout in v1. Delivery is offered in the UI but
+  // its fulfilment pipeline does not exist, so reaching a pay button with it
+  // selected would take an order the shop cannot serve.
+  const orderable = isOrderable(service);
   const subtotal = useMemo(
     () => items.reduce((sum, i) => sum + i.basePrice * i.quantity, 0),
     [items]
@@ -104,6 +109,10 @@ export function CheckoutPage() {
   }
 
   function goToPayment() {
+    if (!orderable) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (!validate()) {
       document.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus();
       return;
@@ -280,17 +289,49 @@ export function CheckoutPage() {
             </PanelBody>
           </Panel>
 
-          {step === 'payment' && (
-            <Panel data-od-id="checkout-payment">
-              <PanelHead>
-                <h3>Payment</h3>
-                <span className="pill pill-neutral">Card · Apple Pay · Google Pay</span>
-              </PanelHead>
-              <PanelBody>
-                <PaymentSection orderTotal={chargedTotal} onPaid={placeOrder} />
-              </PanelBody>
-            </Panel>
-          )}
+          {step === 'payment' &&
+            (orderable ? (
+              <Panel data-od-id="checkout-payment">
+                <PanelHead>
+                  <h3>Payment</h3>
+                  <span className="pill pill-neutral">Card · Apple Pay · Google Pay</span>
+                </PanelHead>
+                <PanelBody>
+                  <PaymentSection orderTotal={chargedTotal} onPaid={placeOrder} />
+                </PanelBody>
+              </Panel>
+            ) : (
+              <Panel data-od-id="checkout-unavailable">
+                <PanelHead>
+                  <h3>{meta.label} isn&rsquo;t available online yet</h3>
+                  <span className="pill pill-neutral">Pickup only for now</span>
+                </PanelHead>
+                <PanelBody>
+                  <p className="helpline" style={{ marginBottom: 12 }}>
+                    {meta.note}. We&rsquo;re not taking {meta.label.toLowerCase()} orders on the
+                    website yet, so nothing will be charged. Switch to pickup to finish this order,
+                    or order {meta.label.toLowerCase()} through Uber Eats.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => setService('pickup')}
+                    >
+                      Switch to pickup
+                    </button>
+                    <a
+                      className="btn btn-secondary"
+                      href={SITE.uberEatsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Order on Uber Eats
+                    </a>
+                  </div>
+                </PanelBody>
+              </Panel>
+            ))}
 
           <Panel data-od-id="checkout-service">
             <PanelHead>

@@ -22,10 +22,15 @@ describe("statusKey", () => {
   it("maps every status the API can send", () => {
     expect(statusKey("Pending")).toBe("placed")
     expect(statusKey("Confirmed")).toBe("confirmed")
-    expect(statusKey("Preparing")).toBe("preparing")
     expect(statusKey("Ready")).toBe("ready")
-    expect(statusKey("Completed")).toBe("completed")
     expect(statusKey("Cancelled")).toBe("cancelled")
+  })
+
+  it("folds the values the shop no longer sets onto the three stages", () => {
+    // An order placed before the v1 scope change still has to read correctly,
+    // and must not vanish from the board.
+    expect(statusKey("Preparing")).toBe("confirmed")
+    expect(statusKey("Completed")).toBe("ready")
   })
 
   it("is case- and whitespace-insensitive", () => {
@@ -70,17 +75,21 @@ describe("statusMeta", () => {
 })
 
 describe("nextStatus", () => {
-  it("walks the six stages in order", () => {
+  it("walks the pickup stages in order", () => {
     expect(nextStatus("Pending")).toBe("confirmed")
-    expect(nextStatus("Confirmed")).toBe("preparing")
-    expect(nextStatus("Preparing")).toBe("ready")
-    expect(nextStatus("Ready")).toBe("delivery")
-    expect(nextStatus("Delivery")).toBe("completed")
+    expect(nextStatus("Confirmed")).toBe("ready")
   })
 
-  it("has nowhere to go once the order is finished", () => {
-    // A completed or cancelled order must not offer a further step — that is
-    // how a ticket gets silently reopened.
+  it("treats Preparing as Confirmed, not as its own step", () => {
+    // The kitchen starts cooking the moment it accepts, so these are one state.
+    expect(nextStatus("Preparing")).toBe("ready")
+    expect(statusKey("Preparing")).toBe("confirmed")
+  })
+
+  it("has nowhere to go once the order is collected or cancelled", () => {
+    // Ready is terminal for pickup. Offering a further step is how a ticket gets
+    // silently reopened; offering one after Cancelled is worse.
+    expect(nextStatus("Ready")).toBeNull()
     expect(nextStatus("Completed")).toBeNull()
     expect(nextStatus("Cancelled")).toBeNull()
   })
@@ -102,17 +111,17 @@ describe("apiStatusValue", () => {
     expect(apiStatusValue("cancelled")).toBe("Cancelled")
   })
 
-  it("collapses the presentation-only 'delivery' stage onto the API's Ready", () => {
-    // The booking API has no "out for delivery" value. Inventing one would be
-    // rejected; sending Ready keeps the order moving and the tracker honest.
-    expect(apiStatusValue("delivery")).toBe("Ready")
-    expect(statusKey(apiStatusValue("delivery"))).toBe("ready")
-  })
-
-  it("keeps every API stage inside the six-stage order", () => {
+  it("keeps every API stage inside the pickup lifecycle", () => {
     for (const key of API_STAGES) {
       expect(STATUS_ORDER).toContain(key)
     }
+  })
+
+  it("never sends a value for a stage the shop no longer has", () => {
+    // "delivery" and "completed" are gone with the pickup-only scope. A stale
+    // caller must not be able to write one back to the API.
+    expect(Object.values(STATUS_META).map((m) => m.key)).not.toContain("delivery" as never)
+    expect(STATUS_ORDER).toHaveLength(3)
   })
 })
 

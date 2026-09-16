@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { BrandMark } from '@/components/layout/Brand';
-import { HOURS, SITE } from '@/lib/site';
+import { HOURS_SUMMARY, SITE } from '@/lib/site';
 
 /**
  * The storefront footer.
@@ -50,7 +50,7 @@ export function Footer() {
           <div>
             <h4>Hours</h4>
             <ul>
-              {HOURS.map((row) => (
+              {HOURS_SUMMARY.map((row) => (
                 <li key={row.days}>
                   {row.days}
                   <br />
