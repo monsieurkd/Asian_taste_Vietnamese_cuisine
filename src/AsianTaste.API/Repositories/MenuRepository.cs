@@ -142,11 +142,21 @@ public class MenuRepository : IMenuRepository
 
         if (item == null) return null;
 
-        // Get modifier groups for this item
-        var modifierGroups = await connection.QueryAsync<
-            ModifierGroupDto,
-            ModifierDto,
-            ModifierGroupDto>(
+        // Replace the group-with-modifiers join with two flat queries.
+        //
+        // The single LEFT JOIN this used to run was silently wrong, and had been
+        // since the schema was written — it only became visible once migration 13
+        // actually seeded option groups, because before that every dish returned
+        // an empty list and nothing exercised the mapping.
+        //
+        // The cause is Dapper's multi-mapping: it splits on the first column
+        // named "Id", and BOTH tables select `as Id`. So the group's modifiers,
+        // the group's own row, and a NULL phantom row for a group with no choices
+        // (the Spice level range has none by design) all collapsed into the wrong
+        // entities. Two queries remove the ambiguity entirely rather than working
+        // around it with aliases that collide again the next time a column is
+        // added.
+        var groups = (await connection.QueryAsync<ModifierGroupDto>(
             @"
             SELECT
                 mg.id as Id,
@@ -154,45 +164,49 @@ public class MenuRepository : IMenuRepository
                 mg.is_required as IsRequired,
                 mg.min_select as MinSelect,
                 mg.max_select as MaxSelect,
-                m.id as Id,
-                m.name as Name,
-                m.price_adjustment as PriceAdjustment,
-                m.is_available as IsAvailable
+                mg.display_order as DisplayOrder
             FROM modifier_groups mg
-            LEFT JOIN modifiers m ON m.modifier_group_id = mg.id AND m.is_available = TRUE
             WHERE mg.menu_item_id = @ItemId
-            ORDER BY mg.display_order ASC, m.display_order ASC;
+            ORDER BY mg.display_order ASC, mg.id ASC;
             ",
-            (group, modifier) =>
-            {
-                group.Modifiers.Add(modifier);
-                return group;
-            },
-            new { ItemId = id },
-            splitOn: "Id");
+            new { ItemId = id })).ToList();
 
-        // Group modifiers by their group (Dapper flat mapping workaround)
-        var grouped = new List<ModifierGroupDto>();
-        foreach (var group in modifierGroups)
+        if (groups.Count > 0)
         {
-            var existing = grouped.FirstOrDefault(g => g.Id == group.Id);
-            if (existing == null)
+            var groupIds = groups.Select(g => g.Id).ToArray();
+
+            var modifiers = await connection.QueryAsync<ModifierDto>(
+                @"
+                -- No `is_default`: ModifierDto carries the property but the
+                -- table never had the column. Selecting it threw 42703 the first
+                -- time this code ran, which is how it was found.
+                SELECT
+                    m.id as Id,
+                    m.modifier_group_id as ModifierGroupId,
+                    m.name as Name,
+                    m.price_adjustment as PriceAdjustment,
+                    m.display_order as DisplayOrder
+                FROM modifiers m
+                WHERE m.modifier_group_id = ANY(@GroupIds)
+                  AND m.is_available = TRUE
+                ORDER BY m.display_order ASC, m.id ASC;
+                ",
+                new { GroupIds = groupIds });
+
+            var byGroup = modifiers
+                .GroupBy(m => m.ModifierGroupId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var group in groups)
             {
-                grouped.Add(group);
-            }
-            else
-            {
-                foreach (var modifier in group.Modifiers)
+                if (byGroup.TryGetValue(group.Id, out var choices))
                 {
-                    if (!existing.Modifiers.Any(m => m.Id == modifier.Id))
-                    {
-                        existing.Modifiers.Add(modifier);
-                    }
+                    group.Modifiers = choices;
                 }
             }
         }
 
-        item.ModifierGroups = grouped;
+        item.ModifierGroups = groups;
         return item;
     }
 
