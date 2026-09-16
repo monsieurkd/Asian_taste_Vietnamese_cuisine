@@ -1,6 +1,7 @@
 # Paseo workflow plan
 
-Status: **plan only, nothing changed.** Written 2026-09-13.
+Status: **partly enacted.** Written 2026-09-13; setup performed 2026-09-16 — see
+"Setup as performed" at the end.
 
 ## What Paseo is here
 
@@ -140,9 +141,93 @@ environment a Fly token scoped to read-only, or a separate app for staging, and
 keep the deploy token on the machine only. Until then, treat "deploy" and "secrets"
 as human-only actions and act accordingly.
 
-## Open question
+## Open question — ANSWERED 2026-09-16
 
 **Does Paseo run in a sandbox with its own clone, or against this working
 directory?** A sandbox with its own clone would not inherit `~/.fly`. Worth
 confirming, because it decides whether the mitigation above is needed or already
 in effect.
+
+**Answer: against this working directory.** `~/.paseo/projects/workspaces.json`
+records the repo as:
+
+```json
+{ "kind": "local_checkout",
+  "cwd": "/Users/kieuminhduc/Documents/job/Asian_taste_Vietnamese_cuisine",
+  "isPaseoOwnedWorktree": false,
+  "mainRepoRoot": null }
+```
+
+`isPaseoOwnedWorktree: false` is the decisive field — there is no separate clone,
+so the agent inherits `~/.fly` and the Vercel CLI config, and `fly deploy` /
+`fly secrets set` work from a phone with **no second prompt**. The mitigation in
+"Verified: the credentials are reachable" is therefore **needed, not already in
+effect.**
+
+## Setup as performed (2026-09-16)
+
+Paseo 0.8.0 was already installed (`/opt/homebrew/bin/paseo` + `Paseo.app`) and
+this repo was already registered; the daemon had simply been stopped. What was
+done:
+
+```bash
+paseo daemon start        # had exited on SIGTERM; now running, 127.0.0.1:6767
+paseo daemon pair --relay # enabled the relay and printed the pairing link
+```
+
+**The relay is free — item "What I would check before relying on it" #1 is
+settled.** The endpoint is first-party (`relay.paseo.sh:443`, TLS, E2E encrypted)
+and the entire enable path is one consent prompt. No account, no plan, no card
+field. The pairing link carries only `serverId`, the relay endpoint and the
+daemon's public key:
+
+```json
+{"v":2,"serverId":"srv_Fk_1NkCNtq83","daemonPublicKeyB64":"...",
+ "relay":{"endpoint":"relay.paseo.sh:443","useTls":true}}
+```
+
+Treat the link like a password — it is the trust anchor for the E2E handshake and
+anyone holding it can reach the daemon.
+
+### Branch policy — the chosen option, and the gap
+
+**Chosen: remote sessions work on branches, a human merges.** Recorded here
+because item 2 says "do not leave it implicit".
+
+**There is no config setting that enforces this.** Paseo has no global default for
+workspace isolation, and `paseo run` without `--new-workspace` runs in *this*
+working directory on *whatever branch is checked out* — today
+`feat/v1-pickup-and-addons`, not `main`. So branch-safety is a property of how a
+session is started, held by discipline rather than by the tool.
+
+Start a phone session on a throwaway branch with:
+
+```bash
+paseo run --new-workspace worktree --worktree-mode branch-off \
+          --new-branch phone/<slug> --base main "<prompt>"
+```
+
+A `local` new-workspace does **not** give this isolation — `worktree` is what
+prevents two sessions sharing one checkout. Verify with `git worktree list` and
+`paseo workspace ls` before trusting it.
+
+Two things this does not fix, worth knowing rather than discovering:
+
+1. The session still inherits `~/.fly`, so it can deploy and rotate production
+   secrets — on a branch, but unstoppably. The "needs a human" list is the only
+   control that covers this.
+2. The desktop app's UI may default to the existing `local_checkout` workspace,
+   which is the un-isolated path. The flag above is the CLI path; if a session is
+   started from the phone UI, confirm which workspace it landed in before treating
+   it as branch-isolated.
+
+### Still not done from the suggested order
+
+- **Item 1 (unskippable hook install):** unchanged. `core.hooksPath` is `.githooks`
+  and the pre-commit hook is executable in this clone, but it is still per-clone
+  and absent from a fresh one.
+- **Item 4 (pin the toolchain):** no `global.json` and no `.nvmrc` exist yet.
+  Deferred — it only matters once remote sessions are frequent.
+- **Provider coverage:** only Claude (`2.1.12`) is installed; Codex is not found,
+  so Paseo can drive one provider here today.
+
