@@ -1,0 +1,1119 @@
+
+/* ==========================================================================
+   Bound to docs/DESIGN/mockups/src/brand-spec.md — the ratified, locked set.
+   Cream paper, deep-brown panels, gold highlight, one maroon accent.
+   Display = Plus Jakarta Sans · Body = Manrope.
+
+   Two creams only: --color-bg is the paper, --color-border is the hairline
+   that doubles as the recessed fill for media wells and quiet bands. --tan and
+   --brown-light were deleted from the design set because they duplicated those
+   two; they are not defined here, so a call site that still uses them renders
+   nothing at all. Tailwind drops an unknown utility silently — if a surface
+   goes missing, grep the old name rather than reopening this block.
+   ========================================================================== */
+@theme {
+  /* ─── six core tokens ─────────────────────────────────────────────── */
+  --color-bg: #f5f0e6;
+  --color-surface: #ffffff;
+  --color-fg: #3c2a21;
+  --color-muted: color-mix(in oklch, var(--color-fg) 66%, var(--color-bg));
+  --color-border: #e8dcc8;
+  --color-accent: #8b3a3a;
+
+  /* ─── supporting brand semantics — not brand colours ──────────────── */
+  --color-gold: #d4af37;
+  --color-deal: #c30139;
+  --color-spicy: #ff5722;
+  --color-gf: #4caf50;
+
+  /* ─── derived ─────────────────────────────────────────────────────── */
+  --color-accent-soft: color-mix(in oklch, var(--color-accent) 12%, transparent);
+  --color-accent-line: color-mix(in oklch, var(--color-accent) 30%, var(--color-border));
+  --color-fg-soft: color-mix(in oklch, var(--color-fg) 6%, transparent);
+  --color-fg-line: color-mix(in oklch, var(--color-fg) 22%, transparent);
+  --color-gold-soft: color-mix(in oklch, var(--color-gold) 20%, transparent);
+  --color-on-dark: color-mix(in oklch, var(--color-surface) 84%, transparent);
+  --color-on-dark-dim: color-mix(in oklch, var(--color-surface) 64%, transparent);
+
+  /* ─── type ────────────────────────────────────────────────────────── */
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* Tailwind v4 maps `font-sans` / `font-serif` to --font-sans / --font-serif.
+     --font-family-* generates no utility at all, which is how the admin app
+     silently rendered in a fallback face before the names were corrected. */
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-display);
+
+  /* ─── space (8-pt) ────────────────────────────────────────────────── */
+  --container-shell: 1180px;
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --topnav-h: 72px;
+}
+
+/* ─── base ───────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.55;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body.is-locked {
+    overflow: hidden;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+
+  /* Display face. Playfair Display was retired for legibility — do not
+     reintroduce a serif on headings. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    color: var(--color-fg);
+    margin: 0;
+  }
+
+  h1 {
+    font-size: clamp(34px, 5vw, 60px);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    font-size: clamp(27px, 3.4vw, 42px);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+  }
+
+  h3 {
+    font-size: 21px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.005em;
+  }
+
+  h4 {
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .on-dark :focus-visible,
+  .order-bar :focus-visible,
+  .site-foot :focus-visible {
+    outline-color: var(--color-gold);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+@layer components {
+  /* ─── layout primitives ───────────────────────────────────────────────── */
+  .container-shell {
+    max-width: var(--container-shell);
+    margin-inline: auto;
+    padding-inline: clamp(18px, 4vw, 32px);
+  }
+
+  /* ─── the anti-AI text primitives ───────────────────────────────────────
+     A label and its value belong on ONE line. Stacking a short label above
+     the value it names is the loudest "generated UI" tell — real receipts,
+     wallets and order screens read label -> value in a row. Ported from
+     docs/DESIGN/mockups/src/styles/app.css; the computed values are identical,
+     only the class names are translated. */
+
+  .factline {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 5px 9px;
+    margin: 0;
+    font-size: 15px;
+  }
+  .factline > svg {
+    width: 17px;
+    height: 17px;
+    flex: none;
+    align-self: center;
+    color: var(--color-muted);
+  }
+  .factline-k {
+    color: var(--color-muted);
+    font-weight: 600;
+  }
+  .factline-v {
+    font-weight: 700;
+  }
+
+  .kv {
+    display: grid;
+    grid-template-columns: minmax(88px, auto) 1fr;
+    gap: 8px 18px;
+    margin: 0;
+    font-size: 14px;
+  }
+  .kv dt {
+    color: var(--color-muted);
+  }
+  .kv dd {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 34px;
+    padding: 16px 20px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+  }
+  .facts > div {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    min-width: 0;
+  }
+  .facts dt {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+  .facts dd {
+    margin: 0;
+    font-weight: 700;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 640px) {
+    .facts {
+      gap: 10px 20px;
+      padding: 14px 16px;
+    }
+    .facts > div {
+      width: 100%;
+      justify-content: space-between;
+    }
+  }
+
+  .linkrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 44px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-accent);
+  }
+  .linkrow svg {
+    width: 15px;
+    height: 15px;
+    transition: transform 0.15s ease;
+  }
+  .linkrow:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .linkrow:hover svg {
+    transform: translateX(3px);
+  }
+
+  /* help is a sentence, not a card with a title and a button */
+  .helpline {
+    margin: 0;
+    font-size: 14px;
+    color: var(--color-muted);
+  }
+  .helpline a {
+    color: var(--color-accent);
+    font-weight: 700;
+  }
+  .helpline a:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* ─── panels ────────────────────────────────────────────────────────────
+     House rule: a card carries a heading OR a rule, never both. The border
+     under every .panel-head produced the "title -> line -> content" rhythm
+     that reads as generated; space does the separating instead. */
+  .panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    padding: 20px 22px 0;
+  }
+  .panel-head > :first-child {
+    min-width: 0;
+  }
+  .panel-head > :last-child {
+    flex: none;
+  }
+  .panel-body {
+    padding: 22px;
+  }
+  .panel-head + .panel-body {
+    padding-top: 14px;
+  }
+  .panel-foot {
+    padding: 18px 22px;
+    border-top: 1px solid var(--color-border);
+  }
+  .panel-head h2,
+  .panel-head h3 {
+    margin: 0;
+  }
+  @media (max-width: 640px) {
+    .panel-head {
+      flex-wrap: wrap;
+    }
+  }
+
+  /* ─── buttons ─────────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 46px;
+    padding: 12px 22px;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      transform 0.05s ease;
+  }
+  .btn:active {
+    transform: translateY(1px);
+  }
+  .btn[disabled],
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--color-accent);
+    color: var(--color-surface);
+    border-color: var(--color-accent);
+  }
+  .btn-primary:hover {
+    background: color-mix(in oklch, var(--color-accent) 84%, black);
+    border-color: color-mix(in oklch, var(--color-accent) 84%, black);
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--color-fg);
+    border-color: var(--color-fg-line);
+  }
+  .btn-secondary:hover {
+    border-color: var(--color-fg);
+    background: var(--color-fg-soft);
+  }
+  .btn-gold {
+    background: var(--color-gold-soft);
+    color: var(--color-fg);
+    border-color: color-mix(in oklch, var(--color-gold) 55%, var(--color-fg));
+  }
+  .btn-gold:hover {
+    background: color-mix(in oklch, var(--color-gold) 32%, var(--color-surface));
+  }
+  .on-dark .btn-gold,
+  .deal-band .btn-gold,
+  .site-foot .btn-gold {
+    background: var(--color-gold);
+    color: var(--color-fg);
+    border-color: var(--color-gold);
+  }
+  .on-dark .btn-gold:hover,
+  .deal-band .btn-gold:hover,
+  .site-foot .btn-gold:hover {
+    background: color-mix(in oklch, var(--color-gold) 86%, black);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-fg);
+    border-color: transparent;
+    padding-inline: 10px;
+    min-height: 40px;
+  }
+  .btn-ghost:hover {
+    color: var(--color-accent);
+  }
+  .btn-block {
+    width: 100%;
+  }
+  .btn-arrow::after {
+    content: '→';
+    transition: transform 0.15s ease;
+  }
+  .btn-arrow:hover::after {
+    transform: translateX(3px);
+  }
+  .on-dark .btn-secondary {
+    color: var(--color-surface);
+    border-color: color-mix(in oklch, var(--color-surface) 42%, transparent);
+  }
+  .on-dark .btn-secondary:hover {
+    border-color: var(--color-surface);
+    background: color-mix(in oklch, var(--color-surface) 12%, transparent);
+  }
+
+  /* ─── pills + status ────────────────────────────────────────────────────
+     Dietary marks are coloured dots on neutral pills, not saturated fills —
+     that keeps text contrast at AA while staying readable. */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    background-color: var(--color-accent-soft);
+    color: var(--color-accent);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+  .pill-neutral {
+    background-color: var(--color-fg-soft);
+    color: var(--color-muted);
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .status-pill .sdot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: none;
+    background-color: currentColor;
+  }
+  .status-placed {
+    background-color: var(--color-fg-soft);
+    color: var(--color-fg);
+  }
+  .status-confirmed {
+    background-color: var(--color-accent-soft);
+    color: var(--color-accent);
+  }
+  .status-preparing {
+    background-color: var(--color-gold-soft);
+    color: color-mix(in oklch, var(--color-fg) 80%, var(--color-gold));
+  }
+  .status-ready {
+    background-color: color-mix(in oklch, var(--color-gf) 16%, transparent);
+    color: color-mix(in oklch, var(--color-gf) 70%, var(--color-fg));
+  }
+  .status-delivery {
+    background-color: color-mix(in oklch, var(--color-spicy) 16%, transparent);
+    color: color-mix(in oklch, var(--color-spicy) 62%, var(--color-fg));
+  }
+  .status-completed {
+    background-color: color-mix(in oklch, var(--color-fg) 12%, transparent);
+    color: var(--color-fg);
+  }
+  .status-cancelled {
+    background-color: color-mix(in oklch, var(--color-deal) 14%, transparent);
+    color: var(--color-deal);
+  }
+
+  /* ─── state blocks (empty / loading / error / sold-out) ─────────────── */
+  .state-block {
+    text-align: center;
+    padding: 48px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .state-block .state-icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background-color: var(--color-fg-soft);
+    color: var(--color-muted);
+  }
+  .state-block .state-icon svg {
+    width: 26px;
+    height: 26px;
+  }
+  .state-block.error .state-icon {
+    background-color: color-mix(in oklch, var(--color-deal) 14%, transparent);
+    color: var(--color-deal);
+  }
+  .state-block h3 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .state-block p {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 14px;
+    max-width: 40ch;
+  }
+
+  /* ─── skeleton ────────────────────────────────────────────────────────── */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-border);
+    border-radius: var(--radius);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklch, var(--color-surface) 72%, transparent),
+      transparent
+    );
+    animation: shimmer 1.5s infinite;
+  }
+  .sk-line {
+    height: 12px;
+    border-radius: 999px;
+  }
+  .sk-img {
+    aspect-ratio: 16 / 9;
+    border-radius: var(--radius);
+  }
+  .sk-title {
+    height: 18px;
+    width: 60%;
+  }
+
+  /* ─── forms ───────────────────────────────────────────────────────────── */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .field > label,
+  .field-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-fg);
+  }
+  .field .hint {
+    font-size: 12px;
+    color: var(--color-muted);
+  }
+  .input,
+  .textarea,
+  .select {
+    width: 100%;
+    padding: 12px 14px;
+    min-height: 46px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font: inherit;
+    font-size: 15px;
+  }
+  .input:focus,
+  .textarea:focus,
+  .select:focus {
+    outline: 2px solid var(--color-accent-soft);
+    outline-offset: 0;
+    border-color: var(--color-accent);
+  }
+  .input[aria-invalid='true'] {
+    border-color: var(--color-deal);
+  }
+  .textarea {
+    min-height: 92px;
+    resize: vertical;
+    line-height: 1.55;
+  }
+  .field-error {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-deal);
+  }
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+  }
+  @media (max-width: 520px) {
+    .field-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 13px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
+  }
+  .choice:hover {
+    border-color: var(--color-accent-line);
+  }
+  .choice input {
+    margin: 2px 0 0;
+    accent-color: var(--color-accent);
+    width: 18px;
+    height: 18px;
+    flex: none;
+  }
+  .choice:has(input:checked) {
+    border-color: var(--color-accent);
+    background: var(--color-accent-soft);
+  }
+  .choice-main {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    width: 100%;
+  }
+  .choice-main strong {
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .choice-main .choice-price {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .choice-note {
+    font-size: 12px;
+    color: var(--color-muted);
+    margin: 2px 0 0;
+  }
+  .choice-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+  }
+  .switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .switch .track {
+    width: 46px;
+    height: 26px;
+    border-radius: 999px;
+    background: var(--color-border);
+    transition: background 0.15s ease;
+    flex: none;
+    position: relative;
+  }
+  .switch .track::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--color-surface);
+    box-shadow: 0 1px 2px color-mix(in oklch, var(--color-fg) 9%, transparent);
+    transition: transform 0.15s ease;
+  }
+  .switch input:checked + .track {
+    background: var(--color-accent);
+  }
+  .switch input:checked + .track::after {
+    transform: translateX(20px);
+  }
+  .switch input:focus-visible + .track {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .switch-label {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* ─── stepper / progress ─────────────────────────────────────────────── */
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .step {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--color-muted);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .step-num {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    flex: none;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    font-size: 13px;
+  }
+  .step[data-state='current'] {
+    color: var(--color-fg);
+  }
+  .step[data-state='current'] .step-num {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-surface);
+  }
+  .step[data-state='done'] {
+    color: var(--color-fg);
+  }
+  .step[data-state='done'] .step-num {
+    background: var(--color-gf);
+    border-color: var(--color-gf);
+    color: var(--color-surface);
+  }
+  .step-sep {
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
+    min-width: 20px;
+  }
+  @media (max-width: 560px) {
+    .stepper .step-label {
+      display: none;
+    }
+    .step-sep {
+      min-width: 12px;
+    }
+  }
+
+  /* ─── status scale (6 stages) ────────────────────────────────────────── */
+  .scale {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .scale-step {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .scale-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--color-fg-soft);
+  }
+  .scale-step[data-done='true'] .scale-bar {
+    background: var(--color-accent);
+  }
+  .scale-step[data-current='true'] .scale-bar {
+    background: var(--color-gold);
+  }
+  .scale-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-muted);
+    line-height: 1.2;
+  }
+  .scale-step[data-current='true'] .scale-label {
+    color: var(--color-fg);
+  }
+  @media (max-width: 640px) {
+    .scale {
+      overflow-x: auto;
+      padding-bottom: 6px;
+      scrollbar-width: thin;
+    }
+    .scale-step {
+      flex: none;
+      min-width: 84px;
+    }
+  }
+
+  /* ─── order status timeline ──────────────────────────────────────────── */
+  .timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .timeline li {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 16px;
+    padding-bottom: 24px;
+    position: relative;
+  }
+  .timeline li:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 16px;
+    top: 34px;
+    bottom: 0;
+    width: 2px;
+    background: var(--color-border);
+  }
+  .timeline li[data-done='true']:not(:last-child)::before {
+    background: var(--color-gf);
+  }
+  .tl-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    color: var(--color-muted);
+    z-index: 1;
+  }
+  .tl-mark svg {
+    width: 16px;
+    height: 16px;
+  }
+  .timeline li[data-done='true'] .tl-mark {
+    background: var(--color-gf);
+    border-color: var(--color-gf);
+    color: var(--color-surface);
+  }
+  .timeline li[data-current='true'] .tl-mark {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-surface);
+  }
+  .tl-body strong {
+    display: block;
+    font-size: 15px;
+  }
+  .tl-body p {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: var(--color-muted);
+  }
+  .tl-time {
+    font-size: 12px;
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ─── rows / lines ───────────────────────────────────────────────────── */
+  .rowline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .rowline:last-child {
+    border-bottom: 0;
+  }
+  .rowline .rl-main {
+    min-width: 0;
+  }
+  .rowline .rl-main strong {
+    display: block;
+    font-size: 15px;
+  }
+  .rowline .rl-main span {
+    font-size: 12px;
+    color: var(--color-muted);
+  }
+
+  .sum-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 14px;
+    padding: 5px 0;
+    color: var(--color-muted);
+  }
+  .sum-row.total {
+    font-size: 19px;
+    font-weight: 800;
+    color: var(--color-fg);
+    padding-top: 12px;
+    margin-top: 8px;
+    border-top: 1px solid var(--color-border);
+  }
+  .sum-row.total .num {
+    color: var(--color-accent);
+  }
+
+  .rule {
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    margin: 0;
+  }
+
+  /* ─── quantity stepper ───────────────────────────────────────────────── */
+  .qty {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--color-surface);
+  }
+  .qty button {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--color-fg);
+  }
+  .qty button:hover {
+    background: var(--color-fg-soft);
+    color: var(--color-accent);
+  }
+  .qty button[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .qty .qty-val {
+    min-width: 34px;
+    text-align: center;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .qty-lg {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--color-surface);
+  }
+  .qty-lg button {
+    width: 48px;
+    height: 48px;
+    background: transparent;
+    border: 0;
+    font-size: 18px;
+    color: var(--color-fg);
+    display: grid;
+    place-items: center;
+  }
+  .qty-lg button:hover {
+    background: var(--color-fg-soft);
+    color: var(--color-accent);
+  }
+  .qty-lg button[disabled] {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .qty-lg .qty-val {
+    min-width: 44px;
+    text-align: center;
+    font-weight: 800;
+    font-size: 17px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ─── phone placeholder for a dish with no photo ────────────────────────
+     The design set's woven cream plate. Dishes without a photo render their
+     initials here rather than a stock stand-in, which is what the live data
+     looks like: the seed carries no image_url at all. */
+  .ph {
+    position: relative;
+    display: grid;
+    place-items: center;
+    background:
+      repeating-linear-gradient(
+        45deg,
+        transparent 0 9px,
+        color-mix(in oklch, var(--color-fg) 4%, transparent) 9px 10px
+      ),
+      linear-gradient(
+        140deg,
+        var(--color-border),
+        color-mix(in oklch, var(--color-border) 45%, var(--color-surface))
+      );
+  }
+  .ph .ph-mono {
+    font-family: var(--font-display);
+    font-size: clamp(22px, 3vw, 34px);
+    font-weight: 600;
+    color: color-mix(in oklch, var(--color-fg) 26%, transparent);
+    letter-spacing: 0.05em;
+  }
+
+  /* ─── tabs ───────────────────────────────────────────────────────────── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+  }
+  .tab {
+    min-height: 46px;
+    padding: 12px 16px;
+    background: transparent;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    color: var(--color-muted);
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .tab:hover {
+    color: var(--color-fg);
+  }
+  .tab[aria-selected='true'] {
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+
+  /* ─── utilities used by the ported components ────────────────────────────
+     Plain CSS rather than Tailwind utilities, so an undefined one renders
+     nothing at all. That is the failure mode the deleted --tan/--brown-light
+     tokens used to cause, so each of these is defined rather than assumed. */
+  .stack > * + * {
+    margin-top: 1.25rem;
+  }
+  .stack-sm > * + * {
+    margin-top: 0.25rem;
+  }
+
+  /* A filter row: search field grows, segmented control sits beside it. */
+  .filterbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .filterbar .search {
+    flex: 1;
+    min-width: 220px;
+    position: relative;
+  }
+  .seg-sm {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    background: var(--color-fg-soft);
+    padding: 4px;
+    border-radius: 12px;
+  }
+  .seg-sm button {
+    min-height: 38px;
+    padding: 8px 14px;
+    border: 0;
+    background: transparent;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-muted);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .seg-sm button:hover {
+    color: var(--color-fg);
+  }
+  .seg-sm button[aria-pressed='true'] {
+    background: var(--color-surface);
+    color: var(--color-accent);
+    box-shadow: 0 1px 2px color-mix(in oklch, var(--color-fg) 9%, transparent);
+  }
+
+}

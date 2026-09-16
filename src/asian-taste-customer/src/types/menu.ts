@@ -1,38 +1,73 @@
 /**
- * Menu types matching the API DTOs
+ * Menu, cart and order types.
+ *
+ * The menu model follows the ratified data contract in
+ * `docs/DESIGN/mockups/src/scripts/menu-data.js`: a dish carries `tags`, a
+ * default `note`, and an ordered list of option groups; the price is
+ * `basePrice + Σ(selected choice deltas)`. The API is the runtime source of
+ * truth and returns snake-free PascalCase DTOs, which `src/lib/menuModel.ts`
+ * maps into this shape — the components only ever see the model below.
  */
+
+/** Dietary / marketing marks that render as a coloured dot on a neutral pill. */
+export type DishTag = 'popular' | 'gf' | 'vegan' | 'spicy';
+
+/** One option inside a group. `delta` is added to the unit price when picked. */
+export interface DishChoice {
+  id: string;
+  label: string;
+  delta?: number;
+  note?: string;
+}
+
+export type DishOptionType = 'radio' | 'checkbox' | 'range';
 
 /**
- * Search and filter types
+ * A customisation group.
+ *
+ * `range` is the 1–5 spice scale. It carries no `choices` and is priced at
+ * zero — it exists so the kitchen can read the heat level off the ticket.
  */
-export type SortBy = 'relevance' | 'name' | 'price' | 'popularity' | 'spicy';
-export type SortOrder = 'asc' | 'desc';
-export type DietaryFilter = 'vegetarian' | 'vegan' | 'glutenFree';
-
-export interface SearchSearchParams {
-  q?: string;
-  sortBy?: SortBy;
-  sortOrder?: SortOrder;
-  dietary?: DietaryFilter;
-  minPrice?: number;
-  maxPrice?: number;
-  minSpicyLevel?: number;
-  maxSpicyLevel?: number;
-  categoryId?: number;
-  onlyPopular?: boolean;
-  includeModifiers?: boolean;
+export interface DishOptionGroup {
+  id: string;
+  label: string;
+  type: DishOptionType;
+  required?: boolean;
+  choices?: DishChoice[];
+  min?: number;
+  max?: number;
+  value?: number;
+  hint?: string;
 }
 
-export interface SearchFilters extends SearchSearchParams {
-  // Convenience computed fields
-  hasFilters: boolean;
+/** A dish as the storefront renders it. */
+export interface Dish {
+  id: number;
+  slug: string;
+  name: string;
+  desc: string;
+  /** GST-inclusive AUD. */
+  price: number;
+  categoryIds: number[];
+  tags: DishTag[];
+  options: DishOptionGroup[];
+  image: string | null;
+  note?: string;
+  isAvailable: boolean;
+  spicyLevel: number;
 }
 
-export const DEFAULT_SEARCH_PARAMS: Partial<SearchSearchParams> = {
-  sortBy: 'relevance',
-  sortOrder: 'asc',
-  includeModifiers: true,
-};
+export interface MenuCategory {
+  id: number;
+  label: string;
+  desc: string;
+  count: number;
+}
+
+/** Selections keyed by option-group id: a choice id, a list of them, or a number. */
+export type DishSelections = Record<string, string | string[] | number>;
+
+/* ─── API wire shapes (unchanged — the API is not part of this port) ───────── */
 
 export interface ModifierDto {
   id: number;
@@ -87,9 +122,33 @@ export interface MenuResponseDto {
   categories: CategoryWithItemsDto[];
 }
 
-/**
- * Cart types
- */
+/* ─── search ──────────────────────────────────────────────────────────────── */
+
+export type SortBy = 'relevance' | 'name' | 'price' | 'popularity' | 'spicy';
+export type SortOrder = 'asc' | 'desc';
+export type DietaryFilter = 'vegetarian' | 'vegan' | 'glutenFree';
+
+export interface SearchSearchParams {
+  q?: string;
+  sortBy?: SortBy;
+  sortOrder?: SortOrder;
+  dietary?: DietaryFilter;
+  minPrice?: number;
+  maxPrice?: number;
+  minSpicyLevel?: number;
+  maxSpicyLevel?: number;
+  categoryId?: number;
+  onlyPopular?: boolean;
+  includeModifiers?: boolean;
+}
+
+export const DEFAULT_SEARCH_PARAMS: Partial<SearchSearchParams> = {
+  sortBy: 'relevance',
+  sortOrder: 'asc',
+  includeModifiers: true,
+};
+
+/* ─── cart ────────────────────────────────────────────────────────────────── */
 
 export interface CartItemModifier {
   id: number;
@@ -98,10 +157,14 @@ export interface CartItemModifier {
 }
 
 export interface CartItem {
-  id: string; // Unique ID for cart item (menuItemId + selected modifiers hash)
+  /** menuItemId + the sorted modifier ids, so the same dish configured two
+   *  different ways holds two lines. */
+  id: string;
   menuItemId: number;
+  slug: string;
   name: string;
   description: string | null;
+  /** Unit price with modifiers already applied. */
   basePrice: number;
   imageUrl: string | null;
   quantity: number;
@@ -109,19 +172,18 @@ export interface CartItem {
   specialInstructions?: string;
 }
 
-export interface CartState {
-  items: CartItem[];
-  subtotal: number;
-  itemCount: number;
-}
+/* ─── order type ──────────────────────────────────────────────────────────── */
 
 /**
- * Order types
+ * The storefront sells two services. The design set draws a third ("Dine in")
+ * which the API has no value for, and the live marketplace listing is
+ * delivery-only — so a third button would either fail at checkout or write a
+ * type the kitchen cannot receipt. Confirm with the owner before adding one;
+ * see docs/DESIGN/mockups/HANDOFF.md §10 item 3.
  */
-
 export const OrderType = {
+  Delivery: 'Delivery',
   Pickup: 'Pickup',
-  DineIn: 'DineIn',
 } as const;
 
 export type OrderType = (typeof OrderType)[keyof typeof OrderType];
@@ -137,10 +199,6 @@ export const OrderStatus = {
 
 export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
 
-/**
- * Checkout types
- */
-
 export const PaymentMethod = {
   Card: 'Card',
   Cash: 'Cash',
@@ -154,6 +212,8 @@ export interface PickupTime {
   type: PickupTimeType;
   scheduledTime?: Date;
 }
+
+/* ─── checkout / order responses ──────────────────────────────────────────── */
 
 export interface CheckoutOrderItem {
   menuItemId: number;
@@ -220,7 +280,15 @@ export interface OrderDetailResponse {
   customerEmail: string;
   orderType: OrderType;
   paymentMethod?: PaymentMethod;
-  paymentStatus?: 'Pending' | 'Processing' | 'Succeeded' | 'Failed' | 'Refunded' | 'PartiallyRefunded' | 'RequiresAction' | 'Canceled';
+  paymentStatus?:
+    | 'Pending'
+    | 'Processing'
+    | 'Succeeded'
+    | 'Failed'
+    | 'Refunded'
+    | 'PartiallyRefunded'
+    | 'RequiresAction'
+    | 'Canceled';
   paidAmount?: number;
   paidAt?: string;
   subtotal: number;

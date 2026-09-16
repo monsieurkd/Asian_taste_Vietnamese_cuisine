@@ -1,224 +1,219 @@
-import { useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { MenuGrid } from '@/components/menu/MenuGrid';
-import { SearchFilters } from '@/components/search/SearchFilters';
-import { menuApi } from '@/api/menuApi';
-import { useSearchStore } from '@/stores/searchStore';
+import { useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useMenuIndex } from '@/hooks/useMenuIndex';
+import { useCartStore } from '@/stores/cartStore';
+import { DishRow } from '@/components/menu/DishRow';
+import { Panel, PanelBody } from '@/components/ui/Panel';
+import { SkeletonRow, StateBlock } from '@/components/ui/State';
+import { StateIcons } from '@/components/ui/stateIcons';
+import { showToast } from '@/stores/toastStore';
+import type { Dish } from '@/types/menu';
 
+type SortBy = 'relevance' | 'name' | 'price' | 'popularity';
+
+const SORTS: Array<{ id: SortBy; label: string }> = [
+  { id: 'relevance', label: 'Best match' },
+  { id: 'popularity', label: 'Most liked' },
+  { id: 'price', label: 'Price' },
+  { id: 'name', label: 'Name' },
+];
+
+const DIETS = [
+  { id: 'all', label: 'Everything' },
+  { id: 'vegan', label: 'Vegan' },
+  { id: 'gf', label: 'Gluten free' },
+] as const;
+
+/**
+ * Search and filter.
+ *
+ * Filtering runs over the already-loaded catalog rather than a request per
+ * keystroke. At 82 dishes that is instant, works offline after the first load,
+ * and removes a whole class of "the results are stale because a request is in
+ * flight" bugs. If the menu ever grows past a few hundred dishes, this is the
+ * first thing to move back to the API's advanced search.
+ */
 export function SearchPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const {
-    setQuery,
-    setResults,
-    setHasSearched,
-  } = useSearchStore();
+  const [params, setParams] = useSearchParams();
+  const { index, isLoading } = useMenuIndex();
+  const addConfigured = useCartStore((s) => s.addConfigured);
 
-  // Build search params from URL (source of truth)
-  const searchApiParams = useMemo(() => {
-    const params: Record<string, string | number | boolean> = {};
-    const q = searchParams.get('q');
-    const sortBy = searchParams.get('sortBy');
-    const sortOrder = searchParams.get('sortOrder');
-    const dietary = searchParams.get('dietary');
-    const minPrice = searchParams.get('minPrice');
-    const maxPrice = searchParams.get('maxPrice');
-    const minSpicyLevel = searchParams.get('minSpicyLevel');
-    const maxSpicyLevel = searchParams.get('maxSpicyLevel');
-    const categoryId = searchParams.get('categoryId');
-    const onlyPopular = searchParams.get('onlyPopular');
-    const includeModifiers = searchParams.get('includeModifiers');
+  const query = params.get('q') ?? '';
+  const sort = (params.get('sort') as SortBy) ?? 'relevance';
+  const diet = params.get('diet') ?? 'all';
+  const maxPrice = params.get('max') ? Number(params.get('max')) : null;
 
-    if (q) params.q = q;
-    if (sortBy) params.sortBy = sortBy;
-    if (sortOrder) params.sortOrder = sortOrder;
-    if (dietary) params.dietary = dietary;
-    if (minPrice) params.minPrice = Number(minPrice);
-    if (maxPrice) params.maxPrice = Number(maxPrice);
-    if (minSpicyLevel) params.minSpicyLevel = Number(minSpicyLevel);
-    if (maxSpicyLevel) params.maxSpicyLevel = Number(maxSpicyLevel);
-    if (categoryId) params.categoryId = Number(categoryId);
-    if (onlyPopular === 'true') params.onlyPopular = true;
-    if (includeModifiers === 'false') params.includeModifiers = false;
+  const update = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+  };
 
-    return params;
-  }, [searchParams]);
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
 
-  // Sync query to store for display purposes
-  useEffect(() => {
-    const urlQuery = searchParams.get('q') || '';
-    setQuery(urlQuery);
-    setHasSearched(urlQuery.length > 0 || searchParams.toString().length > 0);
-  }, [searchParams, setQuery, setHasSearched]);
+    let list = index.dishes.filter((dish) => {
+      if (q && !(dish.name.toLowerCase().includes(q) || dish.desc.toLowerCase().includes(q))) {
+        return false;
+      }
+      if (diet !== 'all' && !dish.tags.includes(diet as Dish['tags'][number])) return false;
+      if (maxPrice != null && dish.price > maxPrice) return false;
+      return true;
+    });
 
-  // Check if we have any search criteria
-  const hasSearchCriteria = Object.keys(searchApiParams).length > 0;
-
-  // Use React Query to fetch search results
-  const searchKey = ['search', Object.fromEntries(searchParams)];
-  const { data: results, isLoading } = useQuery({
-    queryKey: searchKey,
-    queryFn: () => menuApi.searchItemsAdvanced(searchApiParams),
-    enabled: hasSearchCriteria,
-    staleTime: 2 * 60 * 1000, // 2 minutes
-  });
-
-  // Update store with results for filter component
-  useEffect(() => {
-    if (results !== undefined) {
-      setResults(results);
+    list = [...list];
+    if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
+    else if (sort === 'price') list.sort((a, b) => a.price - b.price);
+    else if (sort === 'popularity') {
+      list.sort((a, b) => Number(b.tags.includes('popular')) - Number(a.tags.includes('popular')));
     }
-  }, [results, setResults]);
 
-  // Get query for display
-  const query = searchParams.get('q') || '';
-  const displayResults = results ?? [];
-  const displayHasSearched = hasSearchCriteria;
+    return list;
+  }, [index.dishes, query, sort, diet, maxPrice]);
 
-  const handleSearch = () => {
-    // Search is triggered by URL param changes, React Query handles the rest
+  const hasFilters = !!query || diet !== 'all' || maxPrice != null || sort !== 'relevance';
+
+  const clearAll = () => setParams(new URLSearchParams(), { replace: true });
+
+  const quickAdd = (dish: Dish) => {
+    addConfigured(dish, { selections: {} });
+    showToast(`${dish.name} added to your order`);
   };
 
   return (
-    <div className="min-h-screen bg-cream pb-16">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="py-8">
-          {/* Page Header */}
-          <div className="mb-8">
-            <h1 className="font-serif text-3xl font-bold text-secondary">
-              {query ? `Search: "${query}"` : 'Search Menu'}
-            </h1>
-            {!query && (
-              <p className="mt-2 text-gray-600">
-                Find a dish by name, or narrow the menu with the filters below.
-              </p>
-            )}
-
-            {/* The page previously pointed at a search bar that only existed as a
-                header icon, leaving no visible field to type into. */}
-            <form
-              className="mt-4 flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const value = (e.currentTarget.elements.namedItem('q') as HTMLInputElement).value.trim();
-                setSearchParams(value ? { q: value } : {});
-              }}
-              role="search"
-            >
-              <input
-                type="search"
-                name="q"
-                defaultValue={query}
-                placeholder="Search for a dish…"
-                aria-label="Search the menu"
-                className="w-full rounded-lg border-2 border-tan bg-white px-4 py-3 text-secondary placeholder:text-gray-400 focus:border-primary focus:outline-none"
-              />
-              <button type="submit" className="btn-primary shrink-0">
-                Search
-              </button>
-            </form>
-          </div>
-
-          {/* Main Content */}
-          <div className="gap-8 lg:grid lg:grid-cols-[280px_1fr]">
-            {/* Sidebar - Filters */}
-            <aside className="lg:sticky lg:top-24 lg:h-fit">
-              <SearchFilters
-                onSearch={handleSearch}
-                resultCount={displayResults.length}
-              />
-            </aside>
-
-            {/* Results Grid */}
-            <div>
-              {displayHasSearched ? (
-                <>
-                  {isLoading ? (
-                    // Skeleton cards rather than a bare spinner: they show the
-                    // shape of the results and read as loading, not as broken.
-                    <div>
-                      <p className="mb-4 text-gray-600">Searching…</p>
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {Array.from({ length: 6 }).map((_, i) => (
-                          <div key={i} className="card overflow-hidden">
-                            <div className="aspect-video w-full animate-pulse bg-tan" />
-                            <div className="space-y-2 p-4">
-                              <div className="h-4 w-3/4 animate-pulse rounded bg-tan" />
-                              <div className="h-4 w-1/2 animate-pulse rounded bg-tan" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : displayResults.length > 0 ? (
-                    <>
-                      <div className="mb-4 flex items-center justify-between">
-                        <p className="text-gray-600">
-                          Found {displayResults.length} result{displayResults.length !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                      <MenuGrid items={displayResults} title="" isLoading={false} />
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-tan bg-white py-16">
-                      <svg
-                        className="mb-4 h-16 w-16 text-gray-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                        />
-                      </svg>
-                      <h3 className="font-serif text-xl font-semibold text-secondary">
-                        No results found
-                      </h3>
-                      <p className="mt-2 text-center text-gray-600">
-                        No dishes match those terms. Try a different search, or
-                        clear the filters below.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setSearchParams({})}
-                        className="btn-primary mt-6"
-                      >
-                        Clear search &amp; filters
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-tan bg-white py-16">
-                  <svg
-                    className="mb-4 h-16 w-16 text-gray-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                  <h3 className="font-serif text-xl font-semibold text-secondary">
-                    Search Our Menu
-                  </h3>
-                  <p className="mt-2 text-center text-gray-600">
-                    Type a dish name above, or use the filters to browse by
-                    dietary preferences, price, and more.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+    <div className="container-shell section" data-od-id="search">
+      <div className="pagehead">
+        <p className="eyebrow eyebrow-gold">Find a dish</p>
+        <h1>{query ? `Results for “${query}”` : 'Search the menu'}</h1>
+        <p className="lead">
+          {query
+            ? `${results.length} dish${results.length === 1 ? '' : 'es'} matched.`
+            : 'Type a name, or narrow the menu with the filters below.'}
+        </p>
       </div>
+
+      <form
+        className="catalog-tools"
+        style={{ marginTop: 24 }}
+        role="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const value = (e.currentTarget.elements.namedItem('q') as HTMLInputElement).value.trim();
+          update('q', value);
+        }}
+      >
+        <div className="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="M16 16l4 4" />
+          </svg>
+          <label className="sr-only" htmlFor="search-q">
+            Search dishes
+          </label>
+          <input
+            className="input"
+            id="search-q"
+            name="q"
+            type="search"
+            defaultValue={query}
+            placeholder="Search for a dish…"
+            autoComplete="off"
+          />
+        </div>
+        <button type="submit" className="btn btn-primary">
+          Search
+        </button>
+      </form>
+
+      <Panel className="mt-6">
+        <PanelBody>
+          <div className="filterbar">
+            <div className="seg-sm" role="group" aria-label="Sort by">
+              {SORTS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={sort === option.id}
+                  onClick={() => update('sort', option.id === 'relevance' ? '' : option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="seg-sm" role="group" aria-label="Dietary">
+              {DIETS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={diet === option.id}
+                  onClick={() => update('diet', option.id === 'all' ? '' : option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="field" style={{ maxWidth: 190 }}>
+              <label htmlFor="search-max">Up to $</label>
+              <input
+                id="search-max"
+                className="input"
+                type="number"
+                min={0}
+                step={1}
+                placeholder="Any price"
+                defaultValue={maxPrice ?? ''}
+                onBlur={(e) => update('max', e.target.value.trim())}
+              />
+            </div>
+
+            {hasFilters && (
+              <button type="button" className="btn btn-ghost" onClick={clearAll}>
+                Clear filters
+              </button>
+            )}
+          </div>
+        </PanelBody>
+      </Panel>
+
+      <div style={{ marginTop: 32 }}>
+        {isLoading ? (
+          <div className="item-list">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonRow key={i} />
+            ))}
+          </div>
+        ) : results.length === 0 ? (
+          <Panel>
+            <StateBlock
+              icon={StateIcons.search}
+              title="No dishes found"
+              body={
+                query
+                  ? `We couldn't match “${query}”. Try a shorter word, or clear the filters.`
+                  : 'Nothing matches those filters. Try widening the price or clearing the diet.'
+              }
+              action={
+                <button type="button" className="btn btn-secondary" onClick={clearAll}>
+                  Clear filters
+                </button>
+              }
+            />
+          </Panel>
+        ) : (
+          <div className="item-list">
+            {results.map((dish) => (
+              <DishRow key={dish.slug} dish={dish} onQuickAdd={quickAdd} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <p className="helpline" style={{ marginTop: 28 }}>
+        Can&rsquo;t find something? <Link to="/menu">Browse all fourteen sections</Link>.
+      </p>
     </div>
   );
 }

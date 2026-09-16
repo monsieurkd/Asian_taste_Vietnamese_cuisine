@@ -2,20 +2,16 @@ import { Outlet } from 'react-router-dom';
 import { MenuPage } from './MenuPage';
 
 /**
- * MenuLayout renders the MenuPage along with an Outlet for modal routes.
- * This allows the modal to appear as an overlay without unmounting the menu page.
+ * The menu, plus a slot for the dish-detail modal.
  *
- * Route structure:
- * - /menu -> shows menu (index)
- * - /menu/item/:itemId -> shows menu + modal overlay
- *
- * Note: ItemDetailModal handles its own backdrop, so no additional backdrop needed here.
+ * The modal is a nested route rather than a piece of page state, so
+ * `/menu/item/pho` is linkable, the back button closes it, and the catalog
+ * behind it keeps its scroll position instead of remounting.
  */
 export function MenuLayout() {
   return (
     <>
       <MenuPage />
-      {/* Outlet renders the ItemDetailModal when on a modal route */}
       <Outlet />
     </>
   );

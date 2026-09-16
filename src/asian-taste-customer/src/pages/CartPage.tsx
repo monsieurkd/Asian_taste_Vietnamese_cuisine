@@ -1,141 +1,182 @@
 import { Link } from 'react-router-dom';
-import {
-  ArrowLeftIcon,
-  ShoppingBagIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
 import { useCartStore } from '@/stores/cartStore';
-import { CartItem } from '@/components/cart/CartItem';
-import { CartSummary } from '@/components/cart/CartSummary';
+import { money } from '@/lib/site';
+import { Panel, PanelBody, PanelFoot, PanelHead, SumRow } from '@/components/ui/Panel';
+import { StateBlock } from '@/components/ui/State';
+import { StateIcons } from '@/components/ui/stateIcons';
+import { ServiceBar } from '@/components/layout/ServiceBar';
+import { CartStepper } from '@/components/cart/CartStepper';
+import { DishMedia } from '@/components/menu/DishMedia';
+import { useMenuIndex } from '@/hooks/useMenuIndex';
 
+/**
+ * `/cart` — review and adjust before checkout.
+ *
+ * This is the third step of the three-stage progress bar, so it links back to
+ * the menu rather than presenting the checkout as the only way forward.
+ */
 export function CartPage() {
-  const { items, clearCart } = useCartStore();
-  const isEmpty = items.length === 0;
+  const items = useCartStore((s) => s.items);
+  const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const removeItem = useCartStore((s) => s.removeItem);
+  const clearCart = useCartStore((s) => s.clearCart);
+  const { index } = useMenuIndex();
 
-  const handleClearCart = () => {
-    if (window.confirm('Are you sure you want to clear your cart?')) {
-      clearCart();
-    }
-  };
+  const subtotal = items.reduce((sum, i) => sum + i.basePrice * i.quantity, 0);
+  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+
+  const suggestions = index.dishes.filter((d) => d.isAvailable).slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-cream">
-      {/* Page Header */}
-      <div className="bg-white border-b border-tan">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link
-              to="/menu"
-              className="rounded-full p-2 text-gray-600 hover:bg-cream hover:text-primary transition-colors"
-            >
-              <ArrowLeftIcon className="h-6 w-6" />
-            </Link>
-            <h1 className="text-2xl font-bold text-secondary">
-              Your Cart
-            </h1>
-            {items.length > 0 && (
-              <span className="ml-2 rounded-full bg-primary px-3 py-1 text-sm font-semibold text-white">
-                {items.reduce((sum, item) => sum + item.quantity, 0)} items
-              </span>
-            )}
-          </div>
+    <div className="container-shell section" data-od-id="cart">
+      <div className="head">
+        <div className="head-copy">
+          <p className="eyebrow eyebrow-gold">Step 1 of 3</p>
+          <h1>Your order</h1>
+          <p className="lead">Check everything looks right, then tell us how you&rsquo;d like it.</p>
         </div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {isEmpty ? (
-          /* Empty Cart State */
-          <div className="mx-auto max-w-md py-16 text-center">
-            <div className="mx-auto mb-6 flex h-32 w-32 items-center justify-center rounded-full bg-cream">
-              <ShoppingBagIcon className="h-16 w-16 text-gray-400" />
-            </div>
-            <h2 className="text-2xl font-bold text-secondary">
-              Your cart is empty
-            </h2>
-            <p className="mt-2 text-gray-600">
-              Looks like you haven't added any items yet.
-            </p>
-            <Link
-              to="/menu"
-              className="btn-primary mt-6 inline-flex items-center gap-2"
-            >
-              Browse Our Menu
-              <ArrowLeftIcon className="h-5 w-5 rotate-180" />
-            </Link>
-          </div>
-        ) : (
-          /* Cart with Items */
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Cart Items */}
-            <div className="lg:col-span-2">
-              <div className="mb-4 flex items-center justify-between">
-                <p className="text-sm text-gray-600">
-                  Review your items before checkout
-                </p>
-                {items.length > 1 && (
-                  <button
-                    onClick={handleClearCart}
-                    className="flex items-center gap-1 text-sm font-medium text-error hover:text-red-700 transition-colors"
-                  >
-                    <XMarkIcon className="h-4 w-4" />
-                    Clear Cart
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                {items.map((item) => (
-                  <CartItem key={item.id} item={item} />
-                ))}
-              </div>
-
-              {/* Recommended Items - could be added later */}
-              <div className="mt-8 rounded-lg border-2 border-dashed border-tan bg-cream p-6 text-center">
-                <h3 className="font-semibold text-secondary">
-                  Want to add more?
-                </h3>
-                <p className="mt-1 text-sm text-gray-600">
-                  Check out our popular items or browse our full menu.
-                </p>
-                <Link
-                  to="/menu?popular=true"
-                  className="btn-secondary mt-4 inline-block"
-                >
-                  View Popular Items
-                </Link>
-              </div>
-            </div>
-
-            {/* Cart Summary - Sticky on Desktop */}
-            <div className="lg:col-span-1">
-              <div className="lg:sticky lg:top-24">
-                <CartSummary />
-              </div>
-            </div>
-          </div>
+        {items.length > 0 && (
+          <button type="button" className="btn btn-ghost" onClick={clearCart}>
+            Empty the order
+          </button>
         )}
       </div>
 
-      {/* Mobile Floating Cart Summary - Only when items exist */}
-      {!isEmpty && (
-        <div className="fixed bottom-0 left-0 right-0 border-t border-tan bg-white p-4 shadow-lg md:hidden lg:hidden">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total</p>
-              <p className="text-xl font-bold text-primary">
-                ${(items.reduce((sum, item) => sum + item.basePrice * item.quantity, 0) * 1.1).toFixed(2)}
-              </p>
-            </div>
+      <div className="stepper" style={{ marginBottom: 28 }} aria-label="Checkout progress">
+        <span className="step" data-state="current">
+          <span className="step-num">1</span>
+          <span className="step-label">Your order</span>
+        </span>
+        <span className="step-sep" aria-hidden="true" />
+        <span className="step" data-state="todo">
+          <span className="step-num">2</span>
+          <span className="step-label">Your details</span>
+        </span>
+        <span className="step-sep" aria-hidden="true" />
+        <span className="step" data-state="todo">
+          <span className="step-num">3</span>
+          <span className="step-label">Payment</span>
+        </span>
+      </div>
+
+      <div className="split">
+        <div className="flex flex-col gap-5">
+          <Panel data-od-id="cart-mode">
+            <PanelHead>
+              <h3>How would you like it?</h3>
+            </PanelHead>
+            <PanelBody>
+              <ServiceBar tone="light" />
+            </PanelBody>
+          </Panel>
+
+          <Panel data-od-id="cart-items">
+            <PanelHead>
+              <h3>Items</h3>
+              <span className="pill">
+                {itemCount} {itemCount === 1 ? 'item' : 'items'}
+              </span>
+            </PanelHead>
+            <PanelBody>
+              {items.length === 0 ? (
+                <StateBlock
+                  icon={StateIcons.cart}
+                  title="Nothing here yet"
+                  body="Your order is empty. Browse the menu and add a few favourites — we'll keep them here."
+                  action={
+                    <Link to="/menu" className="btn btn-primary">
+                      Browse the menu
+                    </Link>
+                  }
+                />
+              ) : (
+                items.map((line) => (
+                  <div className="cart-item" key={line.id}>
+                    <div className="flex items-start gap-3.5">
+                      <div style={{ width: 56, height: 56, borderRadius: 'var(--radius-sm)', overflow: 'hidden', flex: 'none' }}>
+                        <DishMedia src={line.imageUrl} name={line.name} variant="flat" className="h-full w-full" />
+                      </div>
+                      <div>
+                        <h3>{line.name}</h3>
+                        {line.modifiers.length > 0 && (
+                          <div className="ci-note">{line.modifiers.map((m) => m.name).join(' · ')}</div>
+                        )}
+                        {!line.modifiers.length && line.specialInstructions && (
+                          <div className="ci-note">{line.specialInstructions}</div>
+                        )}
+                        <Link
+                          to={`/cart/edit/${line.id}`}
+                          className="ci-remove"
+                          style={{ display: 'inline-block', marginTop: 6 }}
+                        >
+                          Edit options
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="ci-price num">{money(line.basePrice * line.quantity)}</div>
+                    <div className="cart-controls">
+                      <CartStepper
+                        quantity={line.quantity}
+                        onChange={(q) => updateQuantity(line.id, q)}
+                        label={line.name}
+                      />
+                      <button type="button" className="ci-remove" onClick={() => removeItem(line.id)}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </PanelBody>
+          </Panel>
+
+          {suggestions.length > 0 && (
+            <Panel data-od-id="cart-upsell">
+              <PanelHead>
+                <h3>You might also like</h3>
+              </PanelHead>
+              <PanelBody>
+                <div className="grid-3">
+                  {suggestions.map((dish) => (
+                    <div className="rowline" key={dish.slug} style={{ border: 0, padding: 0 }}>
+                      <div className="rl-main">
+                        <strong>{dish.name}</strong>
+                        <span>{money(dish.price)}</span>
+                      </div>
+                      <Link to={`/menu/item/${dish.slug}`} className="add-btn">
+                        Add
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </PanelBody>
+            </Panel>
+          )}
+        </div>
+
+        <aside className="summary-card panel" aria-label="Order summary" data-od-id="cart-summary">
+          <PanelHead>
+            <h3>Summary</h3>
+          </PanelHead>
+          <PanelBody>
+            <SumRow label="Subtotal" value={money(subtotal)} />
+            <SumRow label="GST" value="included" />
+            <SumRow label="Total" value={money(subtotal)} total />
+          </PanelBody>
+          <PanelFoot>
             <Link
               to="/checkout"
-              className="btn-primary flex items-center gap-2"
+              className={`btn btn-primary btn-block ${items.length === 0 ? 'pointer-events-none opacity-50' : ''}`}
+              aria-disabled={items.length === 0}
             >
-              Checkout
-              <ArrowLeftIcon className="h-5 w-5 rotate-180" />
+              Go to checkout
             </Link>
-          </div>
-        </div>
-      )}
+            <Link to="/menu" className="btn btn-ghost btn-block" style={{ marginTop: 8 }}>
+              Add more dishes
+            </Link>
+          </PanelFoot>
+        </aside>
+      </div>
     </div>
   );
 }

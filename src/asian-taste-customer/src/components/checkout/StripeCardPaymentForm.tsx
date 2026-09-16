@@ -9,7 +9,7 @@ import {
 } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import type { Stripe } from '@stripe/stripe-js';
-import { LockClosedIcon } from '@heroicons/react/24/outline';
+import { money } from '@/lib/site';
 
 // Load Stripe outside of component to avoid recreating on every render
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
@@ -35,13 +35,29 @@ interface StripeCardPaymentFormProps {
   orderAmount: number;
 }
 
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="10" width="16" height="10" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
 /**
- * Inner form component that uses Stripe hooks
- * Must be rendered inside Elements provider
+ * The Stripe payment form.
+ *
+ * The Payment Element is the whole point: it renders whatever the Stripe
+ * dashboard has enabled — card, Apple Pay, Google Pay — with no code change, and
+ * `automatic_payment_methods` on the PaymentIntent is what lets it. A card-only
+ * allow-list on the intent is what silently hides the wallets, so neither this
+ * component nor the API restricts the method list.
  */
-const CheckoutForm: FC<
-  Omit<StripeCardPaymentFormProps, 'clientSecret'>
-> = ({ isLoading: externalLoading = false, onSubmit, orderAmount }) => {
+const CheckoutForm: FC<Omit<StripeCardPaymentFormProps, 'clientSecret'>> = ({
+  isLoading: externalLoading = false,
+  onSubmit,
+  orderAmount,
+}) => {
   const stripe = useStripe();
   const elements = useElements();
 
@@ -56,107 +72,76 @@ const CheckoutForm: FC<
     e.preventDefault();
 
     if (!stripe || !elements) {
-      // Stripe.js hasn't yet loaded
-      setMessage('Payment system is still loading. Please wait...');
+      setMessage('Payment system is still loading. Please wait…');
       return;
     }
 
     setIsProcessing(true);
     setMessage('');
 
-    // Confirm the payment using Stripe.js
     const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        // Make sure to change this to your payment completion page
         return_url: `${window.location.origin}/confirmation`,
         receipt_email: email || undefined,
       },
-      redirect: 'if_required', // Handle redirect manually
+      redirect: 'if_required',
     });
 
     if (error) {
-      // Payment failed
       setMessage(error.message || 'An unexpected error occurred.');
       setIsProcessing(false);
-      await onSubmit({
-        success: false,
-        error: error.message,
-      });
+      await onSubmit({ success: false, error: error.message });
     } else if (paymentIntent) {
-      // Payment succeeded
       setIsProcessing(false);
-      await onSubmit({
-        success: true,
-        paymentIntentId: paymentIntent.id,
-      });
+      await onSubmit({ success: true, paymentIntentId: paymentIntent.id });
     }
   };
 
-  const paymentElementOptions = {
-    layout: 'tabs' as const,
-  };
-
   return (
-    <form id="payment-form" onSubmit={handleSubmit} className="space-y-6">
-      {/* Email Link Authentication */}
+    <form onSubmit={handleSubmit} className="stack">
       <LinkAuthenticationElement
-        id="link-authentication-element"
         onChange={(e) => setEmail(e.value.email)}
-        options={{
-          defaultValues: {
-            email: email,
-          },
-        }}
+        options={{ defaultValues: { email } }}
       />
 
-      {/* Payment Element - includes card details, digital wallets, etc. */}
-      <PaymentElement id="payment-element" options={paymentElementOptions} />
+      <PaymentElement options={{ layout: 'tabs' }} />
 
-      {/* Error Message */}
       {message && (
-        <div
-          className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
-          id="payment-message"
-        >
+        <p className="field-error" role="alert" id="payment-message">
           {message}
-        </div>
+        </p>
       )}
 
-      {/* Submit Button */}
-      <div className="pt-4">
-        <button
-          disabled={isProcessing || externalLoading || !stripe || !elements}
-          id="submit"
-          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:bg-gray-400 disabled:cursor-not-allowed transition font-semibold text-lg"
-        >
-          <LockClosedIcon className="w-5 h-5" />
-          {isProcessing ? 'Processing...' : `Pay $${orderAmount.toFixed(2)}`}
-        </button>
-      </div>
+      <button
+        type="submit"
+        className="btn btn-primary btn-block"
+        disabled={isProcessing || externalLoading || !stripe || !elements}
+      >
+        <LockIcon />
+        {isProcessing ? 'Processing…' : `Pay ${money(orderAmount)}`}
+      </button>
 
-      {/* Security Notice */}
-      <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
-        <span>Secured by Stripe. Your payment information is encrypted and secure.</span>
-      </div>
-
-      {/* Display Stripe security badge */}
-      <div className="flex items-center justify-center gap-4 pt-2">
-        <svg className="h-8" viewBox="0 0 60 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path fill="#635BFF" d="M59.64 14.28h-8.06c.19 1.93 1.6 2.55 3.2 2.55 1.64 0 2.96-.37 4.05-.95v3.32a10.3 10.3 0 0 1-4.56.97c-4.31 0-6.94-2.54-6.94-6.98 0-3.92 2.38-6.96 6.34-6.96 3.77 0 6.04 2.8 6.04 6.86 0 .38-.03.95-.07 1.19zm-5.93-5.8c-1.45 0-2.45.95-2.79 2.41h5.42c-.07-1.49-1.08-2.41-2.63-2.41zm-35.64 8.88V9.25c0-.94-.27-1.58-1.06-1.58-1.1 0-2.13 1.44-2.13 3.87v5.82h-4.1V9.25c0-.94-.27-1.58-1.06-1.58-1.1 0-2.13 1.44-2.13 3.87v5.82H3.5V4.65h3.96v.74c.7-.58 1.64-.9 2.82-.9 1.56 0 2.76.67 3.42 1.85.84-.74 2.06-1.85 4.02-1.85 2.42 0 3.86 1.4 3.86 4.13v8.48h-4.06zm21.75 0h-3.93v-.74c-.87.67-2.06 1-3.52 1-3.35 0-5.7-2.84-5.7-6.98 0-3.92 2.38-6.96 6.1-6.96 1.32 0 2.45.33 3.35.87V4.65h4.06v12.7h-.36zm-4.06-5.5c0-1.69-1.13-2.91-2.55-2.91-1.73 0-2.89 1.52-2.89 3.57 0 2.08 1.16 3.6 2.89 3.6 1.42 0 2.55-1.22 2.55-2.9v-1.36zm10.37-7.2h-4.06v12.7h4.06V4.66zm-2.03-2.6c-1.3 0-2.35-.97-2.35-2.17s1.05-2.17 2.35-2.17c1.3 0 2.35.97 2.35 2.17s-1.05 2.17-2.35 2.17z"/>
-        </svg>
-      </div>
+      <p className="helpline" style={{ textAlign: 'center' }}>
+        Secured by Stripe. Your card details never touch this site.
+      </p>
     </form>
   );
 };
 
 /**
- * Main Stripe Card Payment Form Component
- * Wraps the checkout form in a new Elements provider with the specific client secret
+ * Stripe's `appearance` API takes literal colour strings — it cannot read a CSS
+ * variable or a `color-mix()`. Rather than hardcode the palette a second time
+ * (and let it drift from brand-spec), the three values are read back off the
+ * document at mount, so this stays bound to the token block like everything
+ * else.
  */
+function readToken(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
 export const StripeCardPaymentForm: FC<StripeCardPaymentFormProps> = ({
   clientSecret,
   isLoading,
@@ -164,61 +149,58 @@ export const StripeCardPaymentForm: FC<StripeCardPaymentFormProps> = ({
   orderAmount,
 }) => {
   const [stripe, setStripe] = useState<Stripe | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  // Resolve the Stripe.js instance. The setState happens inside the promise
-  // callback (asynchronously), with a cancellation guard so a late resolution
-  // after unmount cannot update state.
+  // Resolve Stripe.js. The setState happens inside the promise callback, with a
+  // cancellation guard so a late resolution after unmount cannot update state.
   useEffect(() => {
     let cancelled = false;
     stripePromise
-      .then((stripeInstance) => {
-        if (!cancelled) setStripe(stripeInstance);
+      .then((instance) => {
+        if (!cancelled) setStripe(instance);
       })
       .catch(() => {
-        if (!cancelled) setStripe(null);
+        if (!cancelled) setFailed(true);
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (!clientSecret) {
+  if (!clientSecret || failed) {
     return (
-      <div className="p-6 bg-red-50 rounded-lg">
-        <p className="text-red-600">Payment initialization failed. Please go back and try again.</p>
+      <div className="state-block error">
+        <p>
+          We couldn&rsquo;t start the payment form. Nothing has been charged — go back and try
+          again.
+        </p>
       </div>
     );
   }
 
-  const options = {
-    clientSecret,
-    appearance: {
-      theme: 'stripe' as const,
-      variables: {
-        colorPrimary: '#4A3728',
-        colorBackground: '#ffffff',
-        colorText: '#2D2D2D',
-      },
-    },
-  };
-
-  // Show loading while Stripe loads
   if (!stripe) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        <span className="ml-3 text-gray-600">Loading secure payment form...</span>
-      </div>
+      <div className="skeleton sk-line" style={{ height: 140 }} aria-label="Loading secure payment form" />
     );
   }
 
   return (
-    <Elements stripe={stripe} options={options}>
-      <CheckoutForm
-        isLoading={isLoading}
-        onSubmit={onSubmit}
-        orderAmount={orderAmount}
-      />
+    <Elements
+      stripe={stripe}
+      options={{
+        clientSecret,
+        appearance: {
+          theme: 'stripe',
+          variables: {
+            colorPrimary: readToken('--color-accent', '#8b3a3a'),
+            colorBackground: readToken('--color-surface', '#ffffff'),
+            colorText: readToken('--color-fg', '#3c2a21'),
+            fontFamily: 'Manrope, system-ui, sans-serif',
+          },
+        },
+      }}
+    >
+      <CheckoutForm isLoading={isLoading} onSubmit={onSubmit} orderAmount={orderAmount} />
     </Elements>
   );
 };

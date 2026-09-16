@@ -1,318 +1,93 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MagnifyingGlassIcon, ShoppingCartIcon, Bars3Icon, XMarkIcon, UserIcon } from '@heroicons/react/24/outline';
-import { useCartStore } from '../../stores/cartStore';
-import { useCustomerAuthStore, selectIsAuthenticated } from '../../stores/customerAuthStore';
-import { LoginModal } from '../auth/LoginModal';
+import { Link, useLocation } from 'react-router-dom';
+import { useHeadHeight, useScrolled } from '@/hooks/useHeadHeight';
+import { BrandMark } from '@/components/layout/Brand';
+import { useCartStore } from '@/stores/cartStore';
+import { SITE } from '@/lib/site';
 
-export function Header() {
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const itemCount = useCartStore((state) => state.getItemCount());
-  const isAuthenticated = useCustomerAuthStore(selectIsAuthenticated);
-  const customer = useCustomerAuthStore((state) => state.customer);
-  const location = useLocation();
-  const navigate = useNavigate();
+const NAV = [
+  { to: '/menu', label: 'Menu' },
+  { to: '/menu#cat-deals', label: 'Deals', hash: '#cat-deals' },
+  { to: '/menu#story', label: 'Our story', hash: '#story' },
+  { to: '/search', label: 'Search' },
+];
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+function IconCart() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 5h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h7.9a1.5 1.5 0 0 0 1.5-1.2L20 8H6" />
+      <circle cx="9.5" cy="20" r="1.3" />
+      <circle cx="17.5" cy="20" r="1.3" />
+    </svg>
+  );
+}
 
-  // Close the mobile menu on route change. Tracked by the pathname the menu was
-  // opened at, so the closure is derived during render rather than applied via
-  // setState in an effect (react-hooks/set-state-in-effect).
-  const [menuOpenedAtPath, setMenuOpenedAtPath] = useState(location.pathname);
-  if (isMobileMenuOpen && menuOpenedAtPath !== location.pathname) {
-    setMenuOpenedAtPath(location.pathname);
-    setIsMobileMenuOpen(false);
-  }
+interface HeaderProps {
+  onOpenCart: () => void;
+}
 
-  // Focus search input when opened
-  useEffect(() => {
-    if (isSearchOpen) {
-      searchInputRef.current?.focus();
-    }
-  }, [isSearchOpen]);
-
-  // Initialize search query from the URL during render rather than syncing it
-  // in an effect (which causes a cascading render and is flagged by
-  // react-hooks/set-state-in-effect).
-  // On the search page we deliberately do NOT auto-open the header field: the
-  // page renders its own search input, and two near-identical controls stacked
-  // ~100px apart left users unable to tell which was authoritative.
-  const isSearchPage = location.pathname === '/search';
-  const [searchQuery, setSearchQuery] = useState(() => new URLSearchParams(location.search).get('q') || '');
-
-  // The header search field is never open on the search page (the page has its
-  // own). Derived rather than forced closed in an effect, which would setState
-  // after mount for no reason.
-  const isHeaderSearchOpen = isSearchOpen && !isSearchPage;
-
-  const handleSearchClick = () => {
-    if (isSearchPage) {
-      searchInputRef.current?.focus();
-    } else {
-      setIsSearchOpen(!isSearchOpen);
-    }
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-    } else {
-      navigate('/search');
-    }
-  };
-
-  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-  };
-
-  const navLinks = [
-    { name: 'Home', href: '/' },
-    { name: 'Menu', href: '/menu' },
-    { name: 'About', href: '/about' },
-    { name: 'Contact', href: '/contact' },
-  ];
+/**
+ * The shared storefront header.
+ *
+ * Its nav disappears from 980px down, and the bottom bar switches on at the
+ * same breakpoint — if those two disagree, portrait tablets (768px) get a
+ * navigation dead zone, which is a bug this set has already fixed once.
+ */
+export function Header({ onOpenCart }: HeaderProps) {
+  const headRef = useHeadHeight<HTMLElement>();
+  const scrolled = useScrolled();
+  const { pathname } = useLocation();
+  const count = useCartStore((s) => s.getItemCount());
 
   return (
     <header
-      className={`sticky top-0 z-50 bg-white transition-shadow duration-200 ${
-        isScrolled ? 'shadow-md' : 'border-b border-tan'
-      }`}
+      ref={headRef}
+      className={`sitehead ${scrolled ? 'is-scrolled' : ''}`}
+      data-od-id="sitehead"
     >
-      {/* Desktop Header */}
-      <div className="hidden md:block">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="relative flex h-18 items-center justify-center">
-            {/* Logo - Absolute Left */}
-            <Link to="/" className="absolute left-0 flex items-center">
-              <div className="text-xl font-bold text-secondary">
-                <span className="text-primary">Asian</span> Taste
-              </div>
-            </Link>
+      <div className="container-shell sitehead-inner">
+        <Link to="/" className="brand" aria-label={`${SITE.name} — home`}>
+          <BrandMark />
+          <span className="brand-text">
+            <span className="brand-name">{SITE.name}</span>
+            <span className="brand-tag">{SITE.tagline}</span>
+          </span>
+        </Link>
 
-            {/* Navigation - Truly Centered */}
-            <nav className="flex items-center space-x-8">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.name}
-                  to={link.href}
-                  className={`text-sm font-medium transition-colors hover:text-primary ${
-                    location.pathname === link.href
-                      ? 'text-primary'
-                      : 'text-gray-600'
-                  }`}
-                >
-                  {link.name}
-                </Link>
-              ))}
-            </nav>
-
-            {/* Actions - Absolute Right */}
-            <div className="absolute right-0 flex items-center space-x-4">
-              <button
-                onClick={handleSearchClick}
-                className={`rounded-full p-2 transition-colors ${
-                  isHeaderSearchOpen || isSearchPage
-                    ? 'bg-cream text-primary'
-                    : 'text-gray-600 hover:bg-cream hover:text-primary'
-                }`}
-                aria-label="Search"
-              >
-                <MagnifyingGlassIcon className="h-6 w-6" />
-              </button>
-
+        <nav aria-label="Primary">
+          {NAV.map((item) => {
+            const current = pathname === item.to.split('#')[0] && !item.hash;
+            return (
               <Link
-                to="/cart"
-                className="relative rounded-full p-2 text-gray-600 hover:bg-cream hover:text-primary transition-colors"
-                aria-label="Cart"
+                key={item.label}
+                to={item.to}
+                aria-current={current ? 'page' : undefined}
               >
-                <ShoppingCartIcon className="h-6 w-6" />
-                {itemCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                    {itemCount > 9 ? '9+' : itemCount}
-                  </span>
-                )}
+                {item.label}
               </Link>
+            );
+          })}
+        </nav>
 
-              {isAuthenticated ? (
-                <Link
-                  to="/account"
-                  className="rounded-full p-2 text-gray-600 hover:bg-cream hover:text-primary transition-colors"
-                  aria-label="Account"
-                  title={`Signed in as ${customer?.firstName || customer?.email?.split('@')[0]}`}
-                >
-                  <UserIcon className="h-6 w-6" />
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsLoginModalOpen(true)}
-                  className="btn-primary text-sm"
-                >
-                  Login
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Search Bar */}
-        {isHeaderSearchOpen && (
-          <div className="border-t border-tan bg-cream py-4 animate-fade-in-up">
-            <form onSubmit={handleSearchSubmit} className="mx-auto max-w-2xl px-4">
-              <div className="relative">
-                <input
-                  ref={searchInputRef}
-                  type="search"
-                  placeholder="Search for dishes by name, ingredient..."
-                  value={searchQuery}
-                  onChange={handleSearchInputChange}
-                  className="input pr-12"
-                />
-                <button
-                  type="submit"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-primary p-2 text-white hover:bg-primary-dark"
-                  aria-label="Search"
-                >
-                  <MagnifyingGlassIcon className="h-5 w-5" />
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-      </div>
-
-      {/* Mobile Header */}
-      <div className="md:hidden">
-        <div className="flex h-14 items-center justify-between px-4">
-          {/* Mobile Menu Button */}
+        <div className="sitehead-actions">
+          <Link to="/menu" className="btn btn-secondary head-order" data-od-id="header-order">
+            Order online
+          </Link>
           <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="rounded-md p-2 text-gray-600 hover:bg-cream"
-            aria-label="Open menu"
+            type="button"
+            onClick={onOpenCart}
+            className="icon-btn cart-btn"
+            data-od-id="header-cart"
+            aria-label={`Open your order${count ? ` (${count} item${count === 1 ? '' : 's'})` : ''}`}
           >
-            {isMobileMenuOpen ? (
-              <XMarkIcon className="h-6 w-6" />
-            ) : (
-              <Bars3Icon className="h-6 w-6" />
+            <IconCart />
+            {count > 0 && (
+              <span key={count} className="cart-count bump">
+                {count}
+              </span>
             )}
           </button>
-
-          {/* Logo */}
-          <Link to="/" className="flex items-center">
-            <div className="text-lg font-bold text-secondary">
-              <span className="text-primary">Asian</span> Taste
-            </div>
-          </Link>
-
-          {/* Cart & Search Icons */}
-          <div className="flex items-center gap-1">
-            <Link
-              to="/search"
-              className={`relative rounded-full p-2 ${
-                isSearchPage ? 'bg-cream text-primary' : 'text-gray-600'
-              }`}
-              aria-label="Search"
-            >
-              <MagnifyingGlassIcon className="h-6 w-6" />
-            </Link>
-            <Link
-              to="/cart"
-              className="relative rounded-full p-2 text-gray-600"
-              aria-label="Cart"
-            >
-              <ShoppingCartIcon className="h-6 w-6" />
-              {itemCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                  {itemCount > 9 ? '9+' : itemCount}
-                </span>
-              )}
-            </Link>
-          </div>
         </div>
-
-        {/* Mobile Menu */}
-        {isMobileMenuOpen && (
-          <div className="border-t border-tan bg-white animate-fade-in-up">
-            {/* Mobile Search Bar */}
-            <div className="border-b border-tan bg-cream p-4">
-              <form onSubmit={handleSearchSubmit}>
-                <div className="relative">
-                  <input
-                    type="search"
-                    placeholder="Search for dishes..."
-                    value={searchQuery}
-                    onChange={handleSearchInputChange}
-                    className="input pr-12"
-                  />
-                  <button
-                    type="submit"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-primary p-2 text-white hover:bg-primary-dark"
-                    aria-label="Search"
-                  >
-                    <MagnifyingGlassIcon className="h-5 w-5" />
-                  </button>
-                </div>
-              </form>
-            </div>
-            <nav className="space-y-1 px-4 py-2">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.name}
-                  to={link.href}
-                  className={`block rounded-md px-4 py-3 text-sm font-medium transition-colors ${
-                    location.pathname === link.href
-                      ? 'bg-cream text-primary'
-                      : 'text-gray-600 hover:bg-cream'
-                  }`}
-                >
-                  {link.name}
-                </Link>
-              ))}
-              {isAuthenticated && (
-                <Link
-                  to="/account"
-                  className={`block rounded-md px-4 py-3 text-sm font-medium transition-colors ${
-                    location.pathname === '/account'
-                      ? 'bg-cream text-primary'
-                      : 'text-gray-600 hover:bg-cream'
-                  }`}
-                >
-                  My Account
-                </Link>
-              )}
-              {!isAuthenticated && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    setIsLoginModalOpen(true);
-                  }}
-                  className="block w-full rounded-md bg-primary px-4 py-3 text-center text-sm font-semibold text-white"
-                >
-                  Login
-                </button>
-              )}
-            </nav>
-          </div>
-        )}
       </div>
-
-      {/* Login Modal */}
-      <LoginModal
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-      />
     </header>
   );
 }
