@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace AsianTaste.API.Tests.Services.Payment;
 
@@ -29,6 +30,12 @@ public class PaymentGatewayDefaultTests
     /// binary. Locating the repo rather than copying the file keeps these tests
     /// honest: they assert on what actually ships.
     /// </summary>
+    /// <summary>
+    /// Matches a JSON string literal, escapes included, so comments can be sought
+    /// only in the text OUTSIDE strings — `//` is legitimate inside a URL.
+    /// </summary>
+    private static readonly Regex StringLiteral = new(@"""(?:[^""\\]|\\.)*""");
+
     private static JsonElement LoadAppSettings()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -59,6 +66,55 @@ public class PaymentGatewayDefaultTests
             "appsettings.json enables the mock payment gateway by default. It applies to " +
             "production too, so a deployment without an explicit override would accept " +
             "every order unpaid. The mock must be opted into, never defaulted to.");
+    }
+
+    [Fact]
+    public void The_shipped_config_is_plain_JSON_with_no_comments()
+    {
+        // .NET's own config reader accepts comments in appsettings.json. System.Text.Json
+        // does NOT, and every guard in this class parses the file that way — so a
+        // comment here fails the whole payment-default suite rather than the one test
+        // that happens to read it.
+        //
+        // That is not hypothetical. A comment block explaining the connection-string
+        // history was added to this file and turned two tests red in CI, in a class
+        // whose subject is "can production take money" — a genuinely confusing place
+        // to be told about JSON syntax.
+        //
+        // Keep explanatory prose in the commit message, docs/TODO.md, or a sibling
+        // markdown file. This file is machine input.
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AsianTaste.sln")))
+        {
+            dir = dir.Parent;
+        }
+
+        Assert.True(dir is not null, "Could not locate the repo root (AsianTaste.sln).");
+
+        var path = Path.Combine(dir!.FullName, "src", "AsianTaste.API", "appsettings.json");
+        var text = File.ReadAllText(path);
+
+        // Check each LINE, because `//` is legitimate inside a URL — this file has
+        // several (http://localhost, https://api.lightspeedapp.com). A naive
+        // substring search fails on those, which is how the first version of this
+        // test reported a false positive.
+        //
+        // The reliable discriminator: strip every JSON string literal, then look for
+        // comment markers in what remains. A comment can only live outside a string.
+        var withoutStrings = StringLiteral.Replace(text, "\"\"");
+
+        Assert.False(
+            withoutStrings.Contains("//", StringComparison.Ordinal),
+            "appsettings.json contains a line comment. .NET accepts comments here but " +
+            "System.Text.Json does not, so the payment-default guards in this class stop " +
+            "parsing the file. Move the note into a commit message or a doc.");
+
+        Assert.False(
+            withoutStrings.Contains("/*", StringComparison.Ordinal),
+            "appsettings.json contains a block comment. See the line-comment message above.");
+
+        // And prove it still parses the way the other tests need it to.
+        using var _ = JsonDocument.Parse(text);
     }
 
     [Fact]
