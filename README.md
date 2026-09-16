@@ -118,7 +118,11 @@ Three terminals (the API must be on **port 5070** — both apps proxy to it):
 
 ```bash
 # 1. API            -> http://localhost:5070
-cd src/AsianTaste.API && dotnet run
+#    ASPNETCORE_ENVIRONMENT=Development is REQUIRED locally. Without it ASP.NET
+#    falls back to appsettings.json and, historically, a second database that
+#    shadowed this one and could not serve the admin app. It is set on Fly for
+#    production; locally it is yours to pass.
+cd src/AsianTaste.API && ASPNETCORE_ENVIRONMENT=Development dotnet run
 
 # 2. Customer app   -> http://localhost:5173
 cd src/asian-taste-customer && npm run dev

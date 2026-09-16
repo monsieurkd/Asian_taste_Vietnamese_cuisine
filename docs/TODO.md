@@ -758,72 +758,61 @@ that POS sync never happened.
 
 ---
 
-## Known trap: two local databases, and the broken one is the default
+## Fixed: the two local databases are now one
 
-**Read this before debugging a local "missing table" error. It is not one bug,
-it is two databases.**
+**What was wrong.** There were two local Postgres databases, `AsianTaste` and
+`AsianTaste_Dev`, and which one you reached depended on an environment variable —
+with **the broken one as the default**.
 
-There are **two** local Postgres databases and they are in different states:
+`appsettings.json` named `AsianTaste` with the password `your_password`. That is a
+*template* value: production overrides it from the Fly secret, so nobody had ever
+meant it to be a real database. But ASP.NET falls back to that file when
+`ASPNETCORE_ENVIRONMENT` is unset, so a plain `dotnet run` created and migrated
+`AsianTaste` instead of the real one. That run died partway through
+`01_create_schema.sql`, and because `CREATE TABLE IF NOT EXISTS` then succeeds
+forever without repairing anything, the database ended up with 7 tables and no
+`admin_users` — permanently.
 
-| Database | Tables | `admin_users` | `customer_id` | Login |
-|---|---|---|---|---|
-| `AsianTaste` | 7 | **missing** | **missing** | **500** |
-| `AsianTaste_Dev` | 17 | present | present | **401** (correct) |
-
-Which one you get depends on the environment variable, and **the broken one is
-the default**:
-
-```bash
-# Production is the fallback when the variable is unset:
-#   appsettings.json        -> Database=AsianTaste       <- BROKEN
-dotnet run                       # 500 on login, admin tables missing
-
-#   appsettings.Development.json -> Database=AsianTaste_Dev  <- healthy
-ASPNETCORE_ENVIRONMENT=Development dotnet run    # works
-```
-
-Both point at `localhost:5432` with the same user, so nothing looks different
-until you hit an admin route. This has already caused one wrong conclusion, so
-check the database name first, not the schema.
-
-**The symptom on `AsianTaste`.** `dotnet run` logs, three times, then starts
-anyway:
+The symptom, on every local boot:
 
 ```
 Migration statement failed with SQLSTATE 42703: column "customer_id" does not exist
 Database initialization FAILED after 3 attempts. The API is starting WITHOUT a working database.
 ```
 
-The menu still returns 82 items — that table is fine — but **every admin table is
-missing**: `/api/auth/login` returns `500 relation "admin_users" does not exist`,
-so the admin dashboard cannot be used locally, and **no migration added after the
-failure ever runs there** (migration 13 has applied to `AsianTaste_Dev` but not to
-`AsianTaste`).
+The menu still returned 82 items, so it looked fine — but `/api/auth/login` gave
+`500 relation "admin_users" does not exist`, the admin dashboard was unusable
+locally, and **no migration added after that failure ever ran there** (migration 13
+had applied to `AsianTaste_Dev` and never to `AsianTaste`).
 
-**Cause.** `AsianTaste` is half-migrated from an interrupted run, not a schema
-fault. `01_create_schema.sql` creates `customer_payment_methods` with a
-`customer_id` referencing `customers(id)`; a run that died between those two
-statements leaves the table present-but-wrong, and `CREATE TABLE IF NOT EXISTS`
-succeeds forever after without fixing it. The API starting anyway rather than
-becoming a restart loop is right for production and confusing locally.
+**It cost two wrong conclusions, which is why it is written down.** One
+diagnostic run tested `AsianTaste_Dev`, found it healthy, and reported the bug
+"already healed" — true for that database, wrong for the one a plain `dotnet run`
+actually reached. `/health/db` answers `{"status":"healthy","menuItems":82}` on
+both, so a clean bill of health on the menu is not evidence the schema is sound.
+**Check the database name, not the schema, when a local table is "missing".**
 
-**Not the same as production.** `/health/db` returns
-`{"status":"healthy","menuItems":82}` on both, so the menu tells you nothing about
-whether the admin tables exist. A clean bill of health on 82 items is not evidence
-the database is sound.
+**What changed.**
 
-**Fix.** Drop and recreate `AsianTaste`, then let the API migrate it from empty.
-Do **not** try to patch the half-migrated one. Simplest route is to stop using the
-extra database entirely — point `appsettings.Development.json` at the same
-database you run against, or recreate `AsianTaste` and delete `AsianTaste_Dev`, so
-there is one local database and no way to test the wrong one.
+- `AsianTaste` was dropped. It held no real data — 0 orders, 0 order items, only
+  the 82 seeded dishes, which `02_seed_data.sql` recreates.
+- `appsettings.json` now points at **the same database as
+  `appsettings.Development.json`** (`AsianTaste_Dev`), so there is no wrong
+  database left to reach by accident. Production is unaffected: `fly.toml` sets
+  `ASPNETCORE_ENVIRONMENT=production` and the real connection string is the Neon
+  secret.
+- Two junk `probe_tmp*` tables dropped from `AsianTaste_Dev`.
+- `README.md` and `AGENTS.md` now pass `ASPNETCORE_ENVIRONMENT=Development`
+  explicitly, because the old instructions were what led you into the trap.
 
-**How to verify a migration properly.** Never against either local database. Bring
-up a throwaway Postgres, point `ConnectionStrings__DefaultConnection` at it, boot
-once, then **boot a second time and compare row counts** — a seed that appends on
-every start is this repo's oldest bug (`02_seed_data.sql` once duplicated all 82
-dishes, and migration 13's dedupe guards exist for the same reason). Remove the
-container afterwards.
+**Verified:** a plain `dotnet run` now returns `401` on a bad login rather than
+`500`, a real login returns `200`, and the pho returns all four option groups.
+
+**How to verify a migration.** Still not against a local database — bring up a
+throwaway Postgres, point `ConnectionStrings__DefaultConnection` at it, boot once,
+then **boot a second time and compare row counts**. A seed that appends on every
+start is this repo's oldest bug (`02_seed_data.sql` once duplicated all 82 dishes,
+which is why migration 13 has dedupe guards). Remove the container afterwards.
 
 ## Verifying anything
 

@@ -24,8 +24,11 @@ Production: customer app on Vercel, API on Fly (`asian-taste-api.fly.dev`, regio
 
 ```bash
 dotnet test                                     # API suite; floor is .test-baseline (117)
-dotnet run                                      # from src/AsianTaste.API, must be on :5070
+ASPNETCORE_ENVIRONMENT=Development dotnet run   # from src/AsianTaste.API, must be on :5070
                                                 # both apps' Vite dev proxy points at :5070
+                                                # the env var is required locally — without it
+                                                # the API used to reach a different database
+                                                # that had no admin tables and 500'd on login
 
 cd src/asian-taste-customer && npm run dev      # :5173
 cd src/asian-taste-admin    && npm run dev      # :5174
