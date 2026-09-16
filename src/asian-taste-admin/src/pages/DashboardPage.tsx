@@ -9,19 +9,23 @@ import { apiStatusValue, nextStatus, serviceLabel, statusKey, type StatusKey } f
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 
-/** The four columns of the kitchen board, and what "advance" means in each. */
+/**
+ * The kitchen board, in the order the food moves.
+ *
+ * Three columns, because there are three states: an order waiting to be
+ * accepted, one being cooked, and one waiting to be collected. "Confirmed" and
+ * "Preparing" used to be separate columns — they are the same moment, so the
+ * second was always empty.
+ */
 const COLUMNS: Array<{ key: StatusKey; title: string; hint: string }> = [
   { key: "placed", title: "New", hint: "Accept or reject" },
-  { key: "confirmed", title: "Confirmed", hint: "Waiting on the wok" },
-  { key: "preparing", title: "Preparing", hint: "Cooking now" },
-  { key: "ready", title: "Ready & out", hint: "Hand over or dispatch" },
+  { key: "confirmed", title: "Cooking", hint: "Accepted — on the wok" },
+  { key: "ready", title: "Ready", hint: "Waiting to be collected" },
 ]
 
 const ADVANCE_LABEL: Partial<Record<StatusKey, string>> = {
   placed: "Accept",
-  confirmed: "Start cooking",
-  preparing: "Mark ready",
-  ready: "Send out",
+  confirmed: "Mark ready",
 }
 
 /** Matches the customer-side accent budget: one loud thing per screen. */
@@ -97,24 +101,17 @@ export function DashboardPage() {
     refetchInterval: 30_000,
   })
 
-  const active = orders.filter((o) => {
-    const k = statusKey(o.status)
-    return k !== "completed" && k !== "cancelled"
-  })
+  const active = orders.filter((o) => statusKey(o.status) !== "cancelled")
 
+  // Oldest first in every column: the next thing to do is always at the top.
   const inColumn = (key: StatusKey) =>
     orders
-      .filter((o) => {
-        const k = statusKey(o.status)
-        if (key === "ready") return k === "ready" || k === "delivery"
-        return k === key
-      })
+      .filter((o) => statusKey(o.status) === key)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
-  const revenueToday = orders
-    .filter((o) => statusKey(o.status) === "completed")
-    .reduce((sum, o) => sum + o.total, 0)
-
+  // Ready is the terminal state for pickup, so it is what "done today" means.
+  const readyToday = orders.filter((o) => statusKey(o.status) === "ready")
+  const revenueToday = readyToday.reduce((sum, o) => sum + o.total, 0)
   const cancelledToday = orders.filter((o) => statusKey(o.status) === "cancelled").length
 
   return (
@@ -142,8 +139,8 @@ export function DashboardPage() {
             <p className="stat-delta down">over {URGENT_MINUTES} min on the board</p>
           </div>
           <div className="stat-card">
-            <p className="stat-k">Completed today</p>
-            <p className="stat-v">{orders.filter((o) => statusKey(o.status) === "completed").length}</p>
+            <p className="stat-k">Ready today</p>
+            <p className="stat-v">{readyToday.length}</p>
             <p className="stat-delta down">{cancelledToday} cancelled</p>
           </div>
           <div className="stat-card">

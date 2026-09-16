@@ -161,7 +161,15 @@ public class DatabaseInitializationService : IDatabaseInitializationService
         var naturalKeysSql = await GetMigrationScriptAsync("12_add_natural_key_indexes.sql");
         await ExecuteScriptAsync(naturalKeysSql, cancellationToken);
 
-        // 7. Seed the admin user, once every script that touches admin_users has
+        // 7. Seed the printed option groups. Runs AFTER the menu is seeded (the
+        //    groups are attached per dish by name, so the dishes must exist) and
+        //    after step 6, because it creates the unique index its own ON CONFLICT
+        //    guards need — without that index the guards cannot fire and every
+        //    restart would duplicate all four groups across all 82 dishes.
+        var optionGroupsSql = await GetMigrationScriptAsync("13_seed_modifier_groups.sql");
+        await ExecuteScriptAsync(optionGroupsSql, cancellationToken);
+
+        // 8. Seed the admin user, once every script that touches admin_users has
         //    run. Only when no admin row exists: this creates the documented default
         //    account, and recreating it unconditionally would undo an operator
         //    deleting it. (A database with NO admin at all is unusable, so that case

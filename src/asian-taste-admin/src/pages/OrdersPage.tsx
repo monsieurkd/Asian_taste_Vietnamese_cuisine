@@ -56,11 +56,7 @@ export function OrdersPage() {
     const q = query.trim().toLowerCase()
     return orders.filter((order) => {
       const key = statusKey(order.status)
-      if (status !== "all" && key !== status) {
-        // "Ready" also covers an order already out for delivery — staff looking
-        // for a handover do not care which side of it the driver is on.
-        if (!(status === "ready" && key === "delivery")) return false
-      }
+      if (status !== "all" && key !== status) return false
       if (service !== "all" && order.orderType.toLowerCase() !== service) return false
       if (q) {
         const hay = `${order.orderNumber} ${order.customerName} ${order.customerPhone}`.toLowerCase()

@@ -5,22 +5,23 @@ Everything I could do without you is done. This is what's left, ordered so that
 each item unblocks the next. Every item says what I need from you, or which
 decision I've made for now and how to change it.
 
-**Where things stand:** the API, database, customer site **and admin dashboard**
-are live and working, and **both front-ends have been rebuilt** against the
-ratified design set in `docs/DESIGN/mockups/` (see §11 for what changed and the
-six things that need you).
+**Where things stand:** the API, database, customer site and admin dashboard are
+live. **v1 is card + Apple Pay, pickup only** — Lightspeed is deferred and does
+not interfere. The design set has been rebuilt into both front-ends (§11).
 
 **What needs you, in this order:**
 
 | # | Item | Effort | Why it matters |
 |---|---|---|---|
-| **2** | Turn off the extra payment methods | ~2 min in Stripe | **Klarna, Zip and Link would be offered to customers today.** Do this before taking real orders |
-| **3** | Buy a domain, enable Google Pay | ~$15/yr | The only thing standing between you and Apple Pay |
+| **2** | Turn off Klarna, Zip and Link; turn on Google Pay | ~2 min in Stripe | **They would be offered to customers today.** Anything switched on in the dashboard appears at checkout with no review |
+| **3** | Buy a domain (cheap path in §3) | ~$15/yr | The only thing between you and Apple Pay. A `*.vercel.app` host cannot be registered |
+| **4** | Switch Stripe to live, using the checklist | ~15 min + ~50¢ | Prove it works with one real order, then refund it |
 | **6** | Decide admin-dashboard exposure | a decision | It is a public URL with a login page |
-| **7** | Talk to the owner about Lightspeed | a conversation | The last POS blocker |
-| **4** | Switch Stripe to live keys | ~10 min | Only when you want real money — and only after item 2 |
-| **12** | Try Paseo from your phone | ~5 min | Free; your laptop is the sandbox. Nothing is switched on until you say so |
-| **13** | Confirm the phone number, hours, delivery fee and cash option | ~5 min | The rebuilt UI shows a decision on each; four small confirmations close them out |
+| **7** | Nudge the owner about Lightspeed | one message | A week of silence. Draft message in item 7 — nothing is blocked either way |
+| **12** | Try Paseo from your phone | ~5 min | Free; your laptop is the sandbox |
+
+**Settled on 2026-09-16** (was four open questions): phone, hours, delivery and the
+cash option are all answered and applied — §10.
 
 ---
 
@@ -134,7 +135,8 @@ checks and the nightly UI loop **cannot detect an Apple Pay regression** — a
 passing UI loop is not evidence it works. Verification has to be a manual pass on
 a real iPhone or Mac.
 
-Full detail: `docs/research/apple-pay/PLAN.md`.
+Full detail: `docs/research/apple-pay/PLAN.md`. **Cheap-domain options and the
+step-by-step migration are in `docs/research/domain/PLAN.md`.**
 
 ---
 
@@ -146,6 +148,11 @@ a card order goes through real Stripe in test mode.
 
 **Do item 2 first.** Switching to live while Klarna, Zip and Link are enabled
 means real customers can pay in ways the till cannot reconcile.
+
+**The checklist to actually follow is `docs/research/stripe/GO-LIVE-CHECKLIST.md`**
+— it proves the webhook before charging anyone, then spends about 50¢ on one real
+order and refunds it. That order of operations matters: a webhook signing-secret
+mismatch charges the customer while the order stays `Pending` and nothing errors.
 
 ### You are not "wasting money" by testing
 
@@ -358,15 +365,18 @@ The admin dashboard is the kitchen's view; the POS push simply stays queued.
   *reachable* (item in "not yet done" below).
 - When credentials do arrive, orders queued in the meantime can be requeued.
 
-**What I need you to ask the owner:**
+**What to ask the owner — full detail in `docs/research/lightspeed/PLAN.md`.**
+Short version, and note the product names were corrected after checking:
 
-1. **Which Lightspeed product is it — Retail or Restaurant?** They have different
-   order APIs and different account IDs. The code assumes Lightning/Retail-style
-   `Order` endpoints.
-2. **Does Lightspeed expose an API on their plan?** Some tiers don't, and that
-   would settle it: POS sync stays off, the tablet stays the kitchen's view.
-3. **Who owns the Lightspeed account credentials?** You'll need someone who can
-   authorise an app against it.
+1. **Which Lightspeed product is on the invoice — Retail or Restaurant?** (Vend =
+   X-Series, ShopKeep = S-Series, **Kounta = O-Series**, iKentoo-lineage =
+   K-Series, Retail = R-Series. An earlier note in this file said Kounta was
+   K-Series; that was wrong.)
+2. **Is API access included on their plan, or does it need an upgrade — and is
+   partner approval required?** Ask Lightspeed sales. There is **no published API
+   pricing**, and Restaurant K-Series is partner-approval-gated.
+3. **Who can authorise an app against the account?** It must be the account owner,
+   in a browser.
 
 **When you have them:**
 
@@ -449,105 +459,91 @@ The order below is by how much it would bite, not by effort.
    orders is commercial use. Parked for now.
 9. **Order-creation rate limiting.** Only the global 100 req/min applies. Fine
    now.
+10. **Reports and analysis** — the owner wants this later, for looking at trends
+    rather than day-to-day. The old admin Reports page was removed with the UI
+    rebuild because it showed mock numbers; a real one needs a reporting endpoint
+    behind it. Far down the line, deliberately.
+11. **Menu editing in the admin app** — the owner's next real ask after v1: the
+    printed menu stays the source of truth, but he wants to change a price without
+    waiting for a deploy. The admin API exists; the UI does not.
+12. **The delivery pipeline** — the UI offers restaurant delivery marked "subject
+    to availability". How it is actually fulfilled (own driver, or Uber Eats only)
+    is undecided, so nothing completes a delivery order yet.
 
 ---
 
-## 10. Questions still open
+## 10. Decisions made on 2026-09-16 — v1 scope
 
-Only the ones still unanswered. The rest moved into the decisions table.
+The owner answered the open questions. What follows is the current scope, not a
+proposal. The questions as they were asked are archived in
+`docs/archive/answered-questions/2026-09-16-owner-answers.md`.
 
-- **Does Lightspeed expose an API on the restaurant's plan?** This is the one that
-  decides whether item 7 is a week of work or a non-starter. Ask alongside which
-  product it is.
-- **Are there existing menu photos?** The menu renders without images by design —
-  the only files in the repo are photos of a printed menu board, which would
-  mislead customers. Real dish photography is the single biggest visual
-  improvement available, and it's a photography job rather than a code one.
-- **Is the printed menu the source of truth for prices?** The seed has 82 items at
-  the prices in `Menu.md`. If the board differs, the board wins and the seed needs
-  updating.
-- **Who changes prices once it's live?** Today it needs a deploy. This decides how
-  urgent menu editing becomes.
+### v1 is: card + Apple Pay, **pickup only**
 
-### Added during the UI port (2026-09-15) — decisions I made, and what needs you
+**Lightspeed is deferred and must not interfere with the product.** The integration
+stays written and deployed but does nothing; orders reach the kitchen through the
+admin dashboard. What to ask the owner, and what each answer would cost, is in
+`docs/research/lightspeed/PLAN.md`.
 
-The front-ends were rebuilt against the ratified design set in
-`docs/DESIGN/mockups/`. Everything below is a place where the design set and the
-live system genuinely disagreed. **I picked the option that keeps the app honest
-and reversible; none of it is settled fact.**
+### The four services, as they now appear
 
-1. **Dine-in is not offered, because the API cannot accept it.** *(needs you)*
-   The mockups draw three services (delivery / pickup / dine in) but the API's
-   `OrderType` has two values — `Delivery` and `Pickup` — and the live marketplace
-   listing is delivery-only. I shipped **two** buttons rather than a third that
-   would fail at checkout or write an order type the kitchen cannot receipt.
-   *If the restaurant does dine in*, this needs an API enum value plus a table
-   number field, and then the button is a 10-minute change. `HANDOFF.md` §10
-   item 3 raises the same question.
+1. **Pickup — first option and the default.** The only service that completes
+   online in v1.
+2. **Restaurant delivery** — shown, marked **subject to availability**, and it
+   carries an additional charge. The UI is built; the order pipeline is not, so
+   it does not complete a checkout yet.
+3. **Uber Eats** — a link out to the restaurant's listing, not an order path here.
+   `https://www.ubereats.com/au/store/asian-taste/h_fV3HtmRTqW6In7OlIKWA`
 
-2. **The order tracker shows 5 stages, not the mockups' 6.** *(decision,
-   reversible)* The design set draws `placed → confirmed → preparing → ready →
-   out for delivery → completed`. The API stores six statuses and has no
-   separate "out for delivery". I mapped the fifth stage onto `Ready` so the
-   customer never sees progress the backend did not record. *To change it*, add
-   the status to the API and the extra stage appears.
-   The admin console still *shows* the sixth column ("Ready & out" merges ready +
-   delivery) because that is where the handover actually happens.
+**The delivery fee question is settled by the same answer:** no fee is charged
+online, because the API still has no field to record one. See §11.
 
-3. **The 82 dishes now carry their printed option groups.** *(decision — worth a
-   look)* `modifier_groups` is a stub: `AdminMenuController` returns an empty
-   list with a `// TODO: Add IMenuRepository.GetAllModifierGroupsAsync`, and the
-   seed has no modifier rows, so **every dish answered `0 option groups`**. The
-   ordering flow in the mockups is built entirely around those choices.
-   I transcribed the choices the paper menu actually prints (protein, cooking
-   method, rice type, the 1–5 heat scale) from `docs/DESIGN/source/Menu.md` into
-   `src/lib/menuModel.ts`, matched by dish name. The API's own groups win the
-   moment they exist — the adapter prefers them.
-   *What this means for you:* the options are real menu content, not invention,
-   but a choice's `delta` (e.g. Combo pho +$1.00) is **displayed** and is **not
-   yet sent to the API**, because there is nowhere to send it. If a customer
-   picks a paid option today the kitchen sees it in the ticket notes and the
-   price the API charges is the base price. The real fix is seeding the modifier
-   tables. Flagged rather than hidden.
+### The status lifecycle, simplified
 
-4. **Seven of the 82 dishes have a photo; the other 75 render the woven
-   placeholder.** *(correct behaviour, no action)* `menu_items.image_url` is NULL
-   for all 82 — migration `10_clear_unverified_dish_images.sql` cleared it. The
-   seven photos now live in `src/asian-taste-customer/public/dishes/` and the
-   rest fall back honestly. **Three pairings are inferred from item names and
-   have never been confirmed by eye** (`pad-thai`, `combination-noodle-bowl-salad`,
-   `crispy-pork-noodle-bowl-salad`) — a human should look. Correcting one is a
-   data edit in `src/lib/dishPhotos.ts`, not a code change.
+`Placed → Confirmed → Preparing → Ready`, then `Cancelled`.
 
-5. **Reports and Settings were removed from the admin app.** *(decision)* No
-   mockup covers them and neither had real content — Reports was mock analytics
-   and Settings had no API behind it. A screen with invented numbers is worse
-   than no screen. The routes are gone; nothing else referenced them.
+- **Confirmed and Preparing are one state.** Once the restaurant confirms, the
+  food is being made — so there is no separate "Preparing" button to press. The
+  admin console shows it as one stage.
+- **"Out for delivery" is removed** (no delivery in v1) **and so is "Completed"**
+  — for pickup, `Ready` is the end of the story.
 
-6. **The real phone number and trading hours are now in the app, and I need you
-   to confirm them.** *(needs you)* The footer used to carry `123 Main Street`,
-   invented hours and a Sydney `(02)` number. I replaced them with the shop's own
-   published details: `329 Henley Beach Rd, Brooklyn Park SA 5032`,
-   **`08 8298 8200`**, `orders@asiantaste.com.au`, and Mon–Tue 10:00–2:30 /
-   Wed–Sun 10:00–8:50. The address matches the database and the menu flyer; the
-   phone and hours came from the Uber Eats listing. **Please confirm the phone
-   number and hours** — they are the two facts a first-time customer checks, and
-   `docs/DESIGN/BRIEF.md` §"What we need from the owner" flags both as owner
-   input that was never recorded. One place to change them:
-   `src/asian-taste-customer/src/lib/site.ts`.
+### Add-ons, and where they live
 
-7. **Delivery is selectable, but the database says delivery is off.**
-   *(needs you)* `restaurant_settings.enable_delivery` is **`false`** and
-   `enable_pickup` is `true` (migration 09: *"delivery not offered at launch"*),
-   yet the ordering flow offers delivery at a $5.00 fee that the API does not
-   charge and nothing enforces. I kept both buttons because the design set and
-   the marketplace listing both show delivery, but **the setting and the UI
-   disagree**. Tell me which is true and I will either remove the button or flip
-   the setting.
+Every dish gets the same base groups: **spice level**, **allergy**, **combo**, and
+a **multi-select extras** group — extra protein +$4, extra soup +$3, extra
+rice/noodle +$2, extra sauce +$2. Extras can be picked together.
 
-8. **Stripe payment methods are still the ones the dashboard has on.**
-   *(no action, cross-reference)* Unchanged by this port — see item 2 above for
-   the Klarna / Zip / Link list that needs switching off before live keys.
+**The surcharge applies only where the printed menu already charges for it**, so a
+dish that gets rice included does not silently become $2 dearer. The group is still
+*shown* so the choice reaches the kitchen.
+
+The schema is built so the owner can add per-dish options later without a schema
+change — see the migration in `src/AsianTaste.API/Data/Migrations/`.
+
+### Real store details, now in the app
+
+| | |
+|---|---|
+| Phone | **08 8234 8232** |
+| Hours | Wednesday–Sunday 10am–4pm, 4:30–9pm · Monday 10am–2:30pm · **Tuesday 10am–4pm, 4:30–9pm** |
+| Rating | **4.6 from 435 reviews** (Google) |
+
+Note the shape: the kitchen closes and reopens for the dinner service, so the
+"open now" logic has **two windows per day**, not one. Monday is lunch only.
+Tuesday is a full day. One source: `src/asian-taste-customer/src/lib/site.ts`.
+
+### Still genuinely open
+
+- **Menu editing in the admin app.** The printed menu is the source of truth and
+  the seed matches it, but the owner wants to change prices himself rather than
+  wait for a deploy. Not built. Ranked in §9.
+- **The delivery pipeline.** The UI says "subject to availability"; nothing
+  enforces or fulfils it. Needs a decision on how delivery is actually offered —
+  own driver, or via Uber Eats only.
+- ~~Dish photos~~ — the owner is supplying them. The 7 published photos stay;
+  the rest keep the woven placeholder, which is correct until real files arrive.
+- **Reports** — moved to §9 as later work.
 
 ## 11. The UI rebuild — what changed, and how to check it
 
@@ -585,43 +581,21 @@ Screens were rendered headlessly at **390 / 768 / 1280** and checked for
 horizontal scroll and console errors: **18/18 clean**. The menu renders 82 dishes
 across 14 sections with 7 photos and 75 woven placeholders.
 
-### Six things that need you (detail in §10)
+### The questions this section used to list
 
-1. **Is the phone number `08 8298 8200` and are the hours right?** They came from
-   the Uber Eats listing and are now on every page. `lib/site.ts`, one file.
-2. **Does the restaurant do dine in?** The mockups draw it; the API's `OrderType`
-   has no such value, so there are two service buttons, not three.
-3. **Is delivery actually offered?** `restaurant_settings.enable_delivery` is
-   `false` in the database, but the UI shows a delivery option with a $5 fee the
-   API does not charge. The setting and the screen disagree — tell me which wins.
-4. **Two of the seven dish photos need a human eye.** They were matched by name,
-   never looked at: pad-thai and the two noodle-bowl salads.
-5. **No delivery fee is charged online — is that right?** *(needs you)* The shop's
-   API records an order's total from its item prices alone: `CreateOrderRequestDto`
-   has no fee field, so anything added at the checkout would be charged to the
-   card while the order, the receipt and `PaidAmount` all recorded less. Rather
-   than collect money the shop's own records disagree with, the online total is
-   the subtotal and delivery is offered at no charge. **If the $5 fee is meant to
-   apply, the API needs a fee field first** — say the word and that becomes the
-   next piece of work, with the fee appearing in the UI the moment it can be
-   recorded. The services and their facts live in
-   `src/asian-taste-customer/src/lib/site.ts`.
-6. **Cash on pickup can no longer be chosen online.** *(needs you)* The old
-   checkout offered "pay at the counter"; the ratified design set's payment step
-   is card and wallet only, so that option is gone. Cash still works in store —
-   it just is not selectable on the website now. Tell me if you want it back and
-   it is a small addition to the payment step.
+They were answered on 2026-09-16 and are now settled in §10: the phone number and
+hours, the delivery and cash questions, and the option groups. The version of this
+section as it was written is archived in
+`docs/archive/answered-questions/2026-09-16-owner-answers.md`.
 
 ### One thing to know about the option groups
 
 `modifier_groups` is an empty stub on the API, so every dish answered "0 option
-groups" and the whole customisation flow the mockups are built around had
-nothing to render. The printed choices (protein, cooking method, rice, the 1–5
-spice scale) were transcribed from `docs/DESIGN/source/Menu.md` into
-`src/lib/menuModel.ts` and are shown, priced and sent as ticket notes. **A paid
-option's surcharge is displayed but not yet charged**, because there is nowhere
-in the API to send it — the real fix is seeding the modifier tables, and that is
-the next piece of work rather than a UI one.
+groups" and the whole customisation flow the mockups are built around had nothing
+to render. The printed choices are now modelled in `src/lib/menuModel.ts` and
+seeded in the database so the owner can add per-dish options later. **A paid
+option's surcharge is displayed and charged only where the printed menu charges
+for it** — see §10.
 
 ---
 
@@ -783,6 +757,73 @@ If you'd rather not see them flagged, `lightspeed_sync_status` can be set to
 that POS sync never happened.
 
 ---
+
+## Known trap: two local databases, and the broken one is the default
+
+**Read this before debugging a local "missing table" error. It is not one bug,
+it is two databases.**
+
+There are **two** local Postgres databases and they are in different states:
+
+| Database | Tables | `admin_users` | `customer_id` | Login |
+|---|---|---|---|---|
+| `AsianTaste` | 7 | **missing** | **missing** | **500** |
+| `AsianTaste_Dev` | 17 | present | present | **401** (correct) |
+
+Which one you get depends on the environment variable, and **the broken one is
+the default**:
+
+```bash
+# Production is the fallback when the variable is unset:
+#   appsettings.json        -> Database=AsianTaste       <- BROKEN
+dotnet run                       # 500 on login, admin tables missing
+
+#   appsettings.Development.json -> Database=AsianTaste_Dev  <- healthy
+ASPNETCORE_ENVIRONMENT=Development dotnet run    # works
+```
+
+Both point at `localhost:5432` with the same user, so nothing looks different
+until you hit an admin route. This has already caused one wrong conclusion, so
+check the database name first, not the schema.
+
+**The symptom on `AsianTaste`.** `dotnet run` logs, three times, then starts
+anyway:
+
+```
+Migration statement failed with SQLSTATE 42703: column "customer_id" does not exist
+Database initialization FAILED after 3 attempts. The API is starting WITHOUT a working database.
+```
+
+The menu still returns 82 items — that table is fine — but **every admin table is
+missing**: `/api/auth/login` returns `500 relation "admin_users" does not exist`,
+so the admin dashboard cannot be used locally, and **no migration added after the
+failure ever runs there** (migration 13 has applied to `AsianTaste_Dev` but not to
+`AsianTaste`).
+
+**Cause.** `AsianTaste` is half-migrated from an interrupted run, not a schema
+fault. `01_create_schema.sql` creates `customer_payment_methods` with a
+`customer_id` referencing `customers(id)`; a run that died between those two
+statements leaves the table present-but-wrong, and `CREATE TABLE IF NOT EXISTS`
+succeeds forever after without fixing it. The API starting anyway rather than
+becoming a restart loop is right for production and confusing locally.
+
+**Not the same as production.** `/health/db` returns
+`{"status":"healthy","menuItems":82}` on both, so the menu tells you nothing about
+whether the admin tables exist. A clean bill of health on 82 items is not evidence
+the database is sound.
+
+**Fix.** Drop and recreate `AsianTaste`, then let the API migrate it from empty.
+Do **not** try to patch the half-migrated one. Simplest route is to stop using the
+extra database entirely — point `appsettings.Development.json` at the same
+database you run against, or recreate `AsianTaste` and delete `AsianTaste_Dev`, so
+there is one local database and no way to test the wrong one.
+
+**How to verify a migration properly.** Never against either local database. Bring
+up a throwaway Postgres, point `ConnectionStrings__DefaultConnection` at it, boot
+once, then **boot a second time and compare row counts** — a seed that appends on
+every start is this repo's oldest bug (`02_seed_data.sql` once duplicated all 82
+dishes, and migration 13's dedupe guards exist for the same reason). Remove the
+container afterwards.
 
 ## Verifying anything
 

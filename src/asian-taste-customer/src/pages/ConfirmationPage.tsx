@@ -6,30 +6,12 @@ import { useCheckoutStore } from '@/stores/checkoutStore';
 import { useCartStore } from '@/stores/cartStore';
 import { useServiceStore } from '@/stores/serviceStore';
 import { SERVICES, SITE, money } from '@/lib/site';
-import type { OrderDetailResponse, OrderStatus } from '@/types/menu';
+import type { OrderDetailResponse } from '@/types/menu';
+import { isCancelled, STAGES, stageIndex } from '@/lib/orderLifecycle';
 import { Panel, PanelBody, PanelHead, RowLine, SumRow, Fact, Facts } from '@/components/ui/Panel';
 import { StateBlock } from '@/components/ui/State';
 import { StateIcons } from '@/components/ui/stateIcons';
 import { StatusPill } from '@/components/ui/Badge';
-
-/* ─── the six-stage vocabulary ──────────────────────────────────────────────
-   Canonical keys, shared with the staff console so the customer's tracker and
-   the kitchen's board are reading the same stages rather than two lookalike
-   lists that drift. */
-const STAGES: Array<{ key: string; label: string; statuses: OrderStatus[] }> = [
-  { key: 'placed', label: 'Placed', statuses: ['Pending'] },
-  { key: 'confirmed', label: 'Confirmed', statuses: ['Confirmed'] },
-  { key: 'preparing', label: 'Preparing', statuses: ['Preparing'] },
-  { key: 'ready', label: 'Ready', statuses: ['Ready'] },
-  { key: 'completed', label: 'Completed', statuses: ['Completed'] },
-];
-
-function stageIndex(status: OrderStatus | undefined): number {
-  if (!status) return 0;
-  if (status === 'Cancelled') return -1;
-  const index = STAGES.findIndex((s) => s.statuses.includes(status));
-  return index === -1 ? 0 : index;
-}
 
 function CheckMark() {
   return (
@@ -44,9 +26,10 @@ function CheckMark() {
  *
  * There is one job to do here and it is not to be pretty: the customer needs to
  * know the kitchen has the order, what number it is, and where it has got to.
- * The tracker advances from the API's own status, which is why it is 5 stages
- * rather than the design set's 6 — the API has no separate "out for delivery",
- * and inventing one would show progress the kitchen never recorded.
+ *
+ * Three stages, not the design set's six: v1 is pickup, the kitchen treats
+ * confirmed and preparing as one moment, and the journey ends at Ready. See
+ * lib/orderLifecycle.ts for why, and how older API values fold in.
  */
 export function ConfirmationPage() {
   const { orderNumber } = useParams<{ orderNumber: string }>();
@@ -215,7 +198,7 @@ export function ConfirmationPage() {
 
   const meta = SERVICES[service];
   const current = stageIndex(order.status);
-  const cancelled = order.status === 'Cancelled';
+  const cancelled = isCancelled(order.status);
   const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
@@ -286,7 +269,7 @@ export function ConfirmationPage() {
                       </span>
                       <div className="tl-body">
                         <strong>{stage.label}</strong>
-                        <p>{describeStage(stage.key, current, i)}</p>
+                        <p>{i <= current ? stage.description : 'Not yet.'}</p>
                       </div>
                     </li>
                   ))}
@@ -362,17 +345,4 @@ export function ConfirmationPage() {
       </section>
     </>
   );
-}
-
-/** One honest sentence per stage — no invented timestamps. */
-function describeStage(key: string, current: number, index: number): string {
-  const copy: Record<string, string> = {
-    placed: 'We have your order and your payment.',
-    confirmed: 'The kitchen has accepted it and started prep.',
-    preparing: 'Your dishes are being cooked fresh, right now.',
-    ready: 'Packed and waiting for the handover.',
-    completed: 'Thanks for eating with us.',
-  };
-  if (index > current) return 'Not yet.';
-  return copy[key] ?? '';
 }

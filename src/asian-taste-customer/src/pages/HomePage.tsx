@@ -88,8 +88,10 @@ export function HomePage() {
               alt="A spread of fresh Vietnamese dishes from the Asian Taste kitchen"
             />
             <div className="hero-stamp">
-              <strong>4.7 from the neighbourhood</strong>
-              <span>Brooklyn Park, Adelaide</span>
+              <strong>
+                {SITE.rating.score} from {SITE.rating.count} Google reviews
+              </strong>
+              <span>{SITE.suburb}, {SITE.city}</span>
             </div>
           </div>
         </div>

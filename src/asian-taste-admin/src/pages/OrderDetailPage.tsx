@@ -89,7 +89,7 @@ export function OrderDetailPage() {
 
   const key = statusKey(order.status)
   const currentIndex = STATUS_ORDER.indexOf(key)
-  const isClosed = key === "completed" || key === "cancelled"
+  const isClosed = key === "ready" || key === "cancelled"
 
   return (
     <>
@@ -168,7 +168,9 @@ export function OrderDetailPage() {
               </Button>
               <p className="meta" style={{ margin: 0 }}>
                 {isClosed
-                  ? "This order is closed."
+                  ? key === "cancelled"
+                    ? "This order was cancelled."
+                    : "Ready for collection — nothing further to do."
                   : `Next: ${STATUS_META[STATUS_ORDER[Math.min(STATUS_ORDER.length - 1, currentIndex + 1)]].label}.`}
               </p>
             </div>
