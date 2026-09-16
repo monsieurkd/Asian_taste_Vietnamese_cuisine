@@ -63,7 +63,7 @@ Source is ~11,000 lines across ~40 files. Cover the paths where a bug costs mone
   `AuthenticationTagMismatchException` derives from `CryptographicException`).
 - Prefer hand-written stubs implementing the repository/service interface over adding a mocking
   package. If you must add a package, it must be test-only and justified.
-- **Read the specification before the implementation** (`Asian_Taste_PRD.md`, XML docs, DTOs) so
+- **Read the specification before the implementation** (`docs/archive/ASIAN_TASTE_PRD_superseded.md`, XML docs, DTOs) so
   you test what the code *should* do, not what it happens to do.
 
 ## The mutation check (mandatory)
@@ -95,7 +95,7 @@ If you add tests, **raise the number in `.test-baseline` in the same commit** â€
 suite growing is fine but the floor silently drifts. If you remove a test, lower the baseline in
 a separate, explained commit.
 
-## Output: update `CI_TEST_REPORT.md`
+## Output: update `docs/archive/CI_TEST_REPORT_artifact.md`
 
 Append a dated section:
 

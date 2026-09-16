@@ -3,9 +3,10 @@
 This repo runs three guardrails on every push and pull request. They exist because the
 project has already shipped two failures that a normal green build did not catch:
 
-1. **Fake coverage** — `src/asian-taste-customer/tests/e2e/checkout.spec.ts` was a tracked
-   Playwright suite with no runner installed and no matching selectors. It read as "checkout
-   is e2e tested" and tested nothing.
+1. **Fake coverage** — a tracked Playwright suite at
+   `src/asian-taste-customer/tests/e2e/checkout.spec.ts` with no runner installed and no
+   matching selectors. It read as "checkout is e2e tested" and tested nothing. *The spec
+   was later deleted, not repaired; the guardrail is what remains of it.*
 2. **Silent status-update failure** — `UpdateOrderStatusAsync` assigned text to a PostgreSQL
    enum column. The webhook reported `"Invalid signature"` while the real cause was a SQL
    type error, so the symptom pointed at the wrong subsystem.
@@ -91,7 +92,7 @@ A guardrail that silently passes is worse than none. All three:
 - **assert their own preconditions** (expected paths must exist), so a moved file fails loudly
   instead of printing a false "all clear";
 - **have been proven RED on a real violation**, and GREEN after the fix — see the negative
-  controls in `CI_TEST_REPORT.md`.
+  controls in `docs/archive/CI_TEST_REPORT_artifact.md`.
 
 Every guardrail has also been tested against a synthetic violation:
 

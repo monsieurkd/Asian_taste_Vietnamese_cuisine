@@ -7,9 +7,14 @@ Online ordering platform for Asian Taste Vietnamese Restaurant
 - **Admin dashboard** — live orders, order management, menu management, reports
 - **API** — ASP.NET Core + PostgreSQL, Stripe payments, optional Lightspeed POS sync
 
-See [`Asian_Taste_PRD.md`](Asian_Taste_PRD.md) for full product requirements,
-[`MAJOR_UPDATE_PLAN.md`](MAJOR_UPDATE_PLAN.md) for the roadmap, and
-[`docs/SESSION_NOTES.md`](docs/SESSION_NOTES.md) for the current state and what's next.
+**Start with [`docs/TODO.md`](docs/TODO.md)** — the live list: what's outstanding, the
+decisions taken, and how to reverse each one. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+explains how the parts fit together.
+
+Everything else that describes the project is history, not current state, and lives in
+[`docs/archive/`](docs/archive/README.md) — the superseded PRD and update plan, an
+out-of-date progress tracker, and one generated CI report. [`docs/SESSION_NOTES.md`](docs/SESSION_NOTES.md)
+is a dated session log with its stale claims flagged inline.
 
 **Running it:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) explains how the
 whole system fits together — what runs where, how a push reaches production, and

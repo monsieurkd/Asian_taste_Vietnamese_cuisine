@@ -1,5 +1,10 @@
 # CI & Test Report — guardrail for unreachable tests
 
+> ⚠️ **HISTORICAL — generated output, not a living document.** A record of one CI
+> run, written by the `ci-test-guardian` / `test-author` skills (which now append
+> here rather than to the repo root). **For current state, read
+> [`../TODO.md`](../TODO.md).** See [`README.md`](README.md).
+
 **Scope:** point `ci-test-guardian` at `src/asian-taste-customer/tests/e2e/checkout.spec.ts`,
 add a guardrail so the defect class cannot return, and verify the fix.
 

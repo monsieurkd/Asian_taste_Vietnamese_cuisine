@@ -1,5 +1,11 @@
 # Asian Taste - Current Progress
 
+> ⚠️ **HISTORICAL — stale, do not act on this.** Last updated 2026-02-25, roughly
+> seven months before this project's current state, and wrong about several things
+> (it lists order confirmation as "Not Started" when it was built and tested). It
+> was never "reconciled" — it was replaced. **For current state, read
+> [`../TODO.md`](../TODO.md).** See [`README.md`](README.md) for why this was archived.
+
 > **Last Updated**: 2026-02-25 (Stripe Payment Integration Complete)
 > **Purpose**: LLM-readable progress tracker for seamless context transfer
 
@@ -761,7 +767,7 @@ src/asian-taste-admin/vite.config.ts
 src/asian-taste-admin/src/App.tsx
 
 # PRD (Reference)
-Asian_Taste_PRD.md                         # Full project requirements
+docs/archive/ASIAN_TASTE_PRD_superseded.md    # Full project requirements
 ```
 
 ---
@@ -981,7 +987,7 @@ fix/*        - Bug fixes
 1. **Order creation is working** - POST /api/orders creates orders successfully
 2. **Enum mapping fixed** - PostgreSQL enums cast to text in SQL queries to avoid Npgsql mapping issues
 3. **Transaction handling fixed** - Proper commit/rollback flow in OrderRepository.CreateOrderAsync
-4. **Follow PRD structure** - See [Asian_Taste_PRD.md](Asian_Taste_PRD.md)
+4. **Follow PRD structure** - See [ASIAN_TASTE_PRD_superseded.md](ASIAN_TASTE_PRD_superseded.md)
 5. **Use PostgreSQL, not SQL Server** - Connection string format differs
 6. **Dapper, not EF Core** - Use raw SQL, micro-ORM approach
 7. **Mobile-first design** - Customer app prioritizes mobile UX

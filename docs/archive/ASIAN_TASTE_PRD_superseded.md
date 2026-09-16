@@ -1,5 +1,11 @@
 # Asian Taste Online Ordering System - PRD
 
+> ⚠️ **HISTORICAL — superseded, do not act on this.** Archived from the repo root
+> during the Sep 2026 cleanup. The built system moved past several of its
+> assumptions. Two facts here are still used and live nowhere else: the venue
+> address, and that the POS is Lightspeed K-Series. **For current state, read
+> [`../TODO.md`](../TODO.md).** See [`README.md`](README.md) for why this was archived.
+
 > **Purpose**: This document is structured for LLM consumption to generate development tasks and implementation plans.
 
 ---

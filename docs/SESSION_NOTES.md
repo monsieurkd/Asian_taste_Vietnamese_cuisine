@@ -359,7 +359,7 @@ without them — only the live verification needs credentials.
 ### 2. Small housekeeping (Phase A leftovers)
 
 - **A5** — no `Makefile` / run script.
-- **A7** — `CurrentProgress.md` is stale (still says order confirmation is "Not Started"; it's built and tested).
+- ~~A7~~ — `CurrentProgress.md` was stale (said order confirmation was "Not Started" when it was built and tested). **Resolved by retiring it to `docs/archive/CURRENT_PROGRESS_stale.md` rather than reconciling it** — the file was a year out of date and `docs/TODO.md` had already replaced it as the live list.
 - ~~A8 lint debt~~ — **done**
 - ~~A9 port inconsistency~~ — **done**
 

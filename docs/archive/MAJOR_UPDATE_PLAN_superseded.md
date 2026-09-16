@@ -1,5 +1,11 @@
 # Asian Taste — Major Update Plan
 
+> ⚠️ **HISTORICAL — superseded, do not act on this.** Archived from the repo root
+> during the Sep 2026 cleanup. Most of its plan was executed and absorbed into
+> `../TODO.md` and `../DEPLOYMENT.md`. Still worth reading for the Adelaide market
+> research in sections 1–2, which is not recorded elsewhere. **For current state,
+> read [`../TODO.md`](../TODO.md).** See [`README.md`](README.md).
+
 > **Created**: 2026-09-10
 > **Focus**: (1) Get the app running smoothly, (2) localise for Adelaide, South Australia, (3) compete with third-party delivery platforms.
 > **Status**: Proposed — awaiting approval before implementation.

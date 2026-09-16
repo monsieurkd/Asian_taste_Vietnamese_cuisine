@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Design tokens · Asian Taste design set</title>
+  <meta name="description" content="Palette, type scale, spacing and the shared component sheet for the Asian Taste ordering experience." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+</head>
+<body data-page="states">
+  <div id="site-chrome"></div>
+
+  <main id="content" class="container section" data-od-id="tokens">
+    <div class="pagehead">
+      <nav class="breadcrumb" aria-label="Breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span aria-current="page">Design tokens</span></nav>
+      <p class="eyebrow eyebrow-gold" style="margin-top:16px">Foundations</p>
+      <h1>Tokens &amp; components</h1>
+      <p class="lead">Everything on every screen comes from this page — the cream paper, the maroon that means “do this”, Plus Jakarta for the story, Manrope for the software. Change a token here and the whole set follows.</p>
+    </div>
+
+    <section class="stack" data-od-id="tokens-colour">
+      <div class="head"><div class="head-copy"><p class="eyebrow eyebrow-gold">01</p><h2>Colour</h2><p class="lead">One warm cream base, one dark ink, one maroon accent. The cream paper and the hairline share a single tone — the hairline doubles as the recessed fill for photo wells and quiet bands. Gold, red, green and orange are reserved for meaning, never decoration.</p></div></div>
+      <div class="sw-grid">
+        <div class="swatch"><div class="sw-color" style="background:var(--bg)"></div><div class="sw-meta"><strong>Cream paper</strong><code>--bg · #F5F0E6</code></div></div>
+        <div class="swatch"><div class="sw-color" style="background:var(--surface)"></div><div class="sw-meta"><strong>Surface</strong><code>--surface · #FFFFFF</code></div></div>
+        <div class="swatch"><div class="sw-color" style="background:var(--fg)"></div><div class="sw-meta"><strong>Ink</strong><code>--fg · #3C2A21</code></div></div>
+        <div class="swatch"><div class="sw-color" style="background:var(--border)"></div><div class="sw-meta"><strong>Hairline · well fill</strong><code>--border · #E8DCC8</code></div></div>
+        <div class="swatch"><div class="sw-color" style="background:var(--accent)"></div><div class="sw-meta"><strong>Maroon · action</strong><code>--accent · #8B3A3A</code></div></div>
+        <div class="swatch"><div class="sw-color" style="background:var(--gold)"></div><div class="sw-meta"><strong>Gold · accent</strong><code>--gold · #D4AF37</code></div></div>
+        <div class="swatch"><div class="sw-color" style="background:var(--deal)"></div><div class="sw-meta"><strong>Deal red</strong><code>--deal · #C30139</code></div></div>
+        <div class="swatch"><div class="sw-color" style="background:var(--spicy)"></div><div class="sw-meta"><strong>Spicy</strong><code>--spicy · #FF5722</code></div></div>
+        <div class="swatch"><div class="sw-color" style="background:var(--gf)"></div><div class="sw-meta"><strong>GF / Vegan</strong><code>--gf · #4CAF50</code></div></div>
+        <div class="swatch"><div class="sw-color" style="background:var(--muted)"></div><div class="sw-meta"><strong>Muted text</strong><code>--muted · mix 66%</code></div></div>
+      </div>
+      <div class="panel"><div class="panel-body"><strong>How to use the accent</strong><p class="meta" style="margin:6px 0 0">Maroon is the “do this” colour: primary buttons, prices, the active tab, the current step. It appears at most twice in one viewport. Gold is brand warmth — stamps, eyebrows, the current status bar. Red is only ever a deal or a problem; green only ever “done” or “safe to eat”.</p></div></div>
+    </section>
+
+    <section class="stack" style="margin-top:var(--gap-2xl)" data-od-id="tokens-type">
+      <div class="head"><div class="head-copy"><p class="eyebrow eyebrow-gold">02</p><h2>Type scale</h2><p class="lead">Plus Jakarta Sans for the restaurant's voice, Manrope for everything you tap.</p></div></div>
+      <div class="panel"><div class="panel-body">
+        <div class="type-row"><span class="tr-key">Display · 56 / Plus Jakarta</span><span style="font-family:var(--font-display);font-size:clamp(34px,5vw,56px);font-weight:700;line-height:1.05">Taste of Happiness</span></div>
+        <div class="type-row"><span class="tr-key">H1 · 42 / Plus Jakarta</span><span style="font-family:var(--font-display);font-size:clamp(28px,4vw,42px);font-weight:700;line-height:1.15">Vietnamese home cooking</span></div>
+        <div class="type-row"><span class="tr-key">H2 · 30 / Plus Jakarta</span><span style="font-family:var(--font-display);font-size:clamp(24px,3vw,30px);font-weight:700">Fourteen ways to eat well</span></div>
+        <div class="type-row"><span class="tr-key">H3 · 20 / Manrope</span><span style="font-family:var(--font-body);font-size:20px;font-weight:700">Cold Rolls (4)</span></div>
+        <div class="type-row"><span class="tr-key">Lead · 18 / Manrope</span><span class="lead" style="margin:0">Broths simmered from scratch each morning.</span></div>
+        <div class="type-row"><span class="tr-key">Body · 16 / Manrope</span><span>Every dish is cooked to order, seasoned to your table's taste.</span></div>
+        <div class="type-row"><span class="tr-key">Meta · 13 / Manrope</span><span class="meta">Delivery · 25–35 min · $5.00 fee</span></div>
+        <div class="type-row"><span class="tr-key">Eyebrow · gold caps</span><span class="eyebrow eyebrow-gold" style="margin:0">The full menu</span></div>
+      </div></div>
+    </section>
+
+    <section class="stack" style="margin-top:var(--gap-2xl)" data-od-id="tokens-space">
+      <div class="head"><div class="head-copy"><p class="eyebrow eyebrow-gold">03</p><h2>Space, radius &amp; depth</h2></div></div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><h3>Spacing scale</h3></div><div class="panel-body">
+          <dl class="kv"><dt>xs</dt><dd>8px</dd><dt>sm</dt><dd>12px</dd><dt>md</dt><dd>20px</dd><dt>lg</dt><dd>32px</dd><dt>xl</dt><dd>56px</dd><dt>2xl</dt><dd>88px</dd></dl>
+        </div></div>
+        <div class="panel"><div class="panel-head"><h3>Radius &amp; shadow</h3></div><div class="panel-body">
+          <div class="row" style="gap:14px;margin-bottom:16px">
+            <span style="width:64px;height:52px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);display:grid;place-items:center;font-size:11px">8px</span>
+            <span style="width:64px;height:52px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:grid;place-items:center;font-size:11px">10px</span>
+            <span style="width:64px;height:52px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);display:grid;place-items:center;font-size:11px">16px</span>
+            <span style="width:64px;height:52px;background:var(--surface);border:1px solid var(--border);border-radius:999px;display:grid;place-items:center;font-size:11px">pill</span>
+          </div>
+          <dl class="kv"><dt>shadow-sm</dt><dd>hairline lift</dd><dt>shadow-md</dt><dd>cards on hover</dd><dt>shadow-lg</dt><dd>drawer, toast</dd></dl>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="stack" style="margin-top:var(--gap-2xl)" data-od-id="tokens-components">
+      <div class="head"><div class="head-copy"><p class="eyebrow eyebrow-gold">04</p><h2>Component sheet</h2><p class="lead">Every interactive element in the set, in its resting, hover and disabled states. Minimum tap target is 44 × 44 px throughout.</p></div></div>
+
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><h3>Buttons</h3></div><div class="panel-body stack">
+          <div class="row" style="flex-wrap:wrap;gap:10px">
+            <button class="btn btn-primary">Start your order</button>
+            <button class="btn btn-secondary">See the menu</button>
+            <button class="btn btn-gold">Deal action</button>
+            <button class="btn btn-ghost">Cancel</button>
+            <button class="btn btn-primary" disabled>Disabled</button>
+          </div>
+          <p class="meta" style="margin:0">Primary = maroon fill, one per view. Secondary = outline. Ghost = text only. Buttons never wrap to two lines.</p>
+        </div></div>
+
+        <div class="panel"><div class="panel-head"><h3>Badges, pills &amp; tags</h3></div><div class="panel-body stack">
+          <div class="row" style="flex-wrap:wrap;gap:8px">
+            <span class="badge badge-popular">Popular</span>
+            <span class="badge badge-deal">Deal</span>
+            <span class="badge badge-gf">GF</span>
+            <span class="badge badge-spicy">Spicy</span>
+            <span class="badge badge-new">New</span>
+          </div>
+          <div class="row" style="flex-wrap:wrap;gap:8px">
+            <span class="pill">2 items</span><span class="pill pill-neutral">Prototype</span>
+            <span class="dish-tag"><i class="dot dot-vegan"></i>Vegan</span>
+            <span class="dish-tag"><i class="dot dot-gf"></i>GF</span>
+          </div>
+          <div class="row" style="flex-wrap:wrap;gap:8px">
+            <span class="status-pill status-placed"><span class="sdot"></span>Placed</span>
+            <span class="status-pill status-preparing"><span class="sdot"></span>Preparing</span>
+            <span class="status-pill status-ready"><span class="sdot"></span>Ready</span>
+            <span class="status-pill status-completed"><span class="sdot"></span>Completed</span>
+          </div>
+        </div></div>
+
+        <div class="panel"><div class="panel-head"><h3>Forms</h3></div><div class="panel-body stack">
+          <div class="field"><label for="t-name">Text field</label><input class="input" id="t-name" placeholder="Brooklyn Park" /></div>
+          <div class="field"><label for="t-err">Field with error</label><input class="input" id="t-err" aria-invalid="true" value="not-an-email" /><p class="field-error">Please check this email address.</p></div>
+          <label class="choice"><input type="radio" name="t-radio" checked /><span class="choice-main"><strong>Delivery</strong><span class="choice-price">$5.00</span></span></label>
+          <label class="switch"><input type="checkbox" checked /><span class="track"></span><span class="switch-label">Save this card</span></label>
+        </div></div>
+
+        <div class="panel"><div class="panel-head"><h3>Quantity, tabs &amp; chips</h3></div><div class="panel-body stack">
+          <div class="row" style="gap:14px;align-items:center">
+            <div class="qty"><button aria-label="Less">−</button><span class="qty-val">2</span><button aria-label="More">+</button></div>
+            <div class="qty-lg"><button aria-label="Less">−</button><span class="qty-val">1</span><button aria-label="More">+</button></div>
+          </div>
+          <div class="tabs"><button class="tab" aria-selected="true">Dishes</button><button class="tab" aria-selected="false">Deals</button><button class="tab" aria-selected="false">Drinks</button></div>
+          <div class="filters" style="margin:0"><button class="chip" aria-pressed="true">All dishes</button><button class="chip" aria-pressed="false">Starters</button></div>
+        </div></div>
+
+        <div class="panel"><div class="panel-head"><h3>Progress &amp; steppers</h3></div><div class="panel-body stack">
+          <div class="stepper">
+            <span class="step" data-state="done"><span class="step-num">✓</span><span class="step-label">Order</span></span>
+            <span class="step-sep"></span>
+            <span class="step" data-state="current"><span class="step-num">2</span><span class="step-label">Details</span></span>
+            <span class="step-sep"></span>
+            <span class="step" data-state="todo"><span class="step-num">3</span><span class="step-label">Payment</span></span>
+          </div>
+          <div class="scale">
+            <div class="scale-step" data-done="true"><span class="scale-bar"></span><span class="scale-label">Placed</span></div>
+            <div class="scale-step" data-done="true"><span class="scale-bar"></span><span class="scale-label">Confirmed</span></div>
+            <div class="scale-step" data-current="true"><span class="scale-bar"></span><span class="scale-label">Preparing</span></div>
+            <div class="scale-step"><span class="scale-bar"></span><span class="scale-label">Ready</span></div>
+          </div>
+        </div></div>
+
+        <div class="panel"><div class="panel-head"><h3>Naming a fact</h3></div><div class="panel-body stack">
+          <p class="meta" style="margin:0">A label and its value live on one line. Use <code>.factline</code> when an icon helps, <code>.kv</code> inside a panel, <code>.facts</code> for a receipt strip.</p>
+          <dl class="facts" aria-label="Fact strip">
+            <div><dt>Order number</dt><dd class="num">AT-4821</dd></div>
+            <div><dt>Service</dt><dd>Delivery</dd></div>
+          </dl>
+          <p class="factline">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+            <span class="factline-k">Delivering to</span><span class="factline-v">12 Example Street, Brooklyn Park SA 5032</span>
+          </p>
+          <dl class="kv" style="border-top:1px solid var(--border);padding-top:14px">
+            <dt>Contact</dt><dd>Minh Nguyen · 04xx xxx xxx</dd>
+            <dt>Note</dt><dd>Leave at the front door</dd>
+          </dl>
+          <a class="linkrow" href="#tokens-components">Order something else
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7"/></svg>
+          </a>
+          <p class="helpline">Something not right with <span class="num">AT-4821</span>? <a href="states.html">See order help</a>.</p>
+        </div></div>
+
+        <div class="panel"><div class="panel-head"><h3>Loading &amp; feedback</h3></div><div class="panel-body stack">
+          <div class="skeleton sk-line sk-title"></div>
+          <div class="skeleton sk-line"></div>
+          <div class="skeleton sk-img"></div>
+          <div class="toast is-open" style="position:static;transform:none;opacity:1;visibility:visible;display:inline-block;max-width:none">Added to your order</div>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="stack" style="margin-top:var(--gap-2xl)" data-od-id="tokens-rules">
+      <div class="head"><div class="head-copy"><p class="eyebrow eyebrow-gold">05</p><h2>House rules</h2></div></div>
+      <div class="panel"><div class="panel-body">
+        <ol style="margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;font-size:15px">
+          <li>One accent colour per viewport, used at most twice.</li>
+          <li>Plus Jakarta Sans for dish names, headings and the brand voice — never for buttons or form labels.</li>
+          <li>Never a broken image: real photo or the woven cream placeholder.</li>
+          <li>Colour carries meaning — red = deal or problem, green = done or dietary-safe.</li>
+          <li>Every tap target is at least 44 × 44 px, including the mobile bar and quantity steppers.</li>
+          <li>Prices and order numbers always use tabular figures.</li>
+          <li>A card carries a heading or a rule, never both — space does the separating.</li>
+          <li>A label and its value share a line. Never stack a short label above the value it names.</li>
+          <li>Help is a sentence with a link in it, not a card with a title and a button.</li>
+          <li>Copy is plain English, sentence case, and never blames the customer.</li>
+          <li>Reduced-motion is respected across all animation.</li>
+        </ol>
+      </div></div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/chrome.js"></script>
+  <script src="scripts/store.js"></script>
+</body>
+</html>

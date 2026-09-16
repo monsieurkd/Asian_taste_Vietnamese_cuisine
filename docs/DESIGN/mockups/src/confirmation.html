@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Order confirmed · Asian Taste</title>
+  <meta name="description" content="Your Asian Taste order is confirmed. Follow it live from the kitchen to your door." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+</head>
+<body data-page="track">
+  <div id="site-chrome"></div>
+
+  <main id="content" data-od-id="confirmation">
+    <section class="band band-surface" data-od-id="confirm-hero">
+      <div class="container center">
+        <span class="big-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+        <p class="eyebrow eyebrow-gold" style="margin-top:20px">Order confirmed</p>
+        <h1 style="margin:8px auto 12px;max-width:30ch">Thank you — the kitchen has it.</h1>
+        <p class="lead" style="margin:0 auto 26px;max-width:52ch">We've sent your receipt. You can follow every step below — no need to call.</p>
+        <dl class="facts" style="max-width:720px;margin:0 auto">
+          <div><dt>Order number</dt><dd class="num" id="order-no">AT-0000</dd></div>
+          <div><dt>Service</dt><dd id="order-service">Delivery</dd></div>
+          <div><dt>Estimated arrival</dt><dd id="order-eta">25–35 min</dd></div>
+          <div><dt>Total paid</dt><dd class="num" id="order-total">$0.00</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="band" data-od-id="confirm-track">
+      <div class="container split">
+        <div class="stack">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>Live order status</h3>
+                <p class="meta" id="status-sub">Updating automatically</p>
+              </div>
+              <span class="status-pill status-placed" id="status-pill"><span class="sdot"></span>Placed</span>
+            </div>
+            <div class="panel-body">
+              <div class="scale" id="scale" aria-hidden="true"></div>
+              <ol class="timeline" id="timeline" style="margin-top:30px"></ol>
+              <div class="row" style="gap:10px;margin-top:4px">
+                <button class="btn btn-secondary" id="advance">Advance status (demo)</button>
+                <button class="btn btn-ghost" id="reset">Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Your items</h3><span class="pill" id="items-pill">0 items</span></div>
+            <div class="panel-body" id="order-items"></div>
+          </div>
+        </div>
+
+        <aside class="stack">
+          <div class="panel">
+            <div class="panel-body stack">
+              <p class="factline">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+                <span class="factline-k" id="where-title">Delivering to</span>
+                <span class="factline-v" id="where-body">—</span>
+              </p>
+              <p class="factline">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+                <span class="factline-k">Contact</span>
+                <span class="factline-v" id="where-contact">—</span>
+              </p>
+              <a class="linkrow" href="menu.html#menu">Order something else
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7"/></svg>
+              </a>
+            </div>
+          </div>
+          <p class="helpline">Something not right with <span class="num" id="help-no">this order</span>? <a href="states.html">See order help</a> — or call the kitchen and quote your order number.</p>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/chrome.js"></script>
+  <script src="scripts/store.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var M = window.AT_MENU;
+      var SNAP_KEY = 'at_last_order';
+
+      /* snapshot the order, then clear the live cart */
+      var snapshot = null;
+      try { snapshot = JSON.parse(sessionStorage.getItem(SNAP_KEY)); } catch (e) {}
+      if (!snapshot) {
+        var cart = AT.cart();
+        if (cart.length) {
+          snapshot = {
+            no: 'AT-' + (1000 + Math.floor(Math.random() * 8999)),
+            type: AT.orderType,
+            items: cart.map(function (l) { return { name: l.name, qty: l.qty, unitPrice: l.unitPrice, summary: l.summary }; }),
+            subtotal: AT.subtotal(), fee: AT.fee(), total: AT.total()
+          };
+        } else {
+          snapshot = {
+            no: 'AT-4821', type: 'delivery',
+            items: [
+              { name: 'Cold Rolls (4)', qty: 1, unitPrice: 8.50, summary: 'Choose your filling: Chicken · Spice level: 2' },
+              { name: 'Pho Beef', qty: 2, unitPrice: 15.90, summary: 'Spice level: 3' },
+              { name: 'Crispy Pork Banh Mi', qty: 1, unitPrice: 8.50, summary: 'Spice level: 1' }
+            ],
+            subtotal: 48.80, fee: 5, total: 53.80
+          };
+        }
+        try { sessionStorage.setItem(SNAP_KEY, JSON.stringify(snapshot)); } catch (e) {}
+        AT.clear();
+      }
+
+      var meta = AT.ORDER_META[snapshot.type] || AT.ORDER_META.delivery;
+      var cust = snapshot.customer || AT.customer() || null;
+      var first = cust && cust.name ? cust.name.split(' ')[0] : '';
+      document.getElementById('order-no').textContent = snapshot.no;
+      document.getElementById('order-service').textContent = meta.label;
+      document.getElementById('order-eta').textContent = meta.eta;
+      document.getElementById('order-total').textContent = AT.money(snapshot.total);
+      if (first) document.querySelector('[data-od-id="confirm-hero"] h1').textContent = 'Thank you, ' + first + ' — the kitchen has it.';
+
+      document.getElementById('order-items').innerHTML = snapshot.items.map(function (i) {
+        return '<div class="rowline"><div class="rl-main"><strong>' + i.qty + ' × ' + i.name + '</strong>' + (i.summary ? '<span>' + i.summary + '</span>' : '') + '</div><span class="num">' + AT.money(i.unitPrice * i.qty) + '</span></div>';
+      }).join('') + '<div class="sum-row total" style="margin-top:10px"><span>Paid</span><span class="num">' + AT.money(snapshot.total) + '</span></div>';
+      document.getElementById('items-pill').textContent = snapshot.items.reduce(function (s, i) { return s + i.qty; }, 0) + ' items';
+
+      document.getElementById('where-title').textContent = snapshot.type === 'delivery' ? 'Delivering to' : (snapshot.type === 'pickup' ? 'Pickup from' : 'Dining at');
+      document.getElementById('where-body').textContent = (cust && cust.address) || (snapshot.type === 'delivery' ? '12 Example Street, Brooklyn Park SA 5032' : '329 Henley Beach Rd, Brooklyn Park SA 5032');
+      document.getElementById('where-contact').textContent = cust && cust.name ? cust.name + ' · ' + cust.phone : 'Guest · 04xx xxx xxx';
+      document.getElementById('help-no').textContent = snapshot.no;
+
+      /* ─── status timeline ────────────────────────────────────────── */
+      var STEPS = AT.STATUSES.map(function (s) { return { id: s.id, label: s.label }; });
+      var FULFIL_INDEX = STEPS.length - 2;
+      STEPS[FULFIL_INDEX].label = snapshot.type === 'delivery' ? 'Out for delivery' : 'Ready to collect';
+      var DESCS = [
+        'We have your order and payment.',
+        (snapshot.type === 'delivery' ? 'The kitchen has accepted it and started prep.' : 'The kitchen has accepted it and started prep.'),
+        'Your dishes are being cooked fresh, right now.',
+        snapshot.type === 'delivery' ? 'Packed and waiting for a driver.' : 'Packed and waiting for you at the counter.',
+        snapshot.type === 'delivery' ? 'On the road to ' + 'your address.' : 'Ready when you are — quote ' + snapshot.no + '.',
+        'Thanks for eating with us.'
+      ];
+      var times = ['Just now', '1 min ago', '2 min ago', '—', '—', '—'];
+      var current = 0;
+
+      function pillClass(id) { return 'status-pill status-' + id; }
+      function render() {
+        document.getElementById('scale').innerHTML = STEPS.map(function (s, i) {
+          return '<div class="scale-step" data-done="' + (i < current) + '" data-current="' + (i === current) + '"><span class="scale-bar"></span><span class="scale-label">' + s.label + '</span></div>';
+        }).join('');
+        document.getElementById('timeline').innerHTML = STEPS.map(function (s, i) {
+          var state = i < current ? 'done' : (i === current ? 'current' : 'todo');
+          var mark = i < current
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>'
+            : (i === current ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>'
+              : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.5"/></svg>');
+          return '<li data-done="' + (i < current) + '" data-current="' + (i === current) + '">' +
+            '<span class="tl-mark">' + mark + '</span>' +
+            '<div class="tl-body"><strong>' + s.label + '</strong><p>' + DESCS[i] + '</p><span class="tl-time">' + times[i] + '</span></div></li>';
+        }).join('');
+        var pill = document.getElementById('status-pill');
+        pill.className = pillClass(STEPS[current].id);
+        pill.innerHTML = '<span class="sdot"></span>' + STEPS[current].label;
+        document.getElementById('status-sub').textContent = current >= STEPS.length - 1 ? 'Order complete' : 'Updating automatically · step ' + (current + 1) + ' of ' + STEPS.length;
+      }
+      function advance() { current = Math.min(STEPS.length - 1, current + 1); render(); }
+      document.getElementById('advance').addEventListener('click', advance);
+      document.getElementById('reset').addEventListener('click', function () { current = 0; render(); });
+
+      render();
+      var auto = setInterval(function () {
+        if (current >= STEPS.length - 1) { clearInterval(auto); return; }
+        advance();
+      }, 5000);
+    })();
+  </script>
+</body>
+</html>

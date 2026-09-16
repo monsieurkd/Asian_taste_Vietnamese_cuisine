@@ -9,7 +9,7 @@
 #
 # This guardrail makes that class of artefact impossible to merge again.
 #
-# Scope (deliberately project-specific — see MAJOR_UPDATE_PLAN.md):
+# Scope (deliberately project-specific — see docs/archive/MAJOR_UPDATE_PLAN_superseded.md):
 #   1. Every test file in the repo must have a runnable home.
 #   2. The API xUnit suite must stay wired to the solution.
 #   3. Every path this script expects must exist, so it cannot silently no-op.

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Asian Taste · Design set</title>
+  <meta name="description" content="The complete Asian Taste UI set — customer ordering flow, staff console and the underlying design tokens." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+</head>
+<body data-page="index">
+  <div id="site-chrome"></div>
+
+  <main id="content">
+    <section class="hero" data-od-id="index-hero">
+      <div class="container hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow">Design set · September 2026</p>
+          <h1>Asian Taste, end to end.</h1>
+          <p class="lead">The complete ordering experience for a family-run Vietnamese kitchen in Brooklyn Park — the customer flow, the kitchen's staff console, and the tokens that hold them together. Sixteen screens, one cream-and-maroon system.</p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="home.html">Open the customer home</a>
+            <a class="btn btn-secondary btn-arrow" href="admin-dashboard.html">Open the staff console</a>
+          </div>
+          <div class="hero-trust">
+            <span><i class="dot"></i>16 screens</span>
+            <span><i class="dot"></i>81 dishes · 14 categories</span>
+            <span><i class="dot"></i>Real menu data</span>
+            <span><i class="dot"></i>Mobile-first</span>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <img src="assets/hero.jpg" width="1600" height="1200" alt="A spread of Vietnamese dishes from the Asian Taste kitchen" />
+          <div class="hero-stamp"><strong>Taste of Happiness</strong><span>Brooklyn Park, Adelaide</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section pt-0" data-od-id="index-customer">
+      <div class="container">
+        <div class="head"><div class="head-copy">
+          <p class="eyebrow eyebrow-gold">Customer flow</p>
+          <h2>From “what's for dinner” to the front door</h2>
+          <p class="lead">One continuous journey — every screen hands off to the next with its state intact.</p>
+        </div></div>
+        <div class="index-grid">
+          <a class="index-card" href="home.html">
+            <span class="badge badge-soft">Start here</span>
+            <h3>Home</h3>
+            <p>The storefront landing page — the appetite hook, delivery / pickup / dine-in, the three most-liked dishes with their real rating, a fourteen-section browse index, the deal and the family story, closing on one action. Built mobile-first at 390px.</p>
+            <span class="go">home.html →</span>
+          </a>
+          <a class="index-card" href="menu.html">
+            <h3>Menu</h3>
+            <p>All 81 dishes across 14 sticky-filtered sections with search and quick-add — the browsing screen Home hands off to.</p>
+            <span class="go">menu.html →</span>
+          </a>
+          <a class="index-card" href="dish-card.html">
+            <h3>Dish card anatomy</h3>
+            <p>One card, every dish — media or placeholder, badge, required-choice hint, dietary tags, price and the adaptive action, annotated.</p>
+            <span class="go">dish-card.html →</span>
+          </a>
+          <a class="index-card" href="dish-detail.html?id=cold-rolls">
+            <h3>Dish detail</h3>
+            <p>Modifiers with live pricing — protein, cooking style, rice, the 1–5 spice scale, vegan swap, quantity and special instructions.</p>
+            <span class="go">dish-detail.html →</span>
+          </a>
+          <a class="index-card" href="cart.html">
+            <h3>Cart</h3>
+            <p>Empty and filled states on one page. Change quantities, switch service type, apply a promo, then move on.</p>
+            <span class="go">cart.html →</span>
+          </a>
+          <a class="index-card" href="checkout.html">
+            <h3>Checkout</h3>
+            <p>Two validated steps — contact and address, then payment — with a masked card form and a processing state before confirmation.</p>
+            <span class="go">checkout.html →</span>
+          </a>
+          <a class="index-card" href="confirmation.html">
+            <h3>Confirmation &amp; tracking</h3>
+            <p>The order number, live six-stage status, a full timeline and the receipt — updating itself as the kitchen moves.</p>
+            <span class="go">confirmation.html →</span>
+          </a>
+          <a class="index-card" href="states.html">
+            <h3>System states</h3>
+            <p>Empty, loading, error and sold-out — the shared blocks that keep every corner of the flow from becoming a dead end.</p>
+            <span class="go">states.html →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section band-dark" data-od-id="index-admin">
+      <div class="container">
+        <div class="head"><div class="head-copy">
+          <p class="eyebrow eyebrow-gold">Staff console</p>
+          <h2>What the pass sees while the wok is moving</h2>
+          <p class="lead">Tablet-first, built for one hand and a hot pan. Same brand, heavier ink.</p>
+        </div></div>
+        <div class="index-grid">
+          <a class="index-card" href="admin-login.html">
+            <h3>Sign in</h3>
+            <p>Staff-only entry. Includes the D-06 fix — the sign-in heading now reads as software, not as a menu.</p>
+            <span class="go">admin-login.html →</span>
+          </a>
+          <a class="index-card" href="admin-dashboard.html">
+            <h3>Dashboard</h3>
+            <p>Today's numbers plus the kitchen board: new, confirmed, preparing, and ready-and-out, oldest ticket first.</p>
+            <span class="go">admin-dashboard.html →</span>
+          </a>
+          <a class="index-card" href="admin-orders.html">
+            <h3>Orders</h3>
+            <p>Every order with status and service filters, free-text search, and an honest no-results state.</p>
+            <span class="go">admin-orders.html →</span>
+          </a>
+          <a class="index-card" href="admin-order-detail.html?id=AT-4821">
+            <h3>Order detail</h3>
+            <p>One ticket, all six statuses as a visible scale and a control, full item list, customer, payment and history.</p>
+            <span class="go">admin-order-detail.html →</span>
+          </a>
+          <a class="index-card" href="admin-menu.html">
+            <h3>Menu management</h3>
+            <p>All 81 dishes with availability toggles that persist locally, category tabs and search.</p>
+            <span class="go">admin-menu.html →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" data-od-id="index-foundations">
+      <div class="container">
+        <div class="head"><div class="head-copy">
+          <p class="eyebrow eyebrow-gold">Foundations</p>
+          <h2>The system the screens are built from</h2>
+        </div></div>
+        <div class="index-grid">
+          <a class="index-card" href="tokens.html">
+            <h3>Tokens &amp; components</h3>
+            <p>Palette, type scale, spacing, radius and the full component sheet — every state, with the house rules.</p>
+            <span class="go">tokens.html →</span>
+          </a>
+          <a class="index-card" href="asian-taste-menu.html">
+            <h3>Original single-file prototype</h3>
+            <p>The first pass, kept for reference — one self-contained HTML file with its own inline styles and cart.</p>
+            <span class="go">asian-taste-menu.html →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section pt-0" data-od-id="index-notes">
+      <div class="container grid-2">
+        <div class="panel">
+          <div class="panel-head"><h3>What's real, what's mocked</h3></div>
+          <div class="panel-body">
+            <dl class="kv" style="grid-template-columns:44px 1fr;gap:10px 14px">
+              <dt>✓</dt><dd><strong>Real</strong> — all 81 dishes, 14 categories, prices and printed option groups, taken from the kitchen's own menu.</dd>
+              <dt>✓</dt><dd><strong>Real</strong> — the cart, service type, quantities and menu availability genuinely persist in your browser.</dd>
+              <dt>✗</dt><dd><strong>Mocked</strong> — admin orders, customers, revenue and the status history are demo data.</dd>
+              <dt>✗</dt><dd><strong>Mocked</strong> — payment, refunds, printing and login accept anything; no network calls are made.</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Reading the set</h3></div>
+          <div class="panel-body">
+            <p class="meta" style="margin:0 0 14px">Open any screen on its own — they all share <code>styles/app.css</code>, <code>scripts/menu-data.js</code>, <code>scripts/chrome.js</code> and <code>scripts/store.js</code>, so the brand never drifts between pages.</p>
+            <a class="btn btn-primary btn-block" href="menu.html">Start the customer journey</a>
+            <a class="btn btn-ghost btn-block" href="tokens.html" style="margin-top:8px">Read the foundations first</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/chrome.js"></script>
+  <script src="scripts/store.js"></script>
+</body>
+</html>
