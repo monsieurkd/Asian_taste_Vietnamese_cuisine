@@ -758,54 +758,72 @@ that POS sync never happened.
 
 ---
 
-## Known trap: a local dev database can be half-migrated
+## Known trap: two local databases, and the broken one is the default
 
-**Symptom.** `dotnet run` logs, repeating three times, then starts anyway:
+**Read this before debugging a local "missing table" error. It is not one bug,
+it is two databases.**
+
+There are **two** local Postgres databases and they are in different states:
+
+| Database | Tables | `admin_users` | `customer_id` | Login |
+|---|---|---|---|---|
+| `AsianTaste` | 7 | **missing** | **missing** | **500** |
+| `AsianTaste_Dev` | 17 | present | present | **401** (correct) |
+
+Which one you get depends on the environment variable, and **the broken one is
+the default**:
+
+```bash
+# Production is the fallback when the variable is unset:
+#   appsettings.json        -> Database=AsianTaste       <- BROKEN
+dotnet run                       # 500 on login, admin tables missing
+
+#   appsettings.Development.json -> Database=AsianTaste_Dev  <- healthy
+ASPNETCORE_ENVIRONMENT=Development dotnet run    # works
+```
+
+Both point at `localhost:5432` with the same user, so nothing looks different
+until you hit an admin route. This has already caused one wrong conclusion, so
+check the database name first, not the schema.
+
+**The symptom on `AsianTaste`.** `dotnet run` logs, three times, then starts
+anyway:
 
 ```
 Migration statement failed with SQLSTATE 42703: column "customer_id" does not exist
 Database initialization FAILED after 3 attempts. The API is starting WITHOUT a working database.
 ```
 
-The menu still loads (82 items) — that table is fine — but **every admin table is
+The menu still returns 82 items — that table is fine — but **every admin table is
 missing**: `/api/auth/login` returns `500 relation "admin_users" does not exist`,
-so the admin dashboard cannot be used locally, and any migration added after the
-failure never runs. That is why migration 13 could not be verified locally and had
-to be proved on a clean database instead.
+so the admin dashboard cannot be used locally, and **no migration added after the
+failure ever runs there** (migration 13 has applied to `AsianTaste_Dev` but not to
+`AsianTaste`).
 
-**Cause.** The local database is in a half-migrated state, not a code fault. It is
-pre-existing. `01_create_schema.sql` creates `customer_payment_methods` with a
+**Cause.** `AsianTaste` is half-migrated from an interrupted run, not a schema
+fault. `01_create_schema.sql` creates `customer_payment_methods` with a
 `customer_id` referencing `customers(id)`; a run that died between those two
-statements leaves the table present-but-wrong, and every later boot retries
-`CREATE TABLE IF NOT EXISTS` (which succeeds, so it changes nothing) and then
-fails on the index. The API deliberately starts anyway rather than becoming a
-restart loop, which is correct for production and confusing locally.
+statements leaves the table present-but-wrong, and `CREATE TABLE IF NOT EXISTS`
+succeeds forever after without fixing it. The API starting anyway rather than
+becoming a restart loop is right for production and confusing locally.
 
 **Not the same as production.** `/health/db` returns
 `{"status":"healthy","menuItems":82}` on both, so the menu tells you nothing about
-whether the admin tables exist.
+whether the admin tables exist. A clean bill of health on 82 items is not evidence
+the database is sound.
 
-**Fix for a local machine.** Drop and recreate the database, then let the API
-migrate from scratch — that is the only reliable route, and it is what a clean
-database proves:
+**Fix.** Drop and recreate `AsianTaste`, then let the API migrate it from empty.
+Do **not** try to patch the half-migrated one. Simplest route is to stop using the
+extra database entirely — point `appsettings.Development.json` at the same
+database you run against, or recreate `AsianTaste` and delete `AsianTaste_Dev`, so
+there is one local database and no way to test the wrong one.
 
-```bash
-docker run -d --name at-dev-pg \
-  -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=AsianTaste -p 5432:5432 postgres:16-alpine
-
-# point the API at it for one run, and it migrates from empty
-ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=AsianTaste;Username=postgres;Password=dev" \
-  dotnet run --project src/AsianTaste.API --no-launch-profile
-```
-
-**How to verify a migration properly.** Never against this local database. Bring up
-a throwaway Postgres, point `ConnectionStrings__DefaultConnection` at it, boot
+**How to verify a migration properly.** Never against either local database. Bring
+up a throwaway Postgres, point `ConnectionStrings__DefaultConnection` at it, boot
 once, then **boot a second time and compare row counts** — a seed that appends on
 every start is this repo's oldest bug (`02_seed_data.sql` once duplicated all 82
 dishes, and migration 13's dedupe guards exist for the same reason). Remove the
 container afterwards.
-
----
 
 ## Verifying anything
 
