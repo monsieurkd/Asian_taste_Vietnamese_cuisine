@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Menu management · Asian Taste staff</title>
+  <meta name="description" content="Turn dishes on and off, check prices and keep the menu in sync with the kitchen." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+  <link rel="stylesheet" href="styles/admin.css" />
+</head>
+<body data-page="menu" data-title="Menu" data-sub="81 dishes across 14 categories. Toggle availability the moment the kitchen runs out.">
+  <div class="admin">
+    <aside class="admin-rail" id="admin-rail"></aside>
+    <div class="admin-main">
+      <header class="admin-top" id="admin-top"></header>
+
+      <div class="admin-page">
+        <section class="panel" data-od-id="menu-tools">
+          <div class="panel-body stack">
+            <div class="filterbar">
+              <div class="search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
+                <label class="sr-only" for="dish-filter">Search dishes</label>
+                <input class="input" id="dish-filter" type="search" placeholder="Search dishes…" />
+              </div>
+              <button class="btn btn-secondary" id="all-on">Mark all available</button>
+              <button class="btn btn-ghost" id="add-dish">Add a dish</button>
+            </div>
+            <div class="seg-sm" role="group" aria-label="Filter by category" id="cat-tabs" style="flex-wrap:wrap">
+              <button data-cat="all" aria-pressed="true">All</button>
+            </div>
+            <p class="meta" id="menu-meta" aria-live="polite" style="margin:0"></p>
+          </div>
+        </section>
+
+        <section class="panel" data-od-id="menu-list">
+          <div class="panel-head">
+            <h3>Dishes</h3>
+            <span class="pill pill-neutral">Availability is a prototype toggle</span>
+          </div>
+          <div id="mm-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/admin.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var M = window.AT_MENU;
+      var A = window.AT_ADMIN;
+      var OFF_KEY = 'at_unavailable';
+      var off = {};
+      try { off = JSON.parse(localStorage.getItem(OFF_KEY)) || {}; } catch (e) { off = {}; }
+      function save() { try { localStorage.setItem(OFF_KEY, JSON.stringify(off)); } catch (e) {} }
+
+      var cat = 'all', q = '';
+
+      function initials(n) { return n.replace(/[^a-zA-Z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(function (w) { return w[0].toUpperCase(); }).join(''); }
+
+      document.getElementById('cat-tabs').innerHTML =
+        '<button data-cat="all" aria-pressed="true">All</button>' +
+        M.categories.map(function (c) { return '<button data-cat="' + c.id + '" aria-pressed="false">' + c.label + '</button>'; }).join('');
+
+      function row(d) {
+        var available = !off[d.id];
+        var cats = d.cats.filter(function (c) { return c !== 'popular'; }).map(function (c) {
+          var f = M.categories.filter(function (x) { return x.id === c; })[0];
+          return f ? f.label : c;
+        }).join(' · ');
+        var thumb = d.image
+          ? '<span class="mm-thumb"><img src="' + d.image + '" alt="" /></span>'
+          : '<span class="mm-thumb ph"><span class="ph-mono" style="font-size:14px">' + initials(d.name) + '</span></span>';
+        return '<div class="mm-row">' +
+          thumb +
+          '<div><strong style="font-size:15px">' + d.name + '</strong>' +
+            '<p class="meta" style="margin:2px 0 0">' + cats + (d.options && d.options.length ? ' · ' + d.options.length + ' option group' + (d.options.length > 1 ? 's' : '') : '') + '</p>' +
+            (available ? '' : '<p class="field-error" style="margin:4px 0 0">Off menu right now</p>') +
+          '</div>' +
+          '<span class="num mm-hide" style="font-weight:700">' + A.money(d.price) + '</span>' +
+          '<label class="switch"><input type="checkbox" data-dish="' + d.id + '" aria-label="Mark ' + d.name + ' available"' + (available ? ' checked' : '') + ' /><span class="track" aria-hidden="true"></span><span class="switch-label" style="font-size:12px">' + (available ? 'Available' : 'Off') + '</span></label>' +
+          '<button class="icon-btn" data-edit="' + d.id + '" aria-label="Edit ' + d.name + '">' +
+            '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>' +
+          '</button>' +
+        '</div>';
+      }
+
+      function render() {
+        var list = M.dishes.filter(function (d) {
+          if (cat !== 'all' && d.cats.indexOf(cat) === -1) return false;
+          if (q && (d.name + ' ' + d.desc).toLowerCase().indexOf(q) === -1) return false;
+          return true;
+        });
+        document.getElementById('mm-list').innerHTML = list.length ? list.map(row).join('')
+          : '<div class="state-block"><span class="state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></span><h3>No dishes match</h3><p>Try another category or a shorter search.</p></div>';
+        var offCount = Object.keys(off).filter(function (k) { return off[k]; }).length;
+        document.getElementById('menu-meta').textContent = 'Showing ' + list.length + ' of ' + M.dishes.length + ' dishes · ' + offCount + ' off menu';
+      }
+
+      document.getElementById('cat-tabs').addEventListener('click', function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        cat = b.dataset.cat;
+        this.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+        render();
+      });
+      document.getElementById('dish-filter').addEventListener('input', function (e) { q = e.target.value.trim().toLowerCase(); render(); });
+
+      document.getElementById('mm-list').addEventListener('change', function (e) {
+        var i = e.target.closest('[data-dish]'); if (!i) return;
+        var id = i.dataset.dish;
+        if (i.checked) delete off[id]; else off[id] = true;
+        save(); render();
+      });
+      document.getElementById('mm-list').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-edit]'); if (!b) return;
+        var d = M.byId(b.dataset.edit);
+        A_dialog('Edit “' + d.name + '” — in a real build this opens the dish editor (name, description, price, options, photo).');
+      });
+      document.getElementById('all-on').addEventListener('click', function () { off = {}; save(); render(); A_dialog('All ' + M.dishes.length + ' dishes are back on the menu.'); });
+      document.getElementById('add-dish').addEventListener('click', function () { A_dialog('New dish form would open here. Prototype only.'); });
+
+      function A_dialog(msg) {
+        var t = document.getElementById('admin-toast');
+        if (!t) { t = document.createElement('div'); t.id = 'admin-toast'; t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+        t.textContent = msg; t.classList.add('is-open');
+        clearTimeout(t._timer); t._timer = setTimeout(function () { t.classList.remove('is-open'); }, 2600);
+      }
+
+      render();
+    })();
+  </script>
+</body>
+</html>

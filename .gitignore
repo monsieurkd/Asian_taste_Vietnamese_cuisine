@@ -20,7 +20,6 @@ yarn-error.log*
 *.log
 
 # Local UI screenshots / tooling config (not for the repo)
-menu/admin_ui/
 reasonix.toml
 
 # Reasonix runtime state (tasks, logs, telemetry) — local only.

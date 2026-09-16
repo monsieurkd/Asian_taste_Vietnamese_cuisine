@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your order · Asian Taste</title>
+  <meta name="description" content="Review your Asian Taste order before checkout — change quantities, switch between delivery, pickup or dine in." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+</head>
+<body data-page="cart">
+  <div id="site-chrome"></div>
+
+  <main id="content" class="container section" data-od-id="cart">
+    <div class="head">
+      <div class="head-copy">
+        <p class="eyebrow eyebrow-gold">Step 1 of 3</p>
+        <h1>Your order</h1>
+        <p class="lead">Check everything looks right, then tell us how you'd like it.</p>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn btn-ghost" id="seed">Add a sample order</button>
+        <button class="btn btn-ghost" id="wipe">Empty the order</button>
+      </div>
+    </div>
+
+    <div class="stepper" style="margin-bottom:28px" aria-label="Checkout progress">
+      <span class="step" data-state="current"><span class="step-num">1</span><span class="step-label">Your order</span></span>
+      <span class="step-sep" aria-hidden="true"></span>
+      <span class="step" data-state="todo"><span class="step-num">2</span><span class="step-label">Your details</span></span>
+      <span class="step-sep" aria-hidden="true"></span>
+      <span class="step" data-state="todo"><span class="step-num">3</span><span class="step-label">Payment</span></span>
+    </div>
+
+    <div class="split">
+      <div class="stack">
+        <section class="panel" aria-labelledby="how-title" data-od-id="cart-mode">
+          <div class="panel-head"><h3 id="how-title">How would you like it?</h3></div>
+          <div class="panel-body">
+            <div class="seg" role="group" aria-label="Choose delivery, pickup or dine in" style="background:var(--fg-soft)">
+              <button class="seg-btn" data-order="delivery" aria-pressed="true" style="color:var(--muted)">Delivery</button>
+              <button class="seg-btn" data-order="pickup" aria-pressed="false" style="color:var(--muted)">Pickup</button>
+              <button class="seg-btn" data-order="dinein" aria-pressed="false" style="color:var(--muted)">Dine in</button>
+            </div>
+            <p class="meta" id="order-note" style="margin:14px 0 0" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="items-title" data-od-id="cart-items">
+          <div class="panel-head">
+            <h3 id="items-title">Items</h3>
+            <span class="pill" id="items-count">0 items</span>
+          </div>
+          <div class="panel-body" id="cart-lines"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="like-title" data-od-id="cart-upsell">
+          <div class="panel-head"><h3 id="like-title">You might also like</h3></div>
+          <div class="panel-body" id="upsell"></div>
+        </section>
+      </div>
+
+      <aside class="summary-card panel" aria-label="Order summary" data-od-id="cart-summary">
+        <div class="panel-head"><h3>Summary</h3></div>
+        <div class="panel-body stack">
+          <div class="sum-row"><span>Subtotal</span><span class="num" id="sub">$0.00</span></div>
+          <div class="sum-row" id="fee-row"><span id="fee-label">Delivery fee</span><span class="num" id="fee">$0.00</span></div>
+          <div class="sum-row"><span>GST</span><span class="num">included</span></div>
+          <div class="sum-row total"><span>Total</span><span class="num" id="total">$0.00</span></div>
+          <div class="field">
+            <label for="promo">Promo code</label>
+            <div class="row" style="gap:8px">
+              <input class="input" id="promo" placeholder="e.g. FAMILY10" />
+              <button class="btn btn-secondary" id="apply-promo" type="button" style="flex:none">Apply</button>
+            </div>
+            <p class="hint" id="promo-msg" aria-live="polite"></p>
+          </div>
+        </div>
+        <div class="panel-foot">
+          <a class="btn btn-primary btn-block" id="to-checkout" href="checkout.html">Go to checkout</a>
+          <a class="btn btn-ghost btn-block" href="menu.html#menu" style="margin-top:8px">Add more dishes</a>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/chrome.js"></script>
+  <script src="scripts/store.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var M = window.AT_MENU;
+      var lines = document.getElementById('cart-lines');
+      var upsell = document.getElementById('upsell');
+
+      function initials(n) { return n.replace(/[^a-zA-Z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(function (w) { return w[0].toUpperCase(); }).join(''); }
+
+      upsell.innerHTML = '<div class="grid-3">' + M.dishes.filter(function (d) { return d.cats.indexOf('popular') !== -1; }).slice(0, 3).map(function (d) {
+        return '<div class="rowline" style="border:0;padding:0"><div class="rl-main"><strong>' + d.name + '</strong><span>' + AT.money(d.price) + '</span></div>' +
+          '<button class="add-btn" data-add="' + d.id + '">Add</button></div>';
+      }).join('') + '</div>';
+
+      function render() {
+        var cart = AT.cart();
+        document.getElementById('items-count').textContent = cart.length + (cart.length === 1 ? ' item' : ' items');
+        if (!cart.length) {
+          lines.innerHTML = '<div class="state-block">' +
+            '<span class="state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h7.9a1.5 1.5 0 0 0 1.5-1.2L20 8H6"/><circle cx="9.5" cy="20" r="1.3"/><circle cx="17.5" cy="20" r="1.3"/></svg></span>' +
+            '<h3>Nothing here yet</h3><p>Your order is empty. Browse the menu and add a few favourites — we\'ll keep them here.</p>' +
+            '<a class="btn btn-primary" href="menu.html#menu">Browse the menu</a></div>';
+        } else {
+          lines.innerHTML = cart.map(function (l) {
+            var d = M.byId(l.id);
+            var media = d && d.image
+              ? '<img src="' + d.image + '" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:var(--radius-sm)" />'
+              : '<span class="mm-thumb ph" style="width:56px;height:56px;border-radius:var(--radius-sm)"><span class="ph-mono" style="font-size:14px">' + initials(l.name) + '</span></span>';
+            return '<div class="cart-item">' +
+              '<div style="display:flex;gap:14px;align-items:flex-start">' + media +
+                '<div><h3>' + l.name + '</h3>' + (l.summary ? '<div class="ci-note">' + l.summary + '</div>' : '') +
+                '<a class="ci-remove" href="dish-detail.html?id=' + l.id + '" style="display:inline-block;margin-top:6px">Edit options</a></div>' +
+              '</div>' +
+              '<div class="ci-price num">' + AT.money(l.unitPrice * l.qty) + '</div>' +
+              '<div class="cart-controls">' +
+                '<div class="qty"><button data-dec="' + l.key + '" aria-label="Remove one ' + l.name + '">−</button><span class="qty-val">' + l.qty + '</span><button data-inc="' + l.key + '" aria-label="Add another ' + l.name + '">+</button></div>' +
+                '<button class="ci-remove" data-del="' + l.key + '">Remove</button>' +
+              '</div>' +
+            '</div>';
+          }).join('');
+        }
+        document.getElementById('sub').textContent = AT.money(AT.subtotal());
+        var f = AT.fee();
+        document.getElementById('fee-row').style.display = f > 0 ? '' : 'none';
+        document.getElementById('fee-label').textContent = AT.orderMeta().label === 'Delivery' ? 'Delivery fee' : 'Fee';
+        document.getElementById('fee').textContent = AT.money(f);
+        document.getElementById('total').textContent = AT.money(AT.total());
+        var co = document.getElementById('to-checkout');
+        var empty = !cart.length;
+        co.style.pointerEvents = empty ? 'none' : '';
+        co.style.opacity = empty ? '.5' : '';
+        co.setAttribute('aria-disabled', String(empty));
+      }
+
+      lines.addEventListener('click', function (e) {
+        var inc = e.target.closest('[data-inc]'), dec = e.target.closest('[data-dec]'), del = e.target.closest('[data-del]');
+        var self = inc || dec;
+        if (self) { var l = AT.cart().filter(function (x) { return x.key === self.dataset[inc ? 'inc' : 'dec']; })[0]; if (l) AT.setQty(l.key, l.qty + (inc ? 1 : -1)); }
+        else if (del) AT.remove(del.dataset.del);
+      });
+
+      document.getElementById('seed').addEventListener('click', function () {
+        AT.add('cold-rolls', { qty: 1, summary: 'Choose your filling: Chicken · Spice level: 2' });
+        AT.add('pho-beef', { qty: 2, summary: 'Spice level: 3' });
+        AT.add('banhmi-crispy-pork', { qty: 1, summary: 'Spice level: 1' });
+        AT.toast('Sample order added');
+      });
+      document.getElementById('wipe').addEventListener('click', function () { AT.clear(); });
+
+      document.getElementById('apply-promo').addEventListener('click', function () {
+        var msg = document.getElementById('promo-msg');
+        var val = (document.getElementById('promo').value || '').trim().toUpperCase();
+        msg.textContent = !val ? 'Enter a code to apply it.' : 'Code “' + val + '” isn\'t valid right now — try FAMILY10 in store.';
+        msg.style.color = 'var(--deal)';
+      });
+
+      AT.onChange(render);
+      render();
+    })();
+  </script>
+</body>
+</html>

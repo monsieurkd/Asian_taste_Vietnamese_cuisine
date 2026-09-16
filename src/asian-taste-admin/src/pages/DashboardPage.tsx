@@ -1,162 +1,260 @@
+import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { DollarSign, ShoppingBag, CheckCircle, TrendingUp, Wifi, WifiOff } from "lucide-react"
 import { ordersApi } from "@/api/orders"
-import { formatCurrency } from "@/lib/utils"
-import { StatCard } from "@/components/dashboard/StatCard"
-import { RecentOrdersTable } from "@/components/dashboard/RecentOrdersTable"
-import { RevenueChart } from "@/components/dashboard/RevenueChart"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import type { Order, OrderStatus } from "@/types"
+import { AdminTop } from "@/components/AdminLayout"
+import { Avatar, Panel, PanelBody, Pill, SkeletonRows } from "@/components/ui/Primitives"
+import { StatusPill } from "@/components/ui/StatusPill"
+import { apiStatusValue, nextStatus, serviceLabel, statusKey, type StatusKey } from "@/lib/orderStatus"
+import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 
+/** The four columns of the kitchen board, and what "advance" means in each. */
+const COLUMNS: Array<{ key: StatusKey; title: string; hint: string }> = [
+  { key: "placed", title: "New", hint: "Accept or reject" },
+  { key: "confirmed", title: "Confirmed", hint: "Waiting on the wok" },
+  { key: "preparing", title: "Preparing", hint: "Cooking now" },
+  { key: "ready", title: "Ready & out", hint: "Hand over or dispatch" },
+]
+
+const ADVANCE_LABEL: Partial<Record<StatusKey, string>> = {
+  placed: "Accept",
+  confirmed: "Start cooking",
+  preparing: "Mark ready",
+  ready: "Send out",
+}
+
+/** Matches the customer-side accent budget: one loud thing per screen. */
+const URGENT_MINUTES = 20
+
+function Ticket({ order }: { order: Order }) {
+  const key = statusKey(order.status)
+  const next = nextStatus(order.status)
+  const mins = minutesAgo(order.createdAt)
+
+  return (
+    <article className={`ticket ${mins > URGENT_MINUTES ? "urgent" : ""}`}>
+      <div className="ticket-top">
+        <span className="ticket-id">{order.orderNumber}</span>
+        <StatusPill status={order.status} />
+      </div>
+
+      <p className="ticket-who">
+        <Avatar name={order.customerName} />
+        <strong>{order.customerName}</strong>
+        <span className="meta">{order.customerPhone}</span>
+      </p>
+
+      <p className="ticket-meta">
+        {serviceLabel(order.orderType)} · placed {formatDate(order.createdAt, "time")} ·{" "}
+        <strong>{mins} min ago</strong>
+      </p>
+
+      {order.notes && (
+        <p className="ticket-meta" style={{ color: "var(--color-accent)" }}>
+          {order.notes}
+        </p>
+      )}
+
+      <div className="ticket-actions">
+        <OpenLink href={`/orders/${order.id}`} />
+        {next && ADVANCE_LABEL[key] && (
+          <span className="meta">Next: {ADVANCE_LABEL[key].toLowerCase()}</span>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function OpenLink({ href }: { href: string }) {
+  return (
+    <Link className="btn btn-secondary" to={href} style={{ minHeight: 38, padding: "8px 14px", fontSize: 13 }}>
+      Open
+    </Link>
+  )
+}
+
 /**
- * Dashboard page showing overview of restaurant operations.
+ * The dashboard.
+ *
+ * The kitchen board is the screen's job — a live order that only appears on
+ * refresh is worse than useless, because the tablet is the pass's whole view of
+ * the shop. `useOrderWebSocket` is what pushes; this page just renders the
+ * orders it invalidates.
  */
 export function DashboardPage() {
   const { isConnected } = useOrderWebSocket()
 
-  const { data: summary, isLoading } = useQuery({
+  const { data: orders = [], isLoading } = useQuery({
+    queryKey: ["orders", "board"],
+    queryFn: () => ordersApi.getOrders({ limit: 100 }),
+    refetchInterval: 30_000,
+  })
+
+  const { data: summary } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: () => ordersApi.getDashboardSummary(),
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30_000,
   })
 
-  const { data: dailyStats } = useQuery({
-    queryKey: ["daily-stats"],
-    queryFn: () => ordersApi.getDailyStats(),
-    refetchInterval: 60000, // Refresh every minute
+  const active = orders.filter((o) => {
+    const k = statusKey(o.status)
+    return k !== "completed" && k !== "cancelled"
   })
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent className="p-6">
-                  <Skeleton className="h-4 w-24 mb-2" />
-                  <Skeleton className="h-8 w-32" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
+  const inColumn = (key: StatusKey) =>
+    orders
+      .filter((o) => {
+        const k = statusKey(o.status)
+        if (key === "ready") return k === "ready" || k === "delivery"
+        return k === key
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
-  const hourlyData = Object.entries(dailyStats?.hourlyDistribution || {}).map(
-    ([hour, count]) => ({
-      hour: Number(hour),
-      orders: count as number,
-    })
-  )
+  const revenueToday = orders
+    .filter((o) => statusKey(o.status) === "completed")
+    .reduce((sum, o) => sum + o.total, 0)
+
+  const cancelledToday = orders.filter((o) => statusKey(o.status) === "cancelled").length
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-gray-500">
-            Welcome back! Here's what's happening today.
-          </p>
-        </div>
-        {/* Connection indicator */}
-        <Badge
-          variant={isConnected ? "success" : "warning"}
-          className="flex items-center gap-1.5"
-        >
-          {isConnected ? (
-            <>
-              <Wifi className="w-3 h-3" />
-              Live
-            </>
-          ) : (
-            <>
-              <WifiOff className="w-3 h-3" />
-              Offline
-            </>
-          )}
-        </Badge>
-      </div>
+    <>
+      <AdminTop
+        title="Dashboard"
+        sub="Live orders, the kitchen board and today's numbers."
+        actions={<StatusPill status={apiStatusValue("ready")} label={isConnected ? "Kitchen online" : "Reconnecting"} />}
+      />
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Today's Revenue"
-          value={formatCurrency(summary?.todayRevenue || 0)}
-          icon={DollarSign}
-          trend={
-            summary?.revenueChangePercent !== undefined && summary?.revenueChangePercent !== null
-              ? {
-                  value: summary.revenueChangePercent,
-                  isPositive: summary.revenueChangePercent >= 0,
-                }
-              : undefined
-          }
-        />
-        <StatCard
-          title="Active Orders"
-          value={summary?.activeOrders || 0}
-          icon={ShoppingBag}
-          iconClassName="bg-warning/10 text-warning"
-        />
-        <StatCard
-          title="Completed Orders"
-          value={summary?.completedOrdersToday || 0}
-          icon={CheckCircle}
-          iconClassName="bg-success/10 text-success"
-        />
-        <StatCard
-          title="Avg. Order Value"
-          value={formatCurrency(summary?.averageOrderValue || 0)}
-          icon={TrendingUp}
-          iconClassName="bg-info/10 text-info"
-        />
-      </div>
+      <div className="admin-page">
+        <section className="stat-grid" data-od-id="dash-stats">
+          <div className="stat-card is-accent">
+            <p className="stat-k">Live orders</p>
+            <p className="stat-v">{active.length}</p>
+            <p className="stat-delta">
+              {orders.filter((o) => statusKey(o.status) === "placed").length} waiting to be accepted
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-k">Needs attention</p>
+            <p className="stat-v">
+              {active.filter((o) => minutesAgo(o.createdAt) > URGENT_MINUTES).length}
+            </p>
+            <p className="stat-delta down">over {URGENT_MINUTES} min on the board</p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-k">Completed today</p>
+            <p className="stat-v">{orders.filter((o) => statusKey(o.status) === "completed").length}</p>
+            <p className="stat-delta down">{cancelledToday} cancelled</p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-k">Revenue today</p>
+            <p className="stat-v">{formatCurrency(revenueToday)}</p>
+            <p className="stat-delta">GST inclusive · AUD</p>
+          </div>
+        </section>
 
-      {/* Charts and Orders */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Revenue Chart */}
-        <div className="lg:col-span-1">
-          <RevenueChart data={hourlyData} />
-        </div>
-
-        {/* Recent Orders */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Orders</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RecentOrdersTable orders={summary?.recentOrders || []} />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Order Status Breakdown */}
-      {summary?.ordersByStatus && Object.keys(summary.ordersByStatus).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Order Status Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-              {Object.entries(summary.ordersByStatus).map(([status, count]) => (
-                <div key={status} className="text-center">
-                  <p className="text-2xl font-bold">{count}</p>
-                  <p className="text-sm text-gray-500">{status}</p>
-                </div>
-              ))}
+        <section data-od-id="dash-board">
+          <div className="head" style={{ marginBottom: 20 }}>
+            <div className="head-copy">
+              <p className="eyebrow eyebrow-gold">Kitchen board</p>
+              <h2 style={{ marginBottom: 6 }}>Where every order is right now</h2>
+              <p className="meta" style={{ margin: 0 }}>
+                Oldest order sits at the top of each column.
+              </p>
             </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+            <Link className="btn btn-secondary" to="/orders">
+              Open the full order list
+            </Link>
+          </div>
+
+          {isLoading ? (
+            <SkeletonRows rows={4} />
+          ) : (
+            <div className="board">
+              {COLUMNS.map((column) => {
+                const list = inColumn(column.key)
+                return (
+                  <div className="col" key={column.key}>
+                    <div className="col-head">
+                      <h3>{column.title}</h3>
+                      <span className="count">{list.length}</span>
+                    </div>
+                    <p className="meta" style={{ margin: "-6px 0 12px" }}>
+                      {column.hint}
+                    </p>
+                    {list.length ? (
+                      list.map((order) => <Ticket key={order.id} order={order} />)
+                    ) : (
+                      <p className="board-empty">Nothing here.</p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        <section data-od-id="dash-recent">
+          <div className="head" style={{ marginBottom: 16 }}>
+            <div className="head-copy">
+              <p className="eyebrow eyebrow-gold">Latest</p>
+              <h2 style={{ marginBottom: 0 }}>Most recent orders</h2>
+            </div>
+            <Link className="btn btn-ghost" to="/orders">
+              View all
+            </Link>
+          </div>
+
+          <Panel className="table-wrap">
+            <table className="dtable">
+              <caption className="sr-only">The six most recent orders</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Customer</th>
+                  <th scope="col">Service</th>
+                  <th scope="col">Placed</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" className="num-col">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.slice(0, 6).map((order) => (
+                  <tr key={order.id}>
+                    <td>
+                      <Link className="order-id" to={`/orders/${order.id}`}>
+                        {order.orderNumber}
+                      </Link>
+                    </td>
+                    <td>{order.customerName}</td>
+                    <td>{serviceLabel(order.orderType)}</td>
+                    <td>{formatDate(order.createdAt, "time")}</td>
+                    <td>
+                      <StatusPill status={order.status} />
+                    </td>
+                    <td className="num-col">{formatCurrency(order.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {summary?.ordersByStatus && (
+              <PanelBody>
+                <div className="filterbar">
+                  {Object.entries(summary.ordersByStatus).map(([status, count]) => (
+                    <Pill key={status} neutral>
+                      {status}: {count as number}
+                    </Pill>
+                  ))}
+                </div>
+              </PanelBody>
+            )}
+          </Panel>
+        </section>
+      </div>
+    </>
   )
 }
+
+export type { OrderStatus }

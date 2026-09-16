@@ -1,0 +1,219 @@
+/* ==========================================================================
+   Asian Taste — admin chrome (loads after app.css)
+   Same brand tokens. Deep-brown rail, cream content, maroon actions.
+   ========================================================================== */
+
+.admin { min-height: 100vh; display: grid; grid-template-columns: 244px 1fr; background: var(--bg); }
+
+/* ─── rail ───────────────────────────────────────────────────────────── */
+.admin-rail { background: var(--fg); color: var(--on-dark); display: flex; flex-direction: column; padding: 22px 16px; gap: 26px; position: sticky; top: 0; height: 100vh; }
+.admin-rail .brand-name { color: var(--surface); }
+.admin-rail .brand-tag { color: var(--on-dark-dim); }
+.admin-rail .brand-mark { color: var(--gold); }
+.admin-nav { display: flex; flex-direction: column; gap: 4px; }
+.admin-nav a {
+  display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: var(--radius);
+  font-size: 14px; font-weight: 700; color: var(--on-dark); min-height: 44px;
+  transition: background .15s ease, color .15s ease;
+}
+.admin-nav a svg { width: 19px; height: 19px; flex: none; opacity: .85; }
+.admin-nav a:hover { background: color-mix(in oklch, var(--surface) 10%, transparent); color: var(--surface); }
+.admin-nav a[aria-current="page"] { background: var(--accent); color: var(--surface); }
+.admin-rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+/* shared avatar (staff + customer identity) */
+.avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: var(--fg); font-weight: 800; font-size: 13px; flex: none; }
+.avatar.is-lg { width: 44px; height: 44px; font-size: 15px; }
+
+/* account block: button + popover */
+.admin-account { position: relative; }
+.admin-account-btn {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; cursor: pointer;
+  border: 1px solid color-mix(in oklch, var(--surface) 14%, transparent); border-radius: var(--radius);
+  background: color-mix(in oklch, var(--surface) 8%, transparent); color: var(--on-dark); text-align: left;
+  transition: background .15s ease, border-color .15s ease;
+}
+.admin-account-btn:hover { background: color-mix(in oklch, var(--surface) 14%, transparent); }
+.admin-account-btn[aria-expanded="true"] { border-color: color-mix(in oklch, var(--gold) 55%, transparent); background: color-mix(in oklch, var(--surface) 14%, transparent); }
+.admin-account-btn .ac-text { min-width: 0; flex: 1; }
+.admin-account-btn strong { display: block; font-size: 13px; color: var(--surface); }
+.admin-account-btn .ac-role { display: block; font-size: 11px; color: var(--on-dark-dim); }
+.admin-account-btn .ac-chev { width: 16px; height: 16px; flex: none; color: var(--on-dark-dim); transition: transform .18s ease; }
+.admin-account-btn[aria-expanded="true"] .ac-chev { transform: rotate(180deg); }
+.admin-account-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 40;
+  display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg);
+}
+.admin-account-menu[hidden] { display: none; }
+.admin-account-menu a, .admin-account-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; cursor: pointer;
+  border: 0; border-radius: var(--radius-sm); background: transparent;
+  font-size: 13px; font-weight: 700; color: var(--fg); text-align: left;
+  transition: background .12s ease, color .12s ease;
+}
+.admin-account-menu a:hover, .admin-account-menu button:hover { background: var(--fg-soft); color: var(--accent); }
+.admin-account-menu svg { width: 17px; height: 17px; flex: none; opacity: .8; }
+.admin-account-menu .is-danger { color: var(--accent); }
+
+/* back to storefront */
+.admin-back {
+  display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px;
+  border: 1px solid color-mix(in oklch, var(--surface) 24%, transparent); border-radius: var(--radius);
+  background: transparent; font-size: 13px; font-weight: 700; color: var(--surface);
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.admin-back svg { width: 17px; height: 17px; flex: none; }
+.admin-back:hover { background: var(--surface); border-color: var(--surface); color: var(--fg); }
+.live-dot { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); }
+.live-dot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--gf); box-shadow: 0 0 0 0 color-mix(in oklch, var(--gf) 60%, transparent); animation: pulse 2s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--gf) 55%, transparent); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* ─── main ───────────────────────────────────────────────────────────── */
+.admin-main { min-width: 0; display: flex; flex-direction: column; }
+.admin-top {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md);
+  padding: 16px clamp(18px, 3vw, 32px); border-bottom: 1px solid var(--border);
+  background: color-mix(in oklch, var(--bg) 88%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  position: sticky; top: 0; z-index: 30;
+}
+.admin-top h1 { font-family: var(--font-display); font-size: clamp(22px, 2.6vw, 30px); font-weight: 600; margin: 0; }
+.admin-top .sub { font-size: 13px; color: var(--muted); margin: 2px 0 0; }
+.admin-top-actions { display: flex; align-items: center; gap: var(--gap-sm); }
+.admin-page { padding: clamp(18px, 3vw, 32px); display: flex; flex-direction: column; gap: var(--gap-lg); }
+
+/* ─── stat cards ─────────────────────────────────────────────────────── */
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap-md); }
+@media (max-width: 1080px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .stat-grid { grid-template-columns: 1fr; } }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; }
+.stat-card .stat-k { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stat-card .stat-v { font-family: var(--font-display); font-size: 34px; font-weight: 600; line-height: 1.1; margin: 8px 0 2px; }
+.stat-card .stat-delta { font-size: 12px; font-weight: 700; color: var(--gf); }
+.stat-card .stat-delta.down { color: var(--deal); }
+.stat-card.is-accent { background: var(--fg); border-color: var(--fg); color: var(--surface); }
+.stat-card.is-accent .stat-k { color: var(--gold); }
+.stat-card.is-accent .stat-v { color: var(--surface); }
+
+/* ─── data table ─────────────────────────────────────────────────────── */
+.dtable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.dtable th, .dtable td { padding: 13px 16px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.dtable th { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: color-mix(in oklch, var(--bg) 60%, var(--surface)); }
+.dtable tbody tr { transition: background .12s ease; }
+.dtable tbody tr:hover { background: var(--fg-soft); }
+.dtable .num-col { text-align: right; font-variant-numeric: tabular-nums; }
+.dtable .order-id { font-weight: 800; font-variant-numeric: tabular-nums; }
+.dtable a.order-id:hover { color: var(--accent); }
+.table-wrap { overflow-x: auto; }
+
+/* ─── filter bar ─────────────────────────────────────────────────────── */
+.filterbar { display: flex; align-items: center; gap: var(--gap-sm); flex-wrap: wrap; }
+.filterbar .search { flex: 1; min-width: 220px; position: relative; }
+@media (max-width: 560px) { .filterbar .btn { flex: 1 1 auto; } }
+.filterbar .search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--muted); }
+.filterbar .search .input { padding-left: 40px; }
+.seg-sm { display: inline-flex; flex-wrap: wrap; gap: 4px; background: var(--fg-soft); padding: 4px; border-radius: 12px; }
+.seg-sm button {
+  min-height: 38px; padding: 8px 14px; border: 0; background: transparent; border-radius: 9px;
+  font-size: 13px; font-weight: 700; color: var(--muted); white-space: nowrap;
+}
+.seg-sm button:hover { color: var(--fg); }
+.seg-sm button[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+
+/* ─── kitchen status board ───────────────────────────────────────────── */
+.board { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: var(--gap-md); align-items: start; }
+@media (max-width: 1200px) { .board { grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
+@media (max-width: 700px) { .board { grid-template-columns: 1fr; } }
+.col { background: color-mix(in oklch, var(--bg) 55%, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; }
+.col-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.col-head h3 { font-size: 14px; }
+.col-head .count { font-size: 12px; font-weight: 800; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
+.ticket { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.ticket-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ticket-id { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 14px; }
+.ticket-items { font-size: 13px; color: var(--fg); margin: 0; }
+.ticket-meta { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.ticket.urgent { border-left: 3px solid var(--deal); }
+
+/* ─── order detail ───────────────────────────────────────────────────── */
+.detail-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: var(--gap-lg); align-items: start; }
+@media (max-width: 1000px) { .detail-grid { grid-template-columns: 1fr; } }
+/* .kv lives in app.css so customer and staff screens read identically */
+.line-item { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: start; }
+.line-item .li-qty { font-weight: 800; color: var(--accent); }
+.line-item .li-mod { font-size: 12px; color: var(--muted); }
+.line-item .li-price { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* status change control */
+.status-control { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.status-btn {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  text-align: left; min-height: 64px; transition: border-color .15s ease, background .15s ease;
+}
+.status-btn:hover { border-color: var(--accent-line); }
+.status-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.status-btn strong { font-size: 13px; }
+.status-btn span { font-size: 11px; color: var(--muted); }
+@media (max-width: 560px) { .status-control { grid-template-columns: 1fr 1fr; } }
+
+/* ─── login ──────────────────────────────────────────────────────────── */
+.login-wrap { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); }
+@media (max-width: 900px) { .login-wrap { grid-template-columns: 1fr; } .login-aside { display: none; } }
+.login-aside { background: var(--fg); color: var(--on-dark); padding: clamp(32px, 5vw, 64px); display: flex; flex-direction: column; justify-content: space-between; }
+.login-aside .brand-name { color: var(--surface); }
+.login-aside .brand-tag { color: var(--on-dark-dim); }
+.login-main { display: grid; place-items: center; padding: clamp(28px, 5vw, 64px); }
+.login-card { width: min(420px, 100%); }
+.login-card h1 { margin-bottom: 8px; }
+.login-card .lead { margin-bottom: 28px; }
+
+/* ─── menu management ────────────────────────────────────────────────── */
+.mm-row { display: grid; grid-template-columns: 56px 1fr 130px 120px 44px; gap: 14px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.mm-thumb { width: 56px; height: 56px; border-radius: var(--radius-sm); background: var(--border); display: grid; place-items: center; color: var(--muted); font-size: 10px; text-align: center; overflow: hidden; }
+.mm-thumb img { width: 100%; height: 100%; object-fit: cover; }
+/* On a phone the availability switch IS the screen's job — keep it on the row
+   (track only, the input keeps its own label) and drop the price column, so
+   nothing is orphaned onto a second line. */
+@media (max-width: 720px) {
+  .mm-row { grid-template-columns: 44px 1fr 46px 40px; gap: 12px; padding: 12px; }
+  .mm-row .mm-hide { display: none; }
+  .mm-row .switch-label { display: none; }
+  .mm-row .switch { gap: 0; }
+}
+
+/* ─── responsive rail ────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .admin { grid-template-columns: 1fr; }
+  .admin-rail { position: static; height: auto; flex-direction: row; align-items: center; gap: 16px; padding: 12px 16px; overflow-x: auto; }
+  .admin-rail .admin-nav { flex-direction: row; gap: 6px; }
+  .admin-nav a span { display: none; }
+  .admin-rail-foot { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
+  .admin-account-btn { padding: 6px; border-color: transparent; background: transparent; }
+  .admin-account-btn .ac-text, .admin-account-btn .ac-chev { display: none; }
+  .admin-account-menu { position: fixed; left: auto; right: 12px; top: 64px; bottom: auto; min-width: 200px; }
+  .admin-back { padding: 0 12px; }
+  .admin-back span { display: none; }
+  .live-dot { display: none; }
+}
+
+/* ─── D-06 fix: staff sign-in heading is UI, not editorial ───────────── */
+.login-card h1 { font-family: var(--font-body); font-weight: 800; letter-spacing: -0.02em; font-size: clamp(26px, 3vw, 32px); }
+.login-card h1 + .lead { color: var(--muted); }
+
+/* customer identity — kitchen tickets + order-detail head */
+.ticket-who { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.ticket-who .avatar { width: 26px; height: 26px; font-size: 11px; }
+.ticket-who strong { font-size: 13px; }
+.ticket-who .meta { margin: 0; }
+.head-who { display: inline-flex; align-items: center; gap: 8px; }
+.head-who .avatar { width: 30px; height: 30px; font-size: 11px; }
+.head-who strong { display: block; font-size: 13px; line-height: 1.2; }
+.head-who .meta { font-size: 11px; }
+
+/* kitchen board ticket action row */
+.ticket-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ticket-actions .btn { min-height: 38px; padding: 8px 14px; font-size: 13px; }
+.col .ticket:last-child { margin-bottom: 0; }
+.board-empty { border: 1px dashed var(--border); border-radius: var(--radius); padding: 18px; text-align: center; color: var(--muted); font-size: 13px; }

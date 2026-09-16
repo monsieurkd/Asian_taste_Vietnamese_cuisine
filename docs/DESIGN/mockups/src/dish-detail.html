@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Choose your dish · Asian Taste</title>
+  <meta name="description" content="Build your Asian Taste dish — choose your protein, rice, spice level and quantity before adding it to your order." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+</head>
+<body data-page="menu">
+  <div id="site-chrome"></div>
+
+  <main id="content" class="container section" data-od-id="dish-detail">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="index.html">Home</a><span class="sep">/</span>
+      <a href="menu.html">Menu</a><span class="sep">/</span>
+      <a href="menu.html#menu" id="crumb-cat">Dishes</a><span class="sep">/</span>
+      <span aria-current="page" id="crumb-name">Dish</span>
+    </nav>
+
+    <div class="split" style="margin-top:26px">
+      <div class="stack">
+        <div id="detail-media" class="dish-media is-detail ph"></div>
+
+        <div>
+          <div id="detail-badges" class="tag-row" style="margin-bottom:12px"></div>
+          <h1 id="detail-name" style="margin-bottom:10px">Dish</h1>
+          <p class="lead" id="detail-desc" style="margin-bottom:16px"></p>
+          <div class="dish-tags" id="detail-tags"></div>
+        </div>
+
+        <dl class="facts" aria-label="Good to know">
+          <div><dt>Kitchen note</dt><dd id="fact-note">Cooked to order</dd></div>
+          <div><dt>Heat scale</dt><dd>1 – 5, your choice</dd></div>
+          <div><dt>Vegan</dt><dd>Available on request</dd></div>
+        </dl>
+
+        <form id="options-form" class="stack" novalidate></form>
+
+        <div class="field">
+          <label for="special">Special instructions <span class="muted" style="font-weight:500">(optional)</span></label>
+          <textarea class="textarea" id="special" placeholder="No coriander, sauce on the side, allergies…" maxlength="200"></textarea>
+          <p class="hint">We'll pass this straight to the kitchen.</p>
+        </div>
+      </div>
+
+      <aside class="summary-card panel" aria-label="Your selection">
+        <div class="panel-head">
+          <h3>Your selection</h3>
+          <span class="pill" id="summary-qty-pill">1 item</span>
+        </div>
+        <div class="panel-body stack">
+          <div id="summary-choices" class="stack" style="--gap:8px"></div>
+          <div id="summary-error" class="field-error" hidden>Please choose the required options above.</div>
+          <div class="qty-lg" role="group" aria-label="Quantity">
+            <button type="button" id="q-dec" aria-label="Reduce quantity">−</button>
+            <span class="qty-val" id="q-val" aria-live="polite">1</span>
+            <button type="button" id="q-inc" aria-label="Increase quantity">+</button>
+          </div>
+          <div class="sum-row"><span>Item price</span><span class="num" id="line-unit">$0.00</span></div>
+          <div class="sum-row"><span>Quantity</span><span class="num" id="line-qty">× 1</span></div>
+          <div class="sum-row total"><span>Add to order</span><span class="num" id="line-total">$0.00</span></div>
+        </div>
+        <div class="panel-foot">
+          <button class="btn btn-primary btn-block" id="add-to-order">Add to your order</button>
+          <a class="btn btn-ghost btn-block" href="menu.html#menu" style="margin-top:8px">Keep browsing the menu</a>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/chrome.js"></script>
+  <script src="scripts/store.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var M = window.AT_MENU;
+      var params = new URLSearchParams(location.search);
+      var dish = M.byId(params.get('id')) || M.byId('cold-rolls');
+      var selections = {};
+      var qty = 1;
+
+      function initials(name) {
+        return name.replace(/[^a-zA-Z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(function (w) { return w[0].toUpperCase(); }).join('');
+      }
+
+      /* ─── header ─────────────────────────────────────────────────── */
+      document.title = dish.name + ' · Asian Taste';
+      document.getElementById('crumb-name').textContent = dish.name;
+      var cat = M.categories.filter(function (c) { return dish.cats.indexOf(c.id) !== -1; })[0];
+      if (cat) document.getElementById('crumb-cat').textContent = cat.label;
+      document.getElementById('detail-name').textContent = dish.name;
+      document.getElementById('detail-desc').textContent = dish.desc;
+      document.getElementById('fact-note').textContent = 'Cooked to order · ' + (cat ? cat.label : 'Kitchen');
+
+      document.getElementById('detail-badges').innerHTML =
+        (dish.cats.indexOf('popular') !== -1 ? '<span class="badge badge-popular">Popular</span>' : '') +
+        (dish.cats.indexOf('deals') !== -1 ? '<span class="badge badge-deal">Super deal</span>' : '');
+      document.getElementById('detail-tags').innerHTML = (dish.tags || []).map(function (t) {
+        var T = M.tags[t];
+        return '<span class="dish-tag"><i class="dot ' + T.dot + '" aria-hidden="true"></i>' + T.label + '</span>';
+      }).join('');
+
+      var media = document.getElementById('detail-media');
+      if (dish.image) {
+        var dim = window.AT_MENU.imageDim(dish.image);
+        media.className = 'dish-media is-detail';
+        media.innerHTML = '<img src="' + dish.image + '" alt="' + dish.name + '"' +
+          (dim ? ' width="' + dim[0] + '" height="' + dim[1] + '"' : '') + ' />';
+      } else {
+        media.innerHTML = '<span class="ph-mono" aria-hidden="true">' + initials(dish.name) + '</span>';
+      }
+
+      /* ─── option groups ──────────────────────────────────────────── */
+      var form = document.getElementById('options-form');
+      var groups = dish.options || [];
+      if (!groups.length) {
+        form.innerHTML = '<div class="panel"><div class="panel-body"><strong>No choices needed.</strong><p class="meta" style="margin:6px 0 0">This one comes exactly as described — just set your quantity.</p></div></div>';
+      }
+      groups.forEach(function (g) {
+        var wrap = document.createElement('fieldset');
+        wrap.className = 'panel';
+        wrap.style.border = '0';
+        wrap.style.padding = '0';
+        wrap.dataset.group = g.id;
+        if (g.type === 'radio') {
+          wrap.innerHTML = '<legend class="field-label" style="padding:0;margin-bottom:10px">' + g.label + (g.required ? ' <span class="muted" style="font-weight:500">· required</span>' : '') + '</legend>' +
+            '<div class="choice-list">' + (g.choices || []).map(function (c) {
+              return '<label class="choice"><input type="radio" name="' + g.id + '" value="' + c.id + '" />' +
+                '<span class="choice-main"><strong>' + c.label + '</strong>' + (c.delta ? '<span class="choice-price">+ ' + AT.money(c.delta) + '</span>' : '') + '</span></label>';
+            }).join('') + '</div>';
+        } else if (g.type === 'checkbox') {
+          wrap.innerHTML = '<legend class="field-label" style="padding:0;margin-bottom:10px">' + g.label + '</legend>' +
+            '<div class="choice-list">' + (g.choices || []).map(function (c) {
+              return '<label class="choice"><input type="checkbox" name="' + g.id + '" value="' + c.id + '" />' +
+                '<span class="choice-main"><span><strong>' + c.label + '</strong>' + (c.note ? '<p class="choice-note">' + c.note + '</p>' : '') + '</span></span></label>';
+            }).join('') + '</div>';
+        } else if (g.type === 'range') {
+          var vals = [];
+          for (var v = g.min; v <= g.max; v++) vals.push(v);
+          wrap.innerHTML = '<legend class="field-label" style="padding:0;margin-bottom:6px">' + g.label + '</legend>' +
+            '<p class="hint" style="margin:0 0 10px">' + (g.hint || '') + '</p>' +
+            '<div class="seg seg-num" role="group" aria-label="' + g.label + '" style="background:var(--fg-soft)">' +
+              vals.map(function (n) { return '<button type="button" class="seg-btn" data-spice="' + n + '" aria-pressed="false" style="color:var(--muted);min-width:54px;justify-content:center">' + n + '</button>'; }).join('') +
+            '</div>';
+        }
+        form.appendChild(wrap);
+      });
+
+      /* ─── selection state + live price ───────────────────────────── */
+      var summaryChoices = document.getElementById('summary-choices');
+      function readForm() {
+        groups.forEach(function (g) {
+          if (g.type === 'range') return;
+          var picked = Array.prototype.slice.call(form.querySelectorAll('[name="' + g.id + '"]:checked')).map(function (i) { return i.value; });
+          if (picked.length) selections[g.id] = g.type === 'checkbox' ? picked : picked[0];
+          else delete selections[g.id];
+        });
+      }
+      function summaryText() {
+        var out = [];
+        groups.forEach(function (g) {
+          if (g.type === 'range') { out.push(g.label + ': ' + (selections[g.id] || g.value)); return; }
+          var v = selections[g.id]; if (v == null) return;
+          var ids = Array.isArray(v) ? v : [v];
+          var labels = ids.map(function (id) {
+            var c = (g.choices || []).filter(function (x) { return x.id === id; })[0];
+            return c ? c.label : id;
+          });
+          out.push(g.label + ': ' + labels.join(', '));
+        });
+        return out;
+      }
+      function render() {
+        var unit = M.priceOf(dish, selections);
+        document.getElementById('line-unit').textContent = AT.money(unit);
+        document.getElementById('line-qty').textContent = '× ' + qty;
+        document.getElementById('line-total').textContent = AT.money(unit * qty);
+        document.getElementById('q-val').textContent = qty;
+        document.getElementById('summary-qty-pill').textContent = qty + (qty === 1 ? ' item' : ' items');
+        document.getElementById('q-dec').disabled = qty <= 1;
+        var s = summaryText();
+        summaryChoices.innerHTML = s.length
+          ? s.map(function (t) { return '<div class="rowline" style="padding:6px 0;border:0"><span class="meta">' + t + '</span></div>'; }).join('')
+          : '<p class="meta" style="margin:0">Made just as described.</p>';
+      }
+
+      form.addEventListener('change', function () { readForm(); document.getElementById('summary-error').hidden = true; render(); });
+      form.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-spice]'); if (!b) return;
+        selections.spice = Number(b.dataset.spice);
+        form.querySelectorAll('[data-spice]').forEach(function (x) {
+          var on = x === b;
+          x.setAttribute('aria-pressed', String(on));
+          x.style.color = on ? 'var(--surface)' : 'var(--muted)';
+          x.style.background = on ? 'var(--accent)' : 'transparent';
+        });
+        render();
+      });
+
+      // default the range groups
+      groups.forEach(function (g) {
+        if (g.type === 'range') {
+          selections[g.id] = g.value;
+          var d = form.querySelector('[data-spice="' + g.value + '"]');
+          if (d) { d.setAttribute('aria-pressed', 'true'); d.style.color = 'var(--surface)'; d.style.background = 'var(--accent)'; }
+        }
+        if (g.type === 'radio' && g.choices && g.choices.length) {
+          var first = form.querySelector('[name="' + g.id + '"][value="' + g.choices[0].id + '"]');
+          if (first) first.checked = true;
+        }
+      });
+      readForm();
+
+      document.getElementById('q-inc').addEventListener('click', function () { qty = Math.min(20, qty + 1); render(); });
+      document.getElementById('q-dec').addEventListener('click', function () { qty = Math.max(1, qty - 1); render(); });
+
+      document.getElementById('add-to-order').addEventListener('click', function () {
+        var missing = (dish.options || []).filter(function (g) { return g.required && g.type === 'radio' && selections[g.id] == null; });
+        if (missing.length) {
+          var err = document.getElementById('summary-error');
+          err.hidden = false; err.textContent = 'Please choose: ' + missing.map(function (g) { return g.label; }).join(', ') + '.';
+          err.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          return;
+        }
+        var summary = summaryText().join(' · ');
+        var note = (document.getElementById('special').value || '').trim();
+        if (note) summary += ' · Note: ' + note;
+        AT.add(dish.id, { qty: qty, summary: summary, unitPrice: M.priceOf(dish, selections) });
+        AT.openDrawer();
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>

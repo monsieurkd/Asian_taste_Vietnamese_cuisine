@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dish card anatomy · Asian Taste design set</title>
+  <meta name="description" content="The anatomy of the Asian Taste dish card — media, badges, name, option hint, description, dietary tags, price and action." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+  <style>
+    .anatomy { position: relative; }
+    .callout {
+      position: absolute; z-index: 3; width: 26px; height: 26px; border-radius: 50%;
+      display: grid; place-items: center; background: var(--accent); color: var(--surface);
+      font-size: 12px; font-weight: 800; box-shadow: var(--shadow-md); border: 2px solid var(--surface);
+    }
+  </style>
+</head>
+<body data-page="states">
+  <div id="site-chrome"></div>
+
+  <main id="content" class="container section" data-od-id="dish-card">
+    <div class="pagehead">
+      <nav class="breadcrumb" aria-label="Breadcrumb"><a href="index.html">Home</a><span class="sep">/</span><span aria-current="page">Dish card</span></nav>
+      <p class="eyebrow eyebrow-gold" style="margin-top:16px">Component</p>
+      <h1>Dish card</h1>
+      <p class="lead">One card, every menu item. The same component carries a photo or a woven placeholder, a popularity or deal badge, the required-choice hint, dietary tags, the price and the right action for that dish.</p>
+    </div>
+
+    <section class="split" data-od-id="card-anatomy">
+      <div class="anatomy">
+        <article class="dish-card" style="max-width:420px">
+          <div class="dish-media is-flat ph">
+            <span class="ph-mono" aria-hidden="true">CR</span>
+            <span class="callout" style="top:10px;left:10px">1</span>
+          </div>
+          <div style="margin-top:2px"><span class="badge badge-popular">Popular</span></div>
+          <h3 class="dish-name">Cold Rolls (4)</h3>
+          <p class="dish-note">Choose your filling</p>
+          <p class="dish-desc">Hand-rolled rice paper with fresh herbs and hoisin dip.</p>
+          <div class="dish-tags">
+            <span class="dish-tag"><i class="dot dot-gf" aria-hidden="true"></i>GF</span>
+            <span class="dish-tag"><i class="dot dot-spicy" aria-hidden="true"></i>Spicy</span>
+          </div>
+          <div class="dish-foot">
+            <span class="price">$8.50</span>
+            <a class="add-btn" href="dish-detail.html?id=cold-rolls">Choose options</a>
+          </div>
+        </article>
+      </div>
+
+      <aside class="stack">
+        <div class="panel">
+          <div class="panel-head"><h3>What each part does</h3></div>
+          <div class="panel-body">
+            <dl class="kv" style="grid-template-columns:34px 1fr;gap:12px 14px">
+              <dt style="color:var(--accent);font-weight:800">1</dt><dd><strong>Media.</strong> 4:3 photo when we have one. No photo? A woven cream placeholder with the dish initials — never a broken image. A sold-out stamp sits bottom-right.</dd>
+              <dt style="color:var(--accent);font-weight:800">2</dt><dd><strong>Badge.</strong> <em>Popular</em> (gold) or <em>Deal</em> (red). Maximum one per card, and never on the same dish as another badge.</dd>
+              <dt style="color:var(--accent);font-weight:800">3</dt><dd><strong>Name.</strong> Plus Jakarta Sans, sentence case, never truncated. Two lines maximum on mobile.</dd>
+              <dt style="color:var(--accent);font-weight:800">4</dt><dd><strong>Option hint.</strong> Only appears when the dish needs a choice — this is the single strongest signal that the card won't add instantly.</dd>
+              <dt style="color:var(--accent);font-weight:800">5</dt><dd><strong>Description.</strong> One line, plain English, no adjectives doing heavy lifting.</dd>
+              <dt style="color:var(--accent);font-weight:800">6</dt><dd><strong>Dietary tags.</strong> GF / Vegan / Spicy, each with its own coloured dot. Same order on every card.</dd>
+              <dt style="color:var(--accent);font-weight:800">7</dt><dd><strong>Price + action.</strong> Price in maroon tabular figures. Action adapts: <em>Add</em>, <em>Choose options</em>, or disabled <em>Sold out</em>.</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Specs</h3></div>
+          <div class="panel-body">
+            <dl class="kv">
+              <dt>Class</dt><dd><code>.dish-card</code></dd>
+              <dt>Radius</dt><dd>16px (<code>--radius-lg</code>)</dd>
+              <dt>Padding</dt><dd>20px</dd>
+              <dt>Hover</dt><dd>lift 2px + soft shadow</dd>
+              <dt>Grid</dt><dd>3 → 2 → 1 columns</dd>
+              <dt>Min tap</dt><dd>44 × 44 px on every action</dd>
+            </dl>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="stack" style="margin-top:var(--gap-2xl)" data-od-id="card-variants">
+      <div class="head"><div class="head-copy"><p class="eyebrow eyebrow-gold">Variants</p><h2>The seven faces of one card</h2><p class="lead">Same skeleton, different data — this is exactly what the menu page renders from <code>scripts/menu-data.js</code>.</p></div></div>
+      <div class="menu-grid">
+        <article class="dish-card">
+          <div class="dish-media"><img src="assets/dishes/pho-beef-noodle-soup.jpg" width="550" height="440" alt="Pho beef noodle soup" loading="lazy" /></div>
+          <div style="margin-top:2px"><span class="badge badge-popular">Popular</span></div>
+          <h3 class="dish-name">Pho — Beef Noodle Soup</h3>
+          <p class="dish-desc">Slow-simmered beef broth with rice noodles and fresh herbs.</p>
+          <div class="dish-tags"><span class="dish-tag"><i class="dot dot-gf" aria-hidden="true"></i>GF</span></div>
+          <div class="dish-foot"><span class="price">$15.50</span><a class="add-btn" href="dish-detail.html?id=pho-beef">Choose options</a></div>
+        </article>
+
+        <article class="dish-card">
+          <div class="dish-media"><img src="assets/dishes/spring-rolls.jpg" alt="Spring rolls" loading="lazy" /></div>
+          <h3 class="dish-name">Spring Rolls (3)</h3>
+          <p class="dish-note">Choose your filling</p>
+          <p class="dish-desc">Crispy rolls, fried to order.</p>
+          <div class="dish-tags"></div>
+          <div class="dish-foot"><span class="price">$5.80</span><a class="add-btn" href="dish-detail.html?id=spring-rolls">Choose options</a></div>
+        </article>
+
+        <article class="dish-card">
+          <div class="dish-media is-flat ph"><span class="ph-mono" aria-hidden="true">SC</span></div>
+          <h3 class="dish-name">Sweet Corn Soup</h3>
+          <p class="dish-desc">Silky, gently sweet soup. Made fresh each morning.</p>
+          <div class="dish-tags"></div>
+          <div class="dish-foot"><span class="price">$7.80</span><button class="add-btn" data-add="sweet-corn-soup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add</button></div>
+        </article>
+
+        <article class="dish-card is-soldout">
+          <div class="dish-media is-flat ph"><span class="ph-mono" aria-hidden="true">CR</span><span class="stamp">Sold out</span></div>
+          <h3 class="dish-name">Cold Rolls (4)</h3>
+          <p class="dish-desc">Hand-rolled rice paper with fresh herbs. Back tomorrow.</p>
+          <div class="dish-tags"><span class="dish-tag"><i class="dot dot-gf" aria-hidden="true"></i>GF</span></div>
+          <div class="dish-foot"><span class="price" style="color:var(--muted)">$8.50</span><button class="add-btn" disabled aria-disabled="true">Sold out</button></div>
+        </article>
+
+        <article class="dish-card">
+          <div class="dish-media is-flat ph"><span class="ph-mono" aria-hidden="true">SN</span></div>
+          <div style="margin-top:2px"><span class="badge badge-deal">Deal</span></div>
+          <h3 class="dish-name">Snack Super Deal</h3>
+          <p class="dish-note">Choose your drink</p>
+          <p class="dish-desc">2 spring rolls + 1 drink. Available on orders from $7.80.</p>
+          <div class="dish-tags"></div>
+          <div class="dish-foot"><span class="price">$5.20</span><a class="add-btn" href="dish-detail.html?id=snack-deal">Choose options</a></div>
+        </article>
+
+        <article class="dish-card">
+          <div class="dish-media is-flat ph"><span class="ph-mono" aria-hidden="true">VH</span></div>
+          <h3 class="dish-name">Veg Tofu Hotpot</h3>
+          <p class="dish-desc">Tofu and vegetables in a hotpot.</p>
+          <div class="dish-tags"><span class="dish-tag"><i class="dot dot-vegan" aria-hidden="true"></i>Vegan</span></div>
+          <div class="dish-foot"><span class="price">$16.50</span><button class="add-btn" data-add="veg-tofu-hotpot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add</button></div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/chrome.js"></script>
+  <script src="scripts/store.js"></script>
+</body>
+</html>

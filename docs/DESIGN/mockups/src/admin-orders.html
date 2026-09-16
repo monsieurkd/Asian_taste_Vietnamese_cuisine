@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orders · Asian Taste staff</title>
+  <meta name="description" content="Every Asian Taste order, filterable by status and service." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+  <link rel="stylesheet" href="styles/admin.css" />
+</head>
+<body data-page="orders" data-title="Orders" data-sub="Search, filter and open any order from today's service.">
+  <div class="admin">
+    <aside class="admin-rail" id="admin-rail"></aside>
+    <div class="admin-main">
+      <header class="admin-top" id="admin-top"></header>
+
+      <div class="admin-page">
+        <section class="panel" data-od-id="orders-filters">
+          <div class="panel-body stack">
+            <div class="filterbar">
+              <div class="search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
+                <label class="sr-only" for="order-search">Search orders</label>
+                <input class="input" id="order-search" type="search" placeholder="Search by order number, customer or dish…" />
+              </div>
+              <div class="seg-sm" role="group" aria-label="Filter by service" id="service-filter">
+                <button data-service="all" aria-pressed="true">All services</button>
+                <button data-service="delivery" aria-pressed="false">Delivery</button>
+                <button data-service="pickup" aria-pressed="false">Pickup</button>
+                <button data-service="dinein" aria-pressed="false">Dine in</button>
+              </div>
+            </div>
+            <div class="seg-sm" role="group" aria-label="Filter by status" id="status-filter" style="flex-wrap:wrap">
+              <button data-status="all" aria-pressed="true">All statuses</button>
+              <button data-status="placed" aria-pressed="false">Placed</button>
+              <button data-status="confirmed" aria-pressed="false">Confirmed</button>
+              <button data-status="preparing" aria-pressed="false">Preparing</button>
+              <button data-status="ready" aria-pressed="false">Ready</button>
+              <button data-status="delivery" aria-pressed="false">Out</button>
+              <button data-status="completed" aria-pressed="false">Completed</button>
+              <button data-status="cancelled" aria-pressed="false">Cancelled</button>
+            </div>
+            <p class="meta" id="result-count" aria-live="polite" style="margin:0">Showing 12 orders</p>
+          </div>
+        </section>
+
+        <section class="panel" data-od-id="orders-table">
+          <div class="table-wrap">
+            <table class="dtable">
+              <caption class="sr-only">Orders for today</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Customer</th>
+                  <th scope="col">Service</th>
+                  <th scope="col">Items</th>
+                  <th scope="col">Placed</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" class="num-col">Total</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="orders-body"></tbody>
+            </table>
+          </div>
+          <div class="panel-foot row-between">
+            <span class="meta">Prototype shows all 12 orders on one page.</span>
+            <div class="row" style="gap:8px">
+              <button class="btn btn-ghost" disabled>Previous</button>
+              <button class="btn btn-ghost" disabled>Next</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/admin.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var A = window.AT_ADMIN;
+      var status = 'all', service = 'all', q = '';
+      var body = document.getElementById('orders-body');
+
+      function matches(o) {
+        if (status !== 'all' && o.status !== status) {
+          if (!(status === 'ready' && o.status === 'delivery')) return false;
+        }
+        if (service !== 'all' && o.type !== service) return false;
+        if (q) {
+          var hay = (o.id + ' ' + o.customer + ' ' + o.phone + ' ' + A.itemsSummary(o)).toLowerCase();
+          if (hay.indexOf(q) === -1) return false;
+        }
+        return true;
+      }
+
+      function render() {
+        var rows = A.orders().filter(matches);
+        body.innerHTML = rows.length ? rows.map(function (o) {
+          return '<tr>' +
+            '<td><a class="order-id" href="admin-order-detail.html?id=' + o.id + '">' + o.id + '</a></td>' +
+            '<td><strong>' + o.customer + '</strong><br><span class="meta">' + o.phone + '</span></td>' +
+            '<td>' + A.typeLabel(o.type) + '</td>' +
+            '<td style="max-width:280px">' + A.itemsSummary(o) + '</td>' +
+            '<td>' + o.placed + '<br><span class="meta">' + o.mins + ' min ago</span></td>' +
+            '<td>' + A.pill(o.status) + '</td>' +
+            '<td class="num-col">' + A.money(o.total) + '</td>' +
+            '<td><a class="btn btn-ghost" style="min-height:36px;padding:6px 12px;font-size:13px" href="admin-order-detail.html?id=' + o.id + '">Open</a></td>' +
+          '</tr>';
+        }).join('') : '<tr><td colspan="8"><div class="state-block"><span class="state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></span><h3>No orders match</h3><p>Try a different status, service or search term.</p><button class="btn btn-secondary" id="clear-filters">Clear filters</button></div></td></tr>';
+        document.getElementById('result-count').textContent = 'Showing ' + rows.length + ' of ' + A.orders().length + ' orders';
+        var clr = document.getElementById('clear-filters');
+        if (clr) clr.addEventListener('click', function () {
+          status = 'all'; service = 'all'; q = ''; document.getElementById('order-search').value = '';
+          document.querySelectorAll('#status-filter button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.status === 'all')); });
+          document.querySelectorAll('#service-filter button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.service === 'all')); });
+          render();
+        });
+      }
+
+      document.getElementById('status-filter').addEventListener('click', function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        status = b.dataset.status;
+        this.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+        render();
+      });
+      document.getElementById('service-filter').addEventListener('click', function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        service = b.dataset.service;
+        this.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+        render();
+      });
+      document.getElementById('order-search').addEventListener('input', function (e) { q = e.target.value.trim().toLowerCase(); render(); });
+
+      render();
+    })();
+  </script>
+</body>
+</html>

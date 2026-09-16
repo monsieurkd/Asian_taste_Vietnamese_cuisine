@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Staff sign in · Asian Taste</title>
+  <meta name="description" content="Asian Taste staff console sign in." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+  <link rel="stylesheet" href="styles/admin.css" />
+</head>
+<body>
+  <div class="login-wrap">
+    <aside class="login-aside">
+      <a class="brand" href="index.html">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z"/><path d="M9 7.5c0-1.3 1.1-1.7 1.1-2.8M12.5 7.5c0-1.3 1.1-1.7 1.1-2.8"/></svg></span>
+        <span class="brand-text"><span class="brand-name">Asian Taste</span><span class="brand-tag">Taste of Happiness</span></span>
+      </a>
+      <div>
+        <h2 style="color:var(--surface);max-width:18ch">The kitchen board, exactly as the pass sees it.</h2>
+        <p class="lead" style="color:var(--on-dark);max-width:40ch;margin-top:16px">Orders land here the second they're paid, move across six stages, and stay visible until they're handed over.</p>
+        <ul class="story-list" style="margin-top:26px">
+          <li><span class="mark" style="background:var(--gold);color:var(--fg)" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><div><strong style="color:var(--surface)">One source of truth</strong><p style="color:var(--on-dark-dim)">Front counter, kitchen and driver see the same ticket.</p></div></li>
+          <li><span class="mark" style="background:var(--gold);color:var(--fg)" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><div><strong style="color:var(--surface)">Built for a busy pass</strong><p style="color:var(--on-dark-dim)">Big targets, tabular numbers, no hunting.</p></div></li>
+        </ul>
+      </div>
+      <p class="meta" style="color:var(--on-dark-dim);margin:0">© 2026 Asian Taste · Brooklyn Park, Adelaide</p>
+    </aside>
+
+    <main class="login-main" data-od-id="admin-login">
+      <div class="login-card">
+        <p class="eyebrow eyebrow-gold">Staff only</p>
+        <h1>Sign in to the console</h1>
+        <p class="lead">Use the shared kitchen account, or your own manager login.</p>
+
+        <form id="login-form" novalidate style="margin-top:26px">
+          <div class="field" style="margin-bottom:16px">
+            <label for="staff-email">Work email</label>
+            <input class="input" id="staff-email" type="email" autocomplete="username" value="minh@asiantaste.com.au" />
+          </div>
+          <div class="field" style="margin-bottom:16px">
+            <label for="staff-pass">Password</label>
+            <div style="position:relative">
+              <input class="input" id="staff-pass" type="password" autocomplete="current-password" value="demo1234" style="padding-right:96px" />
+              <button class="btn btn-ghost" type="button" id="toggle-pass" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);min-height:34px;padding:6px 12px;font-size:12px">Show</button>
+            </div>
+            <p class="field-error" data-err hidden>That email and password don't match. Try again.</p>
+          </div>
+          <label class="switch" style="margin-bottom:22px">
+            <input type="checkbox" id="remember" checked /><span class="track" aria-hidden="true"></span>
+            <span class="switch-label">Keep me signed in on this device</span>
+          </label>
+          <button class="btn btn-primary btn-block" type="submit">Sign in to the console</button>
+          <a class="btn btn-ghost btn-block" href="admin-dashboard.html" style="margin-top:8px">Skip — view the dashboard</a>
+        </form>
+
+        <p class="meta" style="margin-top:26px">Prototype note: this form is a mock. <strong>D-06 fix</strong> — the sign-in heading now uses the Manrope UI face, not the editorial serif, so it reads as software rather than a menu.</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/admin.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      document.getElementById('toggle-pass').addEventListener('click', function () {
+        var p = document.getElementById('staff-pass');
+        var show = p.type === 'password';
+        p.type = show ? 'text' : 'password';
+        this.textContent = show ? 'Hide' : 'Show';
+      });
+      document.getElementById('login-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var err = this.querySelector('[data-err]');
+        err.hidden = true;
+        var btn = this.querySelector('button[type="submit"]');
+        btn.textContent = 'Signing in…'; btn.disabled = true;
+        setTimeout(function () { location.href = 'admin-dashboard.html'; }, 700);
+      });
+    })();
+  </script>
+</body>
+</html>

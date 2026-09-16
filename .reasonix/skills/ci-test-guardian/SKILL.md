@@ -42,7 +42,7 @@ Everything must run with **zero errors** to call CI green.
 - `dotnet build` → **0 errors, 9 warnings**. The warnings are pre-existing and NOT yours to fix: `NpgsqlConnection.GlobalTypeMapper` obsolete ×5 (`Program.cs:24-28`), `Rfc2898DeriveBytes` obsolete ×2 (`CustomerService.cs:389,418`), `CS8601` nullable (`OrderService.cs:74`). **Do not let warning count grow.** A new warning in the projects you touched is a defect.
 - `dotnet test` → **14 tests, all pass** (only `EncryptionServiceTests` + `StripeConfigurationTests`).
 - Both frontends `npm run build` → pass.
-- **Lint FAILS on purpose-ignored debt**: customer 11 problems (5 errors, 6 warnings), admin 6 errors. CI has `continue-on-error: true` on lint (see `MAJOR_UPDATE_PLAN.md` item A8). So lint failing is *expected*; what matters is that **you did not add NEW lint problems**. Report the before/after counts.
+- **Lint FAILS on purpose-ignored debt**: customer 11 problems (5 errors, 6 warnings), admin 6 errors. CI has `continue-on-error: true` on lint (see `docs/archive/MAJOR_UPDATE_PLAN_superseded.md` item A8). So lint failing is *expected*; what matters is that **you did not add NEW lint problems**. Report the before/after counts.
 - There is **no `test` script** in either frontend's `package.json`, and **no Playwright/Vitest installed**. `npm run lint` is the strongest frontend check that exists today. Do not claim frontend behaviour is tested.
 
 ## Where the real risk is (test these, not the easy things)
@@ -62,9 +62,9 @@ Source is ~11,000 lines across ~40 files. Currently tested: 2 files (`Encryption
 - Framework: **xUnit** (`xunit` 2.9.3, `Microsoft.NET.Test.Sdk` 17.14.1, `coverlet.collector` available), target `net10.0`, `ImplicitUsings` + `Nullable` enabled, `<Using Include="Xunit" />` already global.
 - Put tests in `tests/AsianTaste.API.Tests/`, mirroring the source folder layout (`Services/`, `Services/Payment/`, `Middleware/`, …). Existing style to match: `EncryptionServiceTests.cs`, `StripeConfigurationTests.cs` — plain classes, descriptive `Snake_Case_With_Underscores` method names that state the expectation, `[Fact]` / `[Theory]` + `[InlineData]`. **Match that style.**
 - Assertions: xUnit `Assert.*`. For exceptions use `Assert.ThrowsAny<CryptographicException>` style as the existing tests do. No assertion libraries, no mocking framework is currently referenced — prefer hand-written fakes/stubs over adding packages, and only add a package if you explain why and it's test-only.
-- Test the **contract, not the implementation**: derive expected behaviour from `Asian_Taste_PRD.md`, the XML docs, or the DTO/entity definitions — read the spec BEFORE reading the method body, so you test what it *should* do.
+- Test the **contract, not the implementation**: derive expected behaviour from `docs/archive/ASIAN_TASTE_PRD_superseded.md`, the XML docs, or the DTO/entity definitions — read the spec BEFORE reading the method body, so you test what it *should* do.
 
-## Output: write `CI_TEST_REPORT.md` in the repo root
+## Output: write `docs/archive/CI_TEST_REPORT_artifact.md` (append a dated section)
 
 ```markdown
 # CI & Test Report — <date> — <branch> — <commit>

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard · Asian Taste staff</title>
+  <meta name="description" content="Asian Taste staff dashboard — live orders, kitchen board and today's numbers." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+  <link rel="stylesheet" href="styles/admin.css" />
+</head>
+<body data-page="dashboard" data-title="Dashboard" data-sub="Live orders, the kitchen board and today's numbers.">
+  <div class="admin">
+    <aside class="admin-rail" id="admin-rail"></aside>
+    <div class="admin-main">
+      <header class="admin-top" id="admin-top"></header>
+
+      <div class="admin-page">
+        <section class="stat-grid" data-od-id="dash-stats">
+          <div class="stat-card is-accent">
+            <p class="stat-k">Live orders</p>
+            <p class="stat-v" id="stat-live">0</p>
+            <p class="stat-delta" id="stat-live-sub">—</p>
+          </div>
+          <div class="stat-card">
+            <p class="stat-k">Average prep</p>
+            <p class="stat-v" id="stat-prep">—</p>
+            <p class="stat-delta" id="stat-prep-sub">min from accepted to ready</p>
+          </div>
+          <div class="stat-card">
+            <p class="stat-k">Completed today</p>
+            <p class="stat-v" id="stat-done">0</p>
+            <p class="stat-delta down" id="stat-cancelled">0 cancelled</p>
+          </div>
+          <div class="stat-card">
+            <p class="stat-k">Revenue today</p>
+            <p class="stat-v" id="stat-rev">$0</p>
+            <p class="stat-delta">GST inclusive · AUD</p>
+          </div>
+        </section>
+
+        <section data-od-id="dash-board">
+          <div class="head" style="margin-bottom:20px">
+            <div class="head-copy">
+              <p class="eyebrow eyebrow-gold">Kitchen board</p>
+              <h2 style="margin-bottom:6px">Where every order is right now</h2>
+              <p class="meta" style="margin:0">Updates as the pass moves tickets. Oldest order sits at the top of each column.</p>
+            </div>
+            <a class="btn btn-secondary" href="admin-orders.html">Open full order list</a>
+          </div>
+          <div class="board" id="board"></div>
+        </section>
+
+        <section data-od-id="dash-recent">
+          <div class="head" style="margin-bottom:16px">
+            <div class="head-copy"><p class="eyebrow eyebrow-gold">Latest</p><h2 style="margin-bottom:0">Most recent orders</h2></div>
+            <a class="btn btn-ghost" href="admin-orders.html">View all</a>
+          </div>
+          <div class="panel">
+            <div class="table-wrap">
+              <table class="dtable">
+                <caption class="sr-only">The six most recent orders</caption>
+                <thead>
+                  <tr><th scope="col">Order</th><th scope="col">Customer</th><th scope="col">Service</th><th scope="col">Placed</th><th scope="col">Status</th><th scope="col" class="num-col">Total</th></tr>
+                </thead>
+                <tbody id="recent-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/admin.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var A = window.AT_ADMIN;
+
+      var s = A.stats();
+      document.getElementById('stat-live').textContent = s.live;
+      document.getElementById('stat-live-sub').textContent = s.placed + ' waiting to be accepted';
+      document.getElementById('stat-prep').textContent = s.avgPrep + ' min';
+      document.getElementById('stat-done').textContent = s.completed;
+      document.getElementById('stat-cancelled').textContent = s.cancelled + ' cancelled';
+      document.getElementById('stat-rev').textContent = A.money(s.revenue);
+
+      var COLUMNS = [
+        { key: 'placed',    title: 'New',            hint: 'Accept or reject' },
+        { key: 'confirmed', title: 'Confirmed',      hint: 'Waiting on the wok' },
+        { key: 'preparing', title: 'Preparing',      hint: 'Cooking now' },
+        { key: 'ready',     title: 'Ready &amp; out', hint: 'Hand over or dispatch' }
+      ];
+      var NEXT = { placed: 'confirmed', confirmed: 'preparing', preparing: 'ready', ready: 'delivery' };
+      var NEXT_LABEL = { placed: 'Accept', confirmed: 'Start cooking', preparing: 'Mark ready', ready: 'Send out' };
+
+      function ticket(o) {
+        return '<article class="ticket' + (o.mins > 20 ? ' urgent' : '') + '">' +
+          '<div class="ticket-top"><span class="ticket-id">' + o.id + '</span>' + A.pill(o.status) + '</div>' +
+          '<p class="ticket-who"><span class="avatar">' + A.initials(o.customer) + '</span><strong>' + o.customer + '</strong><span class="meta">' + o.phone + '</span></p>' +
+          '<p class="ticket-items">' + A.itemsSummary(o) + '</p>' +
+          (o.note ? '<p class="ticket-meta" style="color:var(--accent)">' + o.note + '</p>' : '') +
+          '<p class="ticket-meta">' + A.typeLabel(o.type) + ' · placed ' + o.placed + ' · <strong>' + o.mins + ' min ago</strong></p>' +
+          '<div class="ticket-actions">' +
+            (NEXT[o.status] ? '<button class="btn btn-primary">' + NEXT_LABEL[o.status] + '</button>' : '') +
+            '<a class="btn btn-secondary" href="admin-order-detail.html?id=' + o.id + '">Open</a>' +
+          '</div>' +
+        '</article>';
+      }
+
+      document.getElementById('board').innerHTML = COLUMNS.map(function (c) {
+        var list;
+        if (c.key === 'ready') list = A.orders().filter(function (o) { return o.status === 'ready' || o.status === 'delivery'; });
+        else list = A.orders().filter(function (o) { return o.status === c.key; });
+        list = list.sort(function (a, b) { return b.mins - a.mins; });
+        return '<div class="col">' +
+          '<div class="col-head"><h3>' + c.title + '</h3><span class="count">' + list.length + '</span></div>' +
+          '<p class="meta" style="margin:-6px 0 12px">' + c.hint + '</p>' +
+          (list.length ? list.map(ticket).join('') : '<p class="board-empty">Nothing here.</p>') +
+        '</div>';
+      }).join('');
+
+      document.getElementById('recent-body').innerHTML = A.orders().slice(0, 6).map(function (o) {
+        return '<tr>' +
+          '<td><a class="order-id" href="admin-order-detail.html?id=' + o.id + '">' + o.id + '</a></td>' +
+          '<td>' + o.customer + '</td>' +
+          '<td>' + A.typeLabel(o.type) + '</td>' +
+          '<td>' + o.placed + '</td>' +
+          '<td>' + A.pill(o.status) + '</td>' +
+          '<td class="num-col">' + A.money(o.total) + '</td>' +
+        '</tr>';
+      }).join('');
+
+      document.getElementById('board').addEventListener('click', function (e) {
+        var btn = e.target.closest('.ticket-actions .btn-primary');
+        if (!btn) return;
+        var id = btn.closest('.ticket').querySelector('.ticket-id').textContent;
+        var t = document.getElementById('admin-toast');
+        if (!t) { t = document.createElement('div'); t.id = 'admin-toast'; t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+        t.textContent = id + ' — ' + btn.textContent.toLowerCase() + ' (prototype, not persisted)';
+        t.classList.add('is-open');
+        clearTimeout(t._timer); t._timer = setTimeout(function () { t.classList.remove('is-open'); }, 2400);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checkout · Asian Taste</title>
+  <meta name="description" content="Enter your details and pay — Asian Taste delivery, pickup or dine in." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/app.css" />
+</head>
+<body data-page="checkout" data-chrome="minimal">
+  <div id="site-chrome"></div>
+
+  <main id="content" class="container section" data-od-id="checkout">
+    <div class="head">
+      <div class="head-copy">
+        <p class="eyebrow eyebrow-gold" id="step-eyebrow">Step 2 of 3</p>
+        <h1 id="step-title">Your details</h1>
+        <p class="lead" id="step-lead">So we know who to cook for and where it's going.</p>
+      </div>
+    </div>
+
+    <div class="stepper" style="margin-bottom:28px" aria-label="Checkout progress">
+      <a class="step" href="cart.html" data-state="done"><span class="step-num">✓</span><span class="step-label">Your order</span></a>
+      <span class="step-sep" aria-hidden="true"></span>
+      <span class="step" id="ind-2" data-state="current"><span class="step-num">2</span><span class="step-label">Your details</span></span>
+      <span class="step-sep" aria-hidden="true"></span>
+      <span class="step" id="ind-3" data-state="todo"><span class="step-num">3</span><span class="step-label">Payment</span></span>
+    </div>
+
+    <form class="split" id="checkout-form" novalidate>
+      <div class="stack">
+        <section class="panel" id="panel-details" data-od-id="checkout-details">
+          <div class="panel-head"><h3>Contact</h3></div>
+          <div class="panel-body stack">
+            <div class="field-row">
+              <div class="field">
+                <label for="name">Full name</label>
+                <input class="input" id="name" name="name" autocomplete="name" required />
+                <p class="field-error" data-err="name" hidden>Please tell us your name.</p>
+              </div>
+              <div class="field">
+                <label for="phone">Mobile number</label>
+                <input class="input" id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="04xx xxx xxx" required />
+                <p class="field-error" data-err="phone" hidden>We need a number to confirm your order.</p>
+              </div>
+            </div>
+            <div class="field">
+              <label for="email">Email</label>
+              <input class="input" id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+              <p class="field-error" data-err="email" hidden>Please check this email address.</p>
+              <p class="hint">We'll send your receipt and order updates here.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-address" data-od-id="checkout-address">
+          <div class="panel-head"><h3>Delivery address</h3><span class="pill" id="addr-mode">Delivery</span></div>
+          <div class="panel-body stack">
+            <div class="field">
+              <label for="street">Street address</label>
+              <input class="input" id="street" name="street" autocomplete="street-address" placeholder="12 Example Street" />
+              <p class="field-error" data-err="street" hidden>An address gets your food to the right door.</p>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="suburb">Suburb</label>
+                <input class="input" id="suburb" name="suburb" autocomplete="address-level2" placeholder="Brooklyn Park" />
+              </div>
+              <div class="field">
+                <label for="postcode">Postcode</label>
+                <input class="input" id="postcode" name="postcode" inputmode="numeric" autocomplete="postal-code" placeholder="5032" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="notes">Delivery instructions <span class="muted" style="font-weight:500">(optional)</span></label>
+              <input class="input" id="notes" name="notes" placeholder="Leave at the front door, buzzer 4…" />
+            </div>
+        </div>
+        </section>
+
+        <section class="panel" data-od-id="checkout-timing">
+          <div class="panel-head"><h3>When?</h3></div>
+          <div class="panel-body">
+            <div class="field">
+              <label for="when">Preferred time</label>
+              <select class="select" id="when">
+                <option value="asap">As soon as possible</option>
+                <option value="30">In 30 minutes</option>
+                <option value="60">In 1 hour</option>
+                <option value="120">In 2 hours</option>
+              </select>
+              <p class="hint" id="when-hint">Kitchen is open until 9pm today.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-payment" hidden data-od-id="checkout-payment">
+          <div class="panel-head"><h3>Payment</h3><span class="pill pill-neutral">Mock only — no money moves</span></div>
+          <div class="panel-body stack">
+            <div class="choice-list" role="radiogroup" aria-label="Payment method">
+              <label class="choice"><input type="radio" name="pay" value="card" checked />
+                <span class="choice-main"><strong>Credit or debit card</strong><span class="choice-price">Visa · Mastercard</span></span></label>
+              <label class="choice"><input type="radio" name="pay" value="apple" />
+                <span class="choice-main"><strong>Apple Pay</strong><span class="choice-price">Fastest</span></span></label>
+              <label class="choice"><input type="radio" name="pay" value="counter" />
+                <span class="choice-main"><strong>Pay at the counter</strong><span class="choice-price">Pickup only</span></span></label>
+            </div>
+
+            <div id="card-fields" class="stack" style="margin-top:8px">
+              <div class="field">
+                <label for="card-number">Card number</label>
+                <input class="input" id="card-number" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242" />
+                <p class="field-error" data-err="card" hidden>Enter a 16-digit card number.</p>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="card-exp">Expiry</label>
+                  <input class="input" id="card-exp" inputmode="numeric" autocomplete="cc-exp" placeholder="MM / YY" />
+                </div>
+                <div class="field">
+                  <label for="card-cvc">CVC</label>
+                  <input class="input" id="card-cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" />
+                </div>
+              </div>
+              <div class="field">
+                <label for="card-name">Name on card</label>
+                <input class="input" id="card-name" autocomplete="cc-name" />
+              </div>
+            </div>
+
+            <label class="switch" style="margin-top:6px">
+              <input type="checkbox" id="save-card" checked /><span class="track" aria-hidden="true"></span>
+              <span class="switch-label">Save this card for next time</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel" data-od-id="checkout-consent">
+          <div class="panel-body">
+            <label class="choice" style="border:0;padding:0;background:transparent">
+              <input type="checkbox" id="terms" name="terms" required />
+              <span class="choice-main"><span><strong>I agree to the terms of service</strong>
+                <p class="choice-note">We'll only use your details to fulfil this order. Allergen requests are passed to the kitchen.</p></span></span>
+            </label>
+            <p class="field-error" data-err="terms" hidden style="margin-top:10px">Please accept the terms to continue.</p>
+          </div>
+        </section>
+      </div>
+
+      <aside class="summary-card panel" aria-label="Order summary" data-od-id="checkout-summary">
+        <div class="panel-head"><h3>Order summary</h3><a class="meta" href="cart.html">Edit</a></div>
+        <div class="panel-body stack">
+          <div id="mini-lines"></div>
+          <div class="sum-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:12px"><span>Subtotal</span><span class="num" id="sub">$0.00</span></div>
+          <div class="sum-row" id="fee-row"><span>Delivery fee</span><span class="num" id="fee">$0.00</span></div>
+          <div class="sum-row total"><span>Total</span><span class="num" id="total">$0.00</span></div>
+        </div>
+        <div class="panel-foot">
+          <button class="btn btn-primary btn-block" id="primary" type="submit">Continue to payment</button>
+          <button class="btn btn-ghost btn-block" id="back" type="button" style="margin-top:8px" hidden>Back to details</button>
+          <p class="meta" style="margin:14px 0 0;text-align:center">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            Secure, encrypted checkout
+          </p>
+        </div>
+      </aside>
+    </form>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <div class="processing" id="processing" hidden role="alertdialog" aria-modal="true" aria-label="Confirming your order">
+    <div>
+      <div class="spin" aria-hidden="true"></div>
+      <h2 style="margin-bottom:8px">Confirming your order…</h2>
+      <p class="lead">Talking to the kitchen. Please don't close this window.</p>
+    </div>
+  </div>
+
+  <script src="scripts/menu-data.js"></script>
+  <script src="scripts/chrome.js"></script>
+  <script src="scripts/store.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var form = document.getElementById('checkout-form');
+      var step = 1;
+      var isDelivery = AT.orderType === 'delivery';
+
+      /* ─── summary ────────────────────────────────────────────────── */
+      function renderSummary() {
+        var cart = AT.cart();
+        document.getElementById('mini-lines').innerHTML = cart.length
+          ? cart.map(function (l) { return '<div class="rowline"><div class="rl-main"><strong>' + l.qty + ' × ' + l.name + '</strong>' + (l.summary ? '<span>' + l.summary + '</span>' : '') + '</div><span class="num">' + AT.money(l.unitPrice * l.qty) + '</span></div>'; }).join('')
+          : '<p class="meta" style="margin:0">Your order is empty. <a href="menu.html#menu" style="color:var(--accent)">Add something first</a>.</p>';
+        document.getElementById('sub').textContent = AT.money(AT.subtotal());
+        var f = AT.fee();
+        document.getElementById('fee-row').style.display = f > 0 ? '' : 'none';
+        document.getElementById('fee').textContent = AT.money(f);
+        document.getElementById('total').textContent = AT.money(AT.total());
+      }
+      AT.onChange(renderSummary);
+      renderSummary();
+
+      /* ─── order type drives the address block ────────────────────── */
+      function syncAddress() {
+        isDelivery = AT.orderType === 'delivery';
+        document.getElementById('panel-address').hidden = !isDelivery;
+        document.getElementById('addr-mode').textContent = AT.orderMeta().label;
+        document.getElementById('addr-mode').className = 'pill' + (isDelivery ? '' : ' pill-neutral');
+        document.getElementById('when-hint').textContent = isDelivery
+          ? 'Delivered in ' + AT.orderMeta().eta + ' at 329 Henley Beach Rd area.'
+          : (AT.orderType === 'pickup' ? 'Ready for pickup in ' + AT.orderMeta().eta + ' at 329 Henley Beach Rd.' : 'Table service begins in ' + AT.orderMeta().eta + '.');
+      }
+      AT.onChange(syncAddress);
+      syncAddress();
+
+      /* ─── step switching ─────────────────────────────────────────── */
+      function setStep(n) {
+        step = n;
+        var isPay = n === 2;
+        document.getElementById('panel-details').querySelectorAll('input').forEach(function (i) { i.disabled = isPay; });
+        document.getElementById('panel-address').querySelectorAll('input').forEach(function (i) { i.disabled = isPay; });
+        document.getElementById('panel-payment').hidden = !isPay;
+        document.getElementById('step-eyebrow').textContent = 'Step ' + (isPay ? 3 : 2) + ' of 3';
+        document.getElementById('step-title').textContent = isPay ? 'Payment' : 'Your details';
+        document.getElementById('step-lead').textContent = isPay ? 'Last bit — how would you like to pay?' : 'So we know who to cook for and where it\'s going.';
+        document.getElementById('ind-2').setAttribute('data-state', isPay ? 'done' : 'current');
+        document.getElementById('ind-2').querySelector('.step-num').textContent = isPay ? '✓' : '2';
+        document.getElementById('ind-3').setAttribute('data-state', isPay ? 'current' : 'todo');
+        document.getElementById('primary').textContent = isPay ? 'Place order · ' + AT.money(AT.total()) : 'Continue to payment';
+        document.getElementById('back').hidden = !isPay;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      document.getElementById('back').addEventListener('click', function () { setStep(1); });
+
+      /* ─── validation ─────────────────────────────────────────────── */
+      function fail(name, on) {
+        var input = form.querySelector('[name="' + name + '"], #' + name);
+        var err = form.querySelector('[data-err="' + name + '"]');
+        if (input) input.setAttribute('aria-invalid', String(on));
+        if (err) err.hidden = !on;
+      }
+      function validate(n) {
+        var bad = [];
+        function req(id, ok) { if (!ok) bad.push(id); return ok; }
+        if (n === 1) {
+          req('name', document.getElementById('name').value.trim().length > 1);
+          req('phone', document.getElementById('phone').value.replace(/\D/g, '').length >= 8);
+          req('email', /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(document.getElementById('email').value));
+          if (isDelivery) req('street', document.getElementById('street').value.trim().length > 3);
+        } else {
+          var method = form.querySelector('[name="pay"]:checked');
+          if (method && method.value === 'card') {
+            req('card', document.getElementById('card-number').value.replace(/\D/g, '').length === 16);
+          }
+          if (method && method.value === 'counter' && isDelivery) {
+            method = null; AT.toast('Pay at the counter is pickup only — choose another method.');
+            bad.push('pay-counter');
+          }
+        }
+        ['name', 'phone', 'email', 'street', 'card'].forEach(function (k) { fail(k, bad.indexOf(k) !== -1); });
+        if (n === 1) fail('terms', false);
+        return bad.length === 0;
+      }
+
+      /* ─── submit ─────────────────────────────────────────────────── */
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!AT.cart().length) { AT.toast('Your order is empty.'); return; }
+        if (!validate(step)) {
+          var firstBad = form.querySelector('[aria-invalid="true"]');
+          if (firstBad) firstBad.focus();
+          return;
+        }
+        if (step === 1) { setStep(2); return; }
+        if (!document.getElementById('terms').checked) { fail('terms', true); document.getElementById('terms').focus(); return; }
+
+        /* persist the customer + order so confirmation and the staff console
+           show the same name, order number and basket */
+        var val = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        var address = isDelivery
+          ? [val('street'), val('suburb'), val('postcode')].filter(Boolean).join(', ')
+          : '329 Henley Beach Rd, Brooklyn Park SA 5032';
+        var record = {
+          no: 'AT-' + (1000 + Math.floor(Math.random() * 8999)),
+          type: AT.orderType,
+          items: AT.cart().map(function (l) { return { name: l.name, qty: l.qty, unitPrice: l.unitPrice, summary: l.summary }; }),
+          subtotal: AT.subtotal(), fee: AT.fee(), total: AT.total(),
+          customer: { name: val('name'), phone: val('phone'), email: val('email'), address: address, note: val('notes') }
+        };
+        AT.saveCustomer(record.customer);
+        try { sessionStorage.setItem('at_last_order', JSON.stringify(record)); } catch (err) {}
+
+        var overlay = document.getElementById('processing');
+        overlay.hidden = false;
+        document.body.classList.add('is-locked');
+        setTimeout(function () { location.href = 'confirmation.html'; }, 2200);
+      });
+
+      /* light input masks */
+      document.getElementById('card-number').addEventListener('input', function (e) {
+        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
+      });
+      document.getElementById('card-exp').addEventListener('input', function (e) {
+        var v = e.target.value.replace(/\D/g, '').slice(0, 4);
+        e.target.value = v.length > 2 ? v.slice(0, 2) + ' / ' + v.slice(2) : v;
+      });
+      form.querySelectorAll('[name="pay"]').forEach(function (r) {
+        r.addEventListener('change', function () {
+          document.getElementById('card-fields').style.display = form.querySelector('[name="pay"]:checked').value === 'card' ? '' : 'none';
+        });
+      });
+
+      setStep(1);
+    })();
+  </script>
+</body>
+</html>
