@@ -758,6 +758,55 @@ that POS sync never happened.
 
 ---
 
+## Known trap: a local dev database can be half-migrated
+
+**Symptom.** `dotnet run` logs, repeating three times, then starts anyway:
+
+```
+Migration statement failed with SQLSTATE 42703: column "customer_id" does not exist
+Database initialization FAILED after 3 attempts. The API is starting WITHOUT a working database.
+```
+
+The menu still loads (82 items) — that table is fine — but **every admin table is
+missing**: `/api/auth/login` returns `500 relation "admin_users" does not exist`,
+so the admin dashboard cannot be used locally, and any migration added after the
+failure never runs. That is why migration 13 could not be verified locally and had
+to be proved on a clean database instead.
+
+**Cause.** The local database is in a half-migrated state, not a code fault. It is
+pre-existing. `01_create_schema.sql` creates `customer_payment_methods` with a
+`customer_id` referencing `customers(id)`; a run that died between those two
+statements leaves the table present-but-wrong, and every later boot retries
+`CREATE TABLE IF NOT EXISTS` (which succeeds, so it changes nothing) and then
+fails on the index. The API deliberately starts anyway rather than becoming a
+restart loop, which is correct for production and confusing locally.
+
+**Not the same as production.** `/health/db` returns
+`{"status":"healthy","menuItems":82}` on both, so the menu tells you nothing about
+whether the admin tables exist.
+
+**Fix for a local machine.** Drop and recreate the database, then let the API
+migrate from scratch — that is the only reliable route, and it is what a clean
+database proves:
+
+```bash
+docker run -d --name at-dev-pg \
+  -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=AsianTaste -p 5432:5432 postgres:16-alpine
+
+# point the API at it for one run, and it migrates from empty
+ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=AsianTaste;Username=postgres;Password=dev" \
+  dotnet run --project src/AsianTaste.API --no-launch-profile
+```
+
+**How to verify a migration properly.** Never against this local database. Bring up
+a throwaway Postgres, point `ConnectionStrings__DefaultConnection` at it, boot
+once, then **boot a second time and compare row counts** — a seed that appends on
+every start is this repo's oldest bug (`02_seed_data.sql` once duplicated all 82
+dishes, and migration 13's dedupe guards exist for the same reason). Remove the
+container afterwards.
+
+---
+
 ## Verifying anything
 
 ```bash
