@@ -1042,6 +1042,41 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    position: relative;
+  }
+  /* The whole text cell opens the dish. A stretched overlay rather than wrapping
+     the content in an anchor: the cell is a flex column whose children the row's
+     styles position, so an extra wrapper would become the flex context and the
+     layout would drift. This contributes no box, so nothing moves.
+
+     It sits above the text (which is pointer-transparent) and below
+     `.quick-add` (z-index 2), so the + / options button keeps its own action. */
+  .item-open {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+  /* Above the overlay, and transparent to the pointer: the text must stay
+     selectable and the images keep their hover. Keyboard focus lives on
+     .item-open, so the outline is drawn there. */
+  .item-content {
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .item-open:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 4px;
+    border-radius: var(--radius);
+  }
+  /* The thumb keeps its own link so it stays clickable above the overlay. */
+  .item-thumb-link {
+    display: block;
+    width: 100%;
+    height: 100%;
   }
   .item-name {
     font-family: var(--font-display);
