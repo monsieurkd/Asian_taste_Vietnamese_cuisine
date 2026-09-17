@@ -36,46 +36,50 @@ export function DishTags({ dish }: { dish: Dish }) {
  * `.dish-foot { margin-top: auto }`, not by fixing a pixel height: a dish with a
  * two-line name and one with a five-line description have to line up, and a
  * fixed height only works until the copy changes.
+ *
+ * The whole card is clickable, and it is an <a> rather than a <div> with an
+ * onClick: the card has to be reachable by keyboard and openable in a new tab
+ * like any other link, and only a real anchor gets both for free. The foot is a
+ * sibling of the link, not a child of it, because an interactive element nested
+ * inside another interactive element is not valid and breaks keyboard use.
  */
 export function DishCard({ dish, rank }: { dish: Dish; rank?: number }) {
   const hint = requiredHint(dish);
   const configurable = isConfigurable(dish);
+  const href = `/menu/item/${dish.slug}`;
+  const actionLabel = configurable ? `Choose options for ${dish.name}` : `Add ${dish.name} to your order`;
 
   return (
     <article className="dish-card">
-      <DishMedia
-        src={dish.image}
-        name={dish.name}
-        overlay={
-          rank ? (
-            <span className="media-badge">
-              <Badge kind="liked">
-                <b style={{ color: 'var(--color-gold)' }}>No. {rank}</b> most liked
-              </Badge>
-            </span>
-          ) : dish.tags.includes('popular') ? (
-            <span className="media-badge">
-              <Badge kind="popular">Popular</Badge>
-            </span>
-          ) : undefined
-        }
-      />
+      <Link className="dish-card-link" to={href} aria-label={`View ${dish.name}`}>
+        <DishMedia
+          src={dish.image}
+          name={dish.name}
+          overlay={
+            rank ? (
+              <span className="media-badge">
+                <Badge kind="liked">
+                  <b style={{ color: 'var(--color-gold)' }}>No. {rank}</b> most liked
+                </Badge>
+              </span>
+            ) : dish.tags.includes('popular') ? (
+              <span className="media-badge">
+                <Badge kind="popular">Popular</Badge>
+              </span>
+            ) : undefined
+          }
+        />
 
-      <h3 className="dish-name">
-        <Link to={`/menu/item/${dish.slug}`}>{dish.name}</Link>
-      </h3>
-      {hint && <p className="dish-note">{hint}</p>}
-      <p className="dish-desc">{dish.desc}</p>
-      <DishTags dish={dish} />
+        <h3 className="dish-name">{dish.name}</h3>
+        {hint && <p className="dish-note">{hint}</p>}
+        <p className="dish-desc">{dish.desc}</p>
+        <DishTags dish={dish} />
+      </Link>
 
       <div className="dish-foot">
         <span className="price">{money(dish.price)}</span>
         {dish.isAvailable ? (
-          <Link
-            to={`/menu/item/${dish.slug}`}
-            className="add-btn"
-            aria-label={configurable ? `Choose options for ${dish.name}` : `Add ${dish.name} to your order`}
-          >
+          <Link to={href} className="add-btn" aria-label={actionLabel}>
             {configurable ? 'Choose options' : 'Add'}
           </Link>
         ) : (

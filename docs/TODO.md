@@ -513,8 +513,24 @@ online, because the API still has no field to record one. See §11.
 - **Confirmed and Preparing are one state.** Once the restaurant confirms, the
   food is being made — so there is no separate "Preparing" button to press. The
   admin console shows it as one stage.
-- **"Out for delivery" is removed** (no delivery in v1) **and so is "Completed"**
-  — for pickup, `Ready` is the end of the story.
+- **"Out for delivery" is removed** (no delivery in v1).
+- **"Completed" is back, as `Collected`.** It was removed with the v1 scope when
+  `Ready` was the end of the story, then restored on 2026-09-17: `Ready` alone
+  cannot tell the owner whether an order was ever picked up, so a bag left on the
+  counter is indistinguishable from one that went out the door, and neither was
+  counted as sold. The console now has a fourth stage —
+  `Placed → Confirmed → Ready → Collected`.
+  - **Collected is stored as the API's `Completed`.** No schema change, no
+    migration: the enum value already existed and only the console's vocabulary
+    and board behaviour changed. `apiStatusValue` sends `Completed`.
+  - **Pressing it clears the board** — collected orders leave the live columns,
+    and the dashboard now counts them (`Collected today`, and `Revenue today` is
+    summed from them). It previously summed `Ready`, which reported every bag
+    still on the counter as sold.
+  - **Ready is no longer terminal**, so an order sitting there still shows as
+    work in hand. That is deliberate — someone still has to hand it over.
+  - **The customer's tracker is unchanged**: `Completed` still reads as the last
+    stage, `Ready`. The customer does not need a "collected" state; the shop does.
 
 ### Add-ons, and where they live
 

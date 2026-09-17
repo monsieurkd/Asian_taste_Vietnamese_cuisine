@@ -5,7 +5,7 @@ import { ordersApi } from "@/api/orders"
 import { AdminTop } from "@/components/AdminLayout"
 import { Panel, PanelBody, SkeletonRows } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
-import { serviceLabel, STATUS_ORDER, statusKey, type StatusKey } from "@/lib/orderStatus"
+import { serviceLabel, STATUS_META, STATUS_ORDER, statusKey, type StatusKey } from "@/lib/orderStatus"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 
 type StatusFilter = "all" | StatusKey
@@ -13,7 +13,7 @@ type ServiceFilter = "all" | "delivery" | "pickup"
 
 const STATUS_FILTERS: Array<{ id: StatusFilter; label: string }> = [
   { id: "all", label: "All statuses" },
-  ...STATUS_ORDER.map((key) => ({ id: key as StatusFilter, label: key[0].toUpperCase() + key.slice(1) })),
+  ...STATUS_ORDER.map((key) => ({ id: key as StatusFilter, label: STATUS_META[key].label })),
   { id: "cancelled", label: "Cancelled" },
 ]
 

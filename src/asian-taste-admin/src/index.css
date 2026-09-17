@@ -1174,6 +1174,12 @@
     background-color: color-mix(in oklch, var(--color-gf) 16%, transparent);
     color: color-mix(in oklch, var(--color-gf) 70%, var(--color-fg));
   }
+  /* Collected is the end of the journey, so it reads as settled rather than as
+     another colour of in-progress: the neutral grey a finished thing gets. */
+  .status-collected {
+    background-color: color-mix(in oklch, var(--color-fg) 12%, transparent);
+    color: color-mix(in oklch, var(--color-fg) 72%, var(--color-bg));
+  }
   .status-delivery {
     background-color: color-mix(in oklch, var(--color-spicy) 16%, transparent);
     color: color-mix(in oklch, var(--color-spicy) 62%, var(--color-fg));

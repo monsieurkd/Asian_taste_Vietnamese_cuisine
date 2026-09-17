@@ -15,6 +15,12 @@ import type { OrderStatus } from '@/types/menu';
 
    So: Placed → Confirmed → Ready, plus Cancelled. The API still stores the
    finer values; `stageIndex` folds them in so an older order reads correctly.
+
+   The console has since gained a fourth stage, `Collected`, for the handover at
+   the counter. It is deliberately not mirrored here: the customer already knows
+   whether they collected their food, and a fourth step they never see would only
+   be a stage that looks stuck. So `Completed` — the API value `Collected` is
+   stored as — still reads as `Ready` on this side.
    ========================================================================== */
 
 export interface Stage {

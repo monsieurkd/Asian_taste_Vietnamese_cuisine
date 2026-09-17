@@ -5,7 +5,7 @@ import type { OrderStatus } from "@/types"
 import { AdminTop } from "@/components/AdminLayout"
 import { Avatar, Button, Kv, KvRow, Panel, PanelBody, PanelHead, Pill, SkeletonRows, SumRow } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
-import { apiStatusValue, serviceLabel, STATUS_META, STATUS_ORDER, statusKey } from "@/lib/orderStatus"
+import { apiStatusValue, isClosed as isOrderClosed, serviceLabel, STATUS_META, STATUS_ORDER, statusKey } from "@/lib/orderStatus"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { showAdminToast } from "@/components/ui/AdminToast"
 
@@ -89,7 +89,7 @@ export function OrderDetailPage() {
 
   const key = statusKey(order.status)
   const currentIndex = STATUS_ORDER.indexOf(key)
-  const isClosed = key === "ready" || key === "cancelled"
+  const isClosed = isOrderClosed(order.status)
 
   return (
     <>
@@ -126,7 +126,7 @@ export function OrderDetailPage() {
             <div>
               <h3>Status</h3>
               <p className="meta" style={{ margin: "2px 0 0" }}>
-                Six stages, left to right. The bar shows the whole journey, not just where it is.
+                Four stages, left to right. The bar shows the whole journey, not just where it is.
               </p>
             </div>
             <StatusPill status={order.status} />
@@ -170,7 +170,7 @@ export function OrderDetailPage() {
                 {isClosed
                   ? key === "cancelled"
                     ? "This order was cancelled."
-                    : "Ready for collection — nothing further to do."
+                    : "Collected — this order is done and has left the live board."
                   : `Next: ${STATUS_META[STATUS_ORDER[Math.min(STATUS_ORDER.length - 1, currentIndex + 1)]].label}.`}
               </p>
             </div>

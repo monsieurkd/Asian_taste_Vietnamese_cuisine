@@ -22,13 +22,16 @@ function CheckMark() {
 }
 
 /**
- * Order confirmation and live tracking.
+ * The order confirmation and live tracking.
  *
  * There is one job to do here and it is not to be pretty: the customer needs to
  * know the kitchen has the order, what number it is, and where it has got to.
  *
  * Three stages, not the design set's six: v1 is pickup, the kitchen treats
- * confirmed and preparing as one moment, and the journey ends at Ready. See
+ * confirmed and preparing as one moment, and the customer's journey ends at
+ * Ready. The console has since gained a fourth stage (`Collected`) for the
+ * handover — the customer has no equivalent and does not need one, so an order
+ * the shop has marked collected still reads as Ready here. See
  * lib/orderLifecycle.ts for why, and how older API values fold in.
  */
 export function ConfirmationPage() {

@@ -3,7 +3,18 @@
 # The API suite must run at least this many tests. A lower count fails the build,
 # because a shrinking suite means tests were deleted, skipped, or filtered out.
 #
+# This floor covers the API suite only — the guardrail reads `dotnet test`. The
+# front-ends keep their own suites under `npm test` in each app and are not gated
+# here yet.
+#
+# Beware the parser: this file is read by grepping out every run of digits and
+# taking the first one, so the first number appearing ANYWHERE in it wins —
+# including inside these comments. A digit typed above the floor silently becomes
+# the floor, which is how this file briefly read zero. State every other number in
+# words.
+#
 # When you legitimately add tests, raise this number in the same commit.
 # When you legitimately REMOVE a test, lower it in a *separate, reviewed* commit
 # and say why — otherwise the guardrail cannot tell sabotage from refactoring.
 123
+

@@ -5,17 +5,18 @@ import type { Order, OrderStatus } from "@/types"
 import { AdminTop } from "@/components/AdminLayout"
 import { Avatar, Panel, PanelBody, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
-import { apiStatusValue, nextStatus, serviceLabel, statusKey, type StatusKey } from "@/lib/orderStatus"
+import { apiStatusValue, isClosed, nextStatus, serviceLabel, statusKey, type StatusKey } from "@/lib/orderStatus"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 
 /**
  * The kitchen board, in the order the food moves.
  *
- * Three columns, because there are three states: an order waiting to be
- * accepted, one being cooked, and one waiting to be collected. "Confirmed" and
- * "Preparing" used to be separate columns — they are the same moment, so the
- * second was always empty.
+ * Three columns, because three states need someone to do something: an order
+ * waiting to be accepted, one being cooked, and one waiting to be collected.
+ * "Confirmed" and "Preparing" used to be separate columns — they are the same
+ * moment, so the second was always empty. Collected orders have no column: the
+ * press that finishes them is also the press that clears the board.
  */
 const COLUMNS: Array<{ key: StatusKey; title: string; hint: string }> = [
   { key: "placed", title: "New", hint: "Accept or reject" },
@@ -26,6 +27,7 @@ const COLUMNS: Array<{ key: StatusKey; title: string; hint: string }> = [
 const ADVANCE_LABEL: Partial<Record<StatusKey, string>> = {
   placed: "Accept",
   confirmed: "Mark ready",
+  ready: "Mark collected",
 }
 
 /** Matches the customer-side accent budget: one loud thing per screen. */
@@ -101,7 +103,10 @@ export function DashboardPage() {
     refetchInterval: 30_000,
   })
 
-  const active = orders.filter((o) => statusKey(o.status) !== "cancelled")
+  // The board carries only the open stages. Collected orders are finished, so
+  // they leave it and land in the day's numbers below instead of sitting in a
+  // column nobody has a reason to look at again.
+  const active = orders.filter((o) => !isClosed(o.status))
 
   // Oldest first in every column: the next thing to do is always at the top.
   const inColumn = (key: StatusKey) =>
@@ -109,9 +114,11 @@ export function DashboardPage() {
       .filter((o) => statusKey(o.status) === key)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
-  // Ready is the terminal state for pickup, so it is what "done today" means.
+  // Collected is the handover, so it is what "done today" means. Counting
+  // `ready` here instead would report every bag still on the counter as sold.
+  const collectedToday = orders.filter((o) => statusKey(o.status) === "collected")
   const readyToday = orders.filter((o) => statusKey(o.status) === "ready")
-  const revenueToday = readyToday.reduce((sum, o) => sum + o.total, 0)
+  const revenueToday = collectedToday.reduce((sum, o) => sum + o.total, 0)
   const cancelledToday = orders.filter((o) => statusKey(o.status) === "cancelled").length
 
   return (
@@ -139,9 +146,11 @@ export function DashboardPage() {
             <p className="stat-delta down">over {URGENT_MINUTES} min on the board</p>
           </div>
           <div className="stat-card">
-            <p className="stat-k">Ready today</p>
-            <p className="stat-v">{readyToday.length}</p>
-            <p className="stat-delta down">{cancelledToday} cancelled</p>
+            <p className="stat-k">Collected today</p>
+            <p className="stat-v">{collectedToday.length}</p>
+            <p className="stat-delta">
+              {readyToday.length} on the counter · {cancelledToday} cancelled
+            </p>
           </div>
           <div className="stat-card">
             <p className="stat-k">Revenue today</p>

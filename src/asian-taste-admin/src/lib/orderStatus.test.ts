@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest"
 import {
   API_STAGES,
   apiStatusValue,
+  isClosed,
   nextStatus,
+  OPEN_STATUSES,
   serviceLabel,
   statusKey,
   statusMeta,
@@ -26,11 +28,17 @@ describe("statusKey", () => {
     expect(statusKey("Cancelled")).toBe("cancelled")
   })
 
-  it("folds the values the shop no longer sets onto the three stages", () => {
+  it("folds the values the shop no longer sets onto the stages that exist", () => {
     // An order placed before the v1 scope change still has to read correctly,
     // and must not vanish from the board.
     expect(statusKey("Preparing")).toBe("confirmed")
-    expect(statusKey("Completed")).toBe("ready")
+  })
+
+  it("reads the API's Completed as Collected, not as Ready", () => {
+    // Completed means the food was handed over. Folding it onto Ready would put
+    // collected orders back in the "waiting to be picked up" column, and would
+    // leave the console unable to represent a finished order at all.
+    expect(statusKey("Completed")).toBe("collected")
   })
 
   it("is case- and whitespace-insensitive", () => {
@@ -78,6 +86,7 @@ describe("nextStatus", () => {
   it("walks the pickup stages in order", () => {
     expect(nextStatus("Pending")).toBe("confirmed")
     expect(nextStatus("Confirmed")).toBe("ready")
+    expect(nextStatus("Ready")).toBe("collected")
   })
 
   it("treats Preparing as Confirmed, not as its own step", () => {
@@ -87,9 +96,8 @@ describe("nextStatus", () => {
   })
 
   it("has nowhere to go once the order is collected or cancelled", () => {
-    // Ready is terminal for pickup. Offering a further step is how a ticket gets
+    // Collected is terminal. Offering a further step is how a ticket gets
     // silently reopened; offering one after Cancelled is worse.
-    expect(nextStatus("Ready")).toBeNull()
     expect(nextStatus("Completed")).toBeNull()
     expect(nextStatus("Cancelled")).toBeNull()
   })
@@ -99,6 +107,33 @@ describe("nextStatus", () => {
       const next = nextStatus(apiStatusValue(status))
       if (next) expect(STATUS_ORDER.indexOf(next)).toBeLessThan(STATUS_ORDER.length)
     }
+  })
+})
+
+describe("isClosed", () => {
+  it("is true once the order is collected or cancelled", () => {
+    expect(isClosed("Completed")).toBe(true)
+    expect(isClosed("Cancelled")).toBe(true)
+  })
+
+  it("is false while the kitchen still has work to do", () => {
+    // Ready is NOT closed: the bag is on the counter and someone still has to
+    // hand it over, which is the whole reason Collected exists.
+    expect(isClosed("Pending")).toBe(false)
+    expect(isClosed("Confirmed")).toBe(false)
+    expect(isClosed("Ready")).toBe(false)
+  })
+})
+
+describe("the kitchen board's open stages", () => {
+  it("omits everything that needs no further action", () => {
+    expect(OPEN_STATUSES).toEqual(["placed", "confirmed", "ready"])
+    expect(OPEN_STATUSES).not.toContain("collected")
+    expect(OPEN_STATUSES).not.toContain("cancelled")
+  })
+
+  it("is a prefix of the full journey, so the board reads left to right", () => {
+    expect(STATUS_ORDER.slice(0, OPEN_STATUSES.length)).toEqual(OPEN_STATUSES)
   })
 })
 
@@ -117,11 +152,19 @@ describe("apiStatusValue", () => {
     }
   })
 
+  it("sends the API's own value for the collected stage", () => {
+    // The console says "Collected"; the API only knows "Completed". If this ever
+    // sends "Collected" the update is rejected as an invalid status, and the
+    // order never leaves the board.
+    expect(apiStatusValue("collected")).toBe("Completed")
+    expect(statusKey(apiStatusValue("collected"))).toBe("collected")
+  })
+
   it("never sends a value for a stage the shop no longer has", () => {
-    // "delivery" and "completed" are gone with the pickup-only scope. A stale
-    // caller must not be able to write one back to the API.
+    // "delivery" is gone with the pickup-only scope. A stale caller must not be
+    // able to write one back to the API.
     expect(Object.values(STATUS_META).map((m) => m.key)).not.toContain("delivery" as never)
-    expect(STATUS_ORDER).toHaveLength(3)
+    expect(API_STAGES).toHaveLength(4)
   })
 })
 

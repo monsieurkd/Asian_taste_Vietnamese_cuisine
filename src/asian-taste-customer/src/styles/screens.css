@@ -485,6 +485,24 @@
     border-color: var(--color-accent-line);
     transform: translateY(-2px);
   }
+  /* The card's own link. It wraps everything but the foot, and `display: flex`
+     with the card's own gap means the layout is identical to when the name was
+     the only link — the anchor is a layout box here, not a text run. */
+  .dish-card-link {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    color: inherit;
+    text-decoration: none;
+  }
+  /* Hover already lifts the card; the title does not also need an underline, but
+     keyboard focus must still be visible on the card itself. */
+  .dish-card-link:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: var(--radius);
+  }
   .dish-card.is-soldout {
     opacity: 0.62;
   }
