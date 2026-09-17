@@ -23,6 +23,14 @@ not interfere. The design set has been rebuilt into both front-ends (§11).
 **Settled on 2026-09-16** (was four open questions): phone, hours, delivery and the
 cash option are all answered and applied — §10.
 
+**Waiting on someone else:**
+
+- **Senior review — visual quality and codebase organisation.** Open, raised
+  2026-09-17 and tracked as **[issue #3](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues/3)**
+  — both front-ends, no backend review. Nothing here is blocked on it, and its
+  findings land in this file. Review-shaped work lives in GitHub issues from now
+  on; this file stays the live list of what is outstanding.
+
 ---
 
 ## 1. ~~Fly billing~~ · ~~Neon rotation~~ · ~~Stripe keys~~ — done ✅
@@ -476,7 +484,7 @@ The order below is by how much it would bite, not by effort.
 
 The owner answered the open questions. What follows is the current scope, not a
 proposal. The questions as they were asked are archived in
-`docs/archive/answered-questions/2026-09-16-owner-answers.md`.
+`docs/archive/2026-09-16-owner-answers.md`.
 
 ### v1 is: card + Apple Pay, **pickup only**
 
@@ -586,7 +594,7 @@ across 14 sections with 7 photos and 75 woven placeholders.
 They were answered on 2026-09-16 and are now settled in §10: the phone number and
 hours, the delivery and cash questions, and the option groups. The version of this
 section as it was written is archived in
-`docs/archive/answered-questions/2026-09-16-owner-answers.md`.
+`docs/archive/2026-09-16-owner-answers.md`.
 
 ### One thing to know about the option groups
 

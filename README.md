@@ -13,8 +13,10 @@ explains how the parts fit together.
 
 Everything else that describes the project is history, not current state, and lives in
 [`docs/archive/`](docs/archive/README.md) — the superseded PRD and update plan, an
-out-of-date progress tracker, and one generated CI report. [`docs/SESSION_NOTES.md`](docs/SESSION_NOTES.md)
-is a dated session log with its stale claims flagged inline.
+out-of-date progress tracker, one generated CI report, a dated session log, and the
+owner's answers from 2026-09-16. Review-shaped work is tracked as GitHub
+[issues](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues); `docs/`
+holds reference material only.
 
 **Running it:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) explains how the
 whole system fits together — what runs where, how a push reaches production, and
@@ -27,6 +29,92 @@ Check it with `./scripts/check-deployment-health.sh`.
 
 **What's left:** [`docs/TODO.md`](docs/TODO.md) — the outstanding items, the
 decisions taken (and how to reverse each), and what is known to be missing.
+
+**Reviewing the look and structure of this project?** That review is tracked as
+[issue #3](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues/3)
+— scope, access and what is wanted back are in the issue, not in a file here.
+GitHub is the tracker for review work; `docs/` holds reference material only.
+
+---
+
+## Run the demo
+
+No setup and no local database: everything below runs against the deployed stack.
+Nothing you do here takes real money — the API is on **Stripe test keys**, so no
+card is ever charged (see [Payments](#payments-test-mode)).
+
+| What | URL |
+|---|---|
+| Customer app | <https://asian-taste-customer.vercel.app> |
+| Admin dashboard | <https://asian-taste-vietnamese-cuisine-wq44.vercel.app> |
+| API | <https://asian-taste-api.fly.dev> ([`/health/db`](https://asian-taste-api.fly.dev/health/db) shows whether the database and menu are up) |
+
+**Admin login**
+
+```
+username   admin
+password   nhahangvietnam
+```
+
+> This is the **deployed** password, written down here so a reviewer can get in
+> without asking — which means it now lives in git history: **rotate it after the
+> review** by updating the `admin_users` row, or delete the row and let the next
+> boot re-seed the documented default. (The seed only re-creates an admin when
+> the table has **no** rows, so deleting one admin while others remain is what
+> sticks.) `Admin123!` — the default in
+> `Data/Migrations/03_create_admin_user.sql` — applies to a **fresh local
+> database only**; the deployed one was rotated off it on 2026-09-13.
+
+**A five-minute walkthrough**
+
+Customer app:
+
+1. Open the customer app → **Order Now** (or **Menu**) → pick a category.
+2. Open **Pho – Beef noodle soup (1 choice)**. It has four option groups — Spice
+   level, Allergy, Combo, Extras — which is the customisation path worth
+   inspecting; most dishes have none.
+3. **Add to cart** → **Cart** → **Checkout**. Leave the service on **Pickup**
+   (delivery does not complete a checkout in v1 and the UI says so). Fill in
+   name, mobile and email.
+4. Pay with a test card below → the confirmation screen shows a real order
+   number (`AT-…`) and a status tracker.
+
+Admin dashboard (same order, the kitchen's view):
+
+5. Log in and open **Orders**. The order you just placed is there; in a second
+   tab it arrives by itself over WebSocket — the list is live.
+6. Open the order → move it **Placed → Confirmed → Ready**. The customer's
+   tracker reflects each step.
+
+Tear-down: the order is test data in a live database. Cancel it in the admin, or
+ask for it to be deleted — there is no delete endpoint yet
+([`docs/TODO.md`](docs/TODO.md) §6).
+
+### Payments (test mode)
+
+The Stripe **publishable** key in the deployed customer bundle is a `pk_test_…`
+key, so the whole checkout runs in test mode: real Stripe API, no money moved, a
+test card is required. (Which mode the API is in is printed in its logs — `fly
+logs -a asian-taste-api | grep STRIPE`.)
+
+Test cards — use **any future expiry** and **any 3-digit CVC**:
+
+| Card number | What it does | Why you'd use it |
+|---|---|---|
+| `4242 4242 4242 4242` | Succeeds | The normal demo path |
+| `4000 0025 0000 3155` | Requires 3-D Secure authentication | Exercises the challenge step in the PaymentElement |
+| `4000 0000 0000 0002` | Declined (generic) | Confirms a decline surfaces as a message, not a crash |
+| `4000 0000 0000 9995` | Declined — insufficient funds | Same, with the specific decline reason |
+
+The full list is Stripe's own: <https://docs.stripe.com/testing#cards>.
+
+**Three things this demo cannot show.** Apple Pay is configured in code but not
+active — it needs a domain registered with Stripe, and a `*.vercel.app` host
+cannot be registered ([`docs/TODO.md`](docs/TODO.md) §3). It also cannot be
+tested in Chrome, on Windows, or on localhost; it needs Safari on an Apple device
+with a card in Wallet, so a green headless run proves nothing about it. Delivery
+is offered in the UI but does not complete a checkout — v1 is pickup only. And it
+is test mode, so orders placed here are not real.
 
 ---
 

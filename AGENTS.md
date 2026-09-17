@@ -5,8 +5,12 @@ payments and optional Lightspeed POS sync.
 
 **`docs/TODO.md` is the live source of truth** for state, open items and taken
 decisions (and how to reverse each). `docs/ARCHITECTURE.md` explains how the pieces
-fit. Anything else describing the project — `docs/SESSION_NOTES.md`, `docs/archive/`
+fit. Anything else describing the project — `docs/archive/`
 — is history, not current state. `docs/DEPLOYMENT.md` has setup commands.
+
+Review-shaped work (a visual/structure review, a proposed change, a bug report) is
+tracked as a **GitHub issue**, not a markdown file; `docs/` holds reference material
+only, and `docs/TODO.md` records what is outstanding and where each item came from.
 
 ## Project
 

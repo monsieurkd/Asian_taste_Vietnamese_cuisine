@@ -7,7 +7,9 @@ read cold by whoever picks this up next (including future me).
 > numbers in it are from then (82 tests, admin app undeployed). Several things it
 > lists as outstanding were fixed later on 2026-09-13.
 >
-> **For current state, read [`docs/TODO.md`](TODO.md)** — it is the live list.
+> **For current state, read [`docs/TODO.md`](../TODO.md)** — it is the live list.
+> **This file lives in `docs/archive/` now** (moved 2026-09-17); its links were
+> rewritten for the new depth.
 > The stalest claims in this file are called out inline below, so nobody acts on
 > them by mistake.
 
@@ -239,7 +241,7 @@ http://[::]:8080` and the health check passing while the machine is up. Adding a
 credit card to the Fly account is required; no code change will fix it. Until
 then the app auto-starts on request, so it works but with a cold start each time.
 
-Read [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) for how all the pieces fit
+Read [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) for how all the pieces fit
 together. A real order was placed through the live API
 (`AT-130006-0008`, $17.00) and retrieved back from Neon. The live site renders
 82 cards, 82 distinct, 0 duplicates, and a dish modal opens with a working
