@@ -36,6 +36,7 @@
 //   with no budget ceiling is not autonomous, it is unattended.
 
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -192,6 +193,17 @@ function readIfExists(p) {
   } catch {
     return '';
   }
+}
+
+/**
+ * Synchronous, quiet git for cleanup paths only (halt, report). Async git lives in
+ * lib/git.mjs; this exists because `halt` is the one place that must work even
+ * after everything else has failed, including an unhandled rejection.
+ * Returns the trimmed stdout, or null on a non-zero exit.
+ */
+function spawnSyncGit(args, cwd = REPO_ROOT) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() : null;
 }
 
 function chunkTask(state, chunk, runDir, { replanDigest } = {}) {
@@ -1055,6 +1067,23 @@ function halt(state, statePath, reason, status = 'halted') {
   saveState(statePath, state);
   log.error(`\nHALTED: ${reason}`);
   log.info(`State preserved at ${statePath} — resume with: node scripts/swarm/run.mjs --resume`);
+  // Leave the checkout on the base branch. Halting is the common case (a missing
+  // API key, a block, a spent budget), and being silently parked on a swarm
+  // branch means the next `git commit` lands work somewhere unexpected. The
+  // branch itself is preserved, so `--resume` and a manual review both still work.
+  // Best-effort: never let cleanup mask the real halt reason.
+  try {
+    if (state.baseBranch) {
+      const branch = spawnSyncGit(['rev-parse', '--abbrev-ref', 'HEAD']);
+      if (branch && branch !== state.baseBranch) {
+        const r = spawnSyncGit(['checkout', state.baseBranch]);
+        if (r === null) log.info(`checkout ${state.baseBranch} failed; still on ${branch}`);
+        else log.info(`returned to ${state.baseBranch} (branch ${state.branch} kept)`);
+      }
+    }
+  } catch {
+    /* a failed checkout must not hide the halt */
+  }
   try {
     writeReport(state, state.runDir || dirname(statePath));
   } catch {
@@ -1121,18 +1150,27 @@ function writeReport(state, runDir) {
     lines.push(`## Release`, ``, '```json', JSON.stringify(state.deploy, null, 2), '```', ``);
   }
 
-  lines.push(
-    `## Evidence`,
-    ``,
-    `- \`driver.log\` — every step and every command's outcome`,
-    `- \`agents.log\` — each agent's raw output`,
-    `- \`gates.log\` — full CI/guardrail output`,
-    `- \`plan.json\` — the PM's plan`,
-    `- \`merge-verdict.json\` — the merger's verdict`,
-    `- \`review.txt\` — independent review + security review`,
-    `- \`run-state.json\` — the resumable, machine-readable ledger`,
-    ``,
-  );
+  // List only the evidence that actually exists. Naming files a run never
+  // produced is the same failure mode the whole swarm guards against: a report
+  // that reads as thorough while pointing at nothing.
+  const evidence = [
+    ['driver.log', 'every step and every command’s outcome'],
+    ['run-state.json', 'the resumable, machine-readable ledger'],
+    ['agents.log', 'each agent’s raw output'],
+    ['plan.json', 'the PM’s plan, including integration criteria'],
+    ['brief.md', 'the PM assistant’s reconnaissance'],
+    ['merge-verdict.json', 'the merger’s verdict, open defects, integration gaps'],
+    ['review.txt', 'independent review + security review output'],
+    ['gates.log', 'full CI/guardrail output'],
+  ].filter(([f]) => existsSync(join(runDir, f)));
+
+  lines.push(`## Evidence`, ``);
+  if (evidence.length) {
+    lines.push(...evidence.map(([f, what]) => `- \`${f}\` — ${what}`));
+  } else {
+    lines.push(`(no evidence files were produced)`);
+  }
+  lines.push(``);
 
   writeFileSync(join(runDir, 'report.md'), lines.join('\n'));
 }
