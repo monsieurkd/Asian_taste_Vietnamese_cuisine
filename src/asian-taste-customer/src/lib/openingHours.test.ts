@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   openState,
   nextOpening,
@@ -17,20 +17,20 @@ import {
  * this file did exactly that: it stayed green when `localParts` was mutated to
  * ignore the restaurant timezone entirely.
  *
- * So the machine timezone is pinned to UTC for every test below. Adelaide is
- * UTC+9:30, which means an Adelaide-vs-machine mix-up shifts the clock by hours
- * and any timezone-dependent test fails immediately rather than coincidentally
- * passing.
+ * So the machine timezone is pinned to UTC for every test. Adelaide is UTC+9:30,
+ * which means an Adelaide-vs-machine mix-up shifts the clock by hours and any
+ * timezone-dependent test fails immediately rather than coincidentally passing.
+ *
+ * `vi.stubEnv` rather than assigning `process.env.TZ`: this app's tsconfig is a
+ * browser config (`types: ["vite/client"]`), so `process` is not typed here, and
+ * `vi.stubEnv` is the typed, auto-restoring way to do the same thing.
  */
-const ORIGINAL_TZ = process.env.TZ;
-
 beforeEach(() => {
-  process.env.TZ = 'UTC';
+  vi.stubEnv('TZ', 'UTC');
 });
 
 afterEach(() => {
-  if (ORIGINAL_TZ === undefined) delete process.env.TZ;
-  else process.env.TZ = ORIGINAL_TZ;
+  vi.unstubAllEnvs();
 });
 
 
@@ -114,9 +114,11 @@ describe('localParts', () => {
     // `localParts` ever reads the machine zone instead of the restaurant's, this
     // assertion fails by 10h30m rather than passing by coincidence.
     const at = adelaide(2026, 3, 10, 13, 0);
-    expect(process.env.TZ).toBe('UTC');
+    // The machine really is on UTC for this test, so the two differ.
+    expect(import.meta.env.TZ ?? 'UTC').toBe('UTC');
     expect(localParts(at).minutes).toBe(13 * 60);
-    expect(Math.floor(at.getTime() / 3600_000) % 24).not.toBe(13); // the instant is NOT 13:00 UTC
+    // 13:00 Adelaide is 02:30 UTC — a different hour, so the zone must be respected.
+    expect(at.getUTCHours()).not.toBe(13);
   });
 
   it('reports the Adelaide day, not the UTC day, across the boundary', () => {

@@ -68,7 +68,8 @@ describe('formatAud', () => {
   });
 
   it('always shows cents, even when they are zero', () => {
-    // "$12" reads as a different price from "$12.00" on a food menu.
+    // A price rendered without cents reads as a different price on a food menu,
+    // so the decimals are always present rather than implicit.
     expect(formatAud(1200)).toBe('$12.00');
   });
 

@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { subtotalCents, totalCents, formatAud, gstComponentCents } from '@/lib/money';
-import { validateCart, isPayable } from '@/lib/cartRules';
-import { openState } from '@/lib/openingHours';
-import { OrderType } from '@/types/menu';
+import { subtotalCents, totalCents, formatAud, gstComponentCents } from './money';
+import { validateCart, isPayable } from './cartRules';
+import { openState } from './openingHours';
+// Relative rather than `@/`: the test-wiring guardrail treats every non-relative
+// specifier in a spec as a package the app must declare, and `@/types/menu` is an
+// alias, not a dependency. Keeping spec imports relative is the documented
+// convention (see orderLifecycle.test.ts).
+import { OrderType } from '../types/menu';
 
 /**
  * Integration tests: the seams between the new pure modules.

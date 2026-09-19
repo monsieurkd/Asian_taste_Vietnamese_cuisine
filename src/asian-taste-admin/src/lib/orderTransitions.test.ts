@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-// Imports the shared module directly: `./orderTransitions` would be the app's
-// own shim convention, but this file is new and has no shim, so it points at the
-// shared source the console actually uses.
-import { canTransition, allowedTransitions } from '@shared/lib/orderTransitions';
+// Relative rather than the `@shared` alias: the test-wiring guardrail reads every
+// non-relative specifier in a spec as a package the app must declare, and `@shared`
+// is a path alias, not a dependency. `orderStatus.test.ts` follows the same rule by
+// importing ./orderStatus.
+import { canTransition, allowedTransitions } from '../../../shared/lib/orderTransitions';
 import { STATUS_ORDER, isClosed } from './orderStatus';
 
 /**
