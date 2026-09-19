@@ -57,6 +57,13 @@ function canCancel(from: StatusKey): TransitionCheck {
 
 /** Moving forward along the pickup journey, one stage at a time. */
 function canAdvance(to: StatusKey, from: StatusKey): TransitionCheck {
+  // `collected` is the last stage in STATUS_ORDER, so the index checks below
+  // already refuse every forward move out of it — this branch is defence in
+  // depth, not the thing doing the work. It is kept deliberately: if a stage is
+  // ever added after `collected`, this guard is what stops a finished order
+  // being walked forward into it. A mutation check confirmed the index maths
+  // alone blocks `collected -> *`, so this is a genuinely equivalent-mutant line
+  // rather than an untested one; the tests pin the behaviour, not this line.
   if (isClosed(from)) {
     return {
       allowed: false,
