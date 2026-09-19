@@ -68,3 +68,8 @@ ui-shots/
 # Test artifacts (dotnet test produces TestResults/*.trx on every run).
 TestResults/
 *.trx
+
+# Swarm run state: logs, briefs, plans, reports. Local only — it is an audit trail
+# for the machine that ran it, not source. The agent roles under .reasonix/skills/
+# ARE tracked (see the ! rules above); this is only what a run produces.
+.swarm/
