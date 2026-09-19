@@ -436,6 +436,27 @@ say the word and I'll change any of them.
 | **Editing the menu** | Future work | Your call | Not built; the menu lives in the seed today |
 | **Payment integration style** | Staying on Payment Intents | Your decision. Stripe's own guidance recommends Checkout Sessions, but that advice targets new integrations — you already have a working, tested Payment Intent flow, and a rewrite buys nothing except Stripe-calculated tax and easier wallet buttons | Revisit only for a specific feature, not for its own sake |
 
+### Decisions made while building the agent swarm (2026-09-19)
+
+You asked for an autonomous swarm that can merge and deploy. Several consequential
+choices were made while building it. Each is reversible, and each is flagged here
+because it **should have been a question put to you** rather than a judgement call —
+the instruction was not to ask. The two marked **you should look at this** are the ones
+where a different answer is genuinely reasonable.
+
+| Decision | What I chose | Why | How to change |
+|---|---|---|---|
+| **Autonomy ceiling** ⚠️ **you should look at this** | The swarm *can* merge to `main` unattended (which deploys to production), but only via an explicit `--merge` flag; the default run stops with a green branch | You said "auto-merge + deploy". I implemented it as asked, but no model ever executes the merge — the driver does, with a fixed shape, so a bad judgement cannot land code by itself | Drop `--merge`, or run in a throwaway clone/fork |
+| **Rollback is a `git revert`, not a redeploy** ⚠️ **you should look at this** | On a failed production health check after `--deploy-watch`, the merge is reverted and the pipeline re-runs | A revert is the only safe way to undo a shared branch (a reset would rewrite `main` and is denied) | Accept the minutes-long window, or keep the swarm off `main` entirely |
+| **`--deploy-watch` was never tested against production** | Written and documented, never triggered for real | I could not run it here (no model credential), and testing it would mean deliberately breaking production | Treat the first few runs as an experiment; the docs say exactly that |
+| **Eight roles, not five** | Added `swarm-pm-assistant` and split dev into four specialists | You asked for a PM assistant, and for dev agents specialised per area ("back, front, UI, C#") — so the split follows your words. But 4 specialists is more seams than this codebase strictly needs | Merge roles in `.reasonix/skills/`; the driver only requires `DEV_ROLES` to match |
+| **Chunks run sequentially** | No parallel chunk execution | Research on multi-agent loops is consistent that free coordination is where they fail (conflicting edits, stale state, duplicated work). Sequential is slower and correct | Implementing parallel chunks is a real change, not a config flag — I would not |
+| **`--max-attempts 3`, `--max-replans 3`** | 3 fix attempts, then 3 direction changes, then halt | Your instruction: 3 attempts before changing direction, and no rewriting an already-wrong module | Both are CLI flags — no edit needed |
+| **Danger chunks halt instead of building** | Chunks touching migration order or `Payment__UseMockGateway` stop the run | Those have caused production incidents here and no automated check fully judges them | Remove `danger` from the PM's vocabulary if you want them attempted |
+| **Guardrail edits are never auto-merged** | A run touching `.github/workflows/**`, `scripts/check-*.sh`, `.gitignore`'d guardrails, `.githooks/**` or `.test-baseline` is halted | A guardrail cannot audit its own removal, and lowering `.test-baseline` is the cheapest way for a stuck agent to fake green | Deliberate; I would not change it |
+| **Run artifacts are gitignored** | `.swarm/` holds logs, plans, reports — local only, not committed | It's an audit trail for the machine that ran it, not source | Commit it if you want the reports in history |
+| **The driver's own logic is tested by a selftest, not the suite** | `scripts/swarm/selftest.mjs` (46 checks) is outside `dotnet test` and outside `.test-baseline` | It is JavaScript, so it cannot join the C# suite; wiring it into CI is a workflow change, and the swarm is forbidden from touching workflows | Add a CI step calling `node scripts/swarm/selftest.mjs` — worth doing |
+
 ---
 
 ## 9. Future work, in the order I'd do it

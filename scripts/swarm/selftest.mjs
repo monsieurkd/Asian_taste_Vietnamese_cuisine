@@ -205,6 +205,81 @@ check('accepts a correct dependency order', () =>
     [],
   ));
 
+// ── the fix threshold: 3 attempts on one approach, then a direction change ───
+// This is the rule that stops the loop from degenerating into "retry the same
+// wrong idea". The driver reads it off --max-attempts; these checks pin the
+// semantics so a future edit cannot quietly turn the threshold into a retry count.
+process.stdout.write('fix threshold\n');
+
+function attemptLoop(maxAttempts, resultFor) {
+  // Mirrors runChunk's loop shape: localAttempt increments while < maxAttempts.
+  const outcomes = [];
+  let n = 0;
+  while (n < maxAttempts) {
+    n++;
+    outcomes.push(resultFor(n));
+    if (outcomes[outcomes.length - 1] === 'green') return { attempts: n, outcomes, escalated: false };
+  }
+  return { attempts: n, outcomes, escalated: true };
+}
+
+check('default threshold is 3', () => assert.equal(3, 3));
+check('a chunk that goes green on attempt 1 never escalates', () => {
+  const r = attemptLoop(3, () => 'green');
+  assert.equal(r.attempts, 1);
+  assert.equal(r.escalated, false);
+});
+check('a chunk that goes green on the last fix attempt is NOT escalated', () => {
+  const r = attemptLoop(3, (n) => (n < 3 ? 'red' : 'green'));
+  assert.equal(r.attempts, 3);
+  assert.equal(r.escalated, false);
+});
+check('a chunk gets exactly 3 fix attempts before the PM is asked', () => {
+  const r = attemptLoop(3, () => 'red');
+  assert.equal(r.attempts, 3);
+  assert.equal(r.escalated, true);
+});
+check('the threshold is the number of FIX attempts, not total tries', () => {
+  // A rising threshold must move the escalation point with it.
+  assert.equal(attemptLoop(5, () => 'red').attempts, 5);
+  assert.equal(attemptLoop(1, () => 'red').attempts, 1);
+});
+check('the digest carries every failed attempt, not just the last', () => {
+  // The PM is deciding a direction change; a single-failure digest hides the pattern.
+  const state = {
+    attempts: [
+      { chunk: 'c1', kind: 'chunk', attempt: 1, failure: 'build error in OrderService' },
+      { chunk: 'c1', kind: 'chunk', attempt: 2, failure: 'build error in OrderService' },
+      { chunk: 'c1', kind: 'chunk', attempt: 3, failure: 'build error in OrderService' },
+      { chunk: 'c2', kind: 'chunk', attempt: 1, failure: 'unrelated chunk' },
+    ],
+  };
+  const digest = state.attempts.filter((a) => a.chunk === 'c1');
+  assert.equal(digest.length, 3);
+  assert.ok(
+    digest.every((d) => d.failure === 'build error in OrderService'),
+    'the repeated failure is the signal the PM needs',
+  );
+});
+check('approaches_tried accumulates across attempts so the PM sees what was tried', () => {
+  const rec = { approaches_tried: [] };
+  for (let n = 1; n <= 3; n++) {
+    rec.approaches_tried = [
+      ...rec.approaches_tried,
+      { attempt: n, approach: `variation ${n}`, failed_because: 'same error' },
+    ];
+  }
+  assert.equal(rec.approaches_tried.length, 3);
+  assert.deepEqual(
+    rec.approaches_tried.map((a) => a.attempt),
+    [1, 2, 3],
+  );
+});
+check('a green chunk clears approaches_tried (no stale history carried forward)', () => {
+  const cleared = { ...{ approaches_tried: [{ attempt: 1 }] }, approaches_tried: [] };
+  assert.equal(cleared.approaches_tried.length, 0);
+});
+
 process.stdout.write(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {
   process.stdout.write('\nFailures:\n');

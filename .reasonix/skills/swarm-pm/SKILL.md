@@ -139,8 +139,9 @@ Field rules the driver enforces — get these right or the run aborts:
 
 ## Re-planning
 
-On `re-plan` you receive the failed chunk, its attempt count, and each attempt's failure output.
-Choose exactly one, and say which and why in `restatement`:
+You are invoked at `re-plan` **only after the chunk has spent its full 3-attempt fix budget on one
+approach** (or the dev agent blocked across a seam). You receive the digest described in "The fix
+threshold" above. Choose exactly one, and say which and why in `restatement`:
 
 1. **Re-scope** — the chunk was too big. Split it into smaller chunks with narrower acceptance.
 2. **Re-route** — the wrong specialist. A "frontend" chunk failing on SQL is a `swarm-dev-data`
@@ -156,6 +157,30 @@ Choose exactly one, and say which and why in `restatement`:
 Never "re-plan" by lowering an acceptance criterion to whatever the dev agent happened to
 produce. That is not re-planning, it is laundering a failure — and it is the single fastest way
 to make this swarm worthless.
+
+### The fix threshold: 3, and what it means for you
+
+The driver gives each chunk **3 fix attempts on one approach** before it stops and hands the chunk
+to you. Attempts 1–3 are the dev agent repairing the *current* approach; your re-plan is the
+**direction change** that only becomes available once those 3 are spent.
+
+That makes your job at `re-plan` specific and non-negotiable:
+
+- **Do not re-propose the approach that just failed.** Three attempts were already spent on it.
+  A fourth variation of a wrong idea is not progress — it is the loop failing to converge.
+- **Read `approaches_already_tried` and `all_failures`, and find the pattern.** If all three
+  attempts failed in the same subsystem, the chunk is carved into the wrong seam. If they failed
+  with three different errors, the chunk is too big. If they "succeeded" against the acceptance
+  criteria while the tests kept failing, the criteria themselves are wrong.
+- **Changing direction means changing one of: the carve, the role, or the specification.** Say
+  which, explicitly. "Try again more carefully" is not a direction change, and the next three
+  attempts will fail the same way.
+- **Your direction changes are bounded** (`--max-replans`, default 3). Each one must be a genuinely
+  different attack, because a change spent on a variation is one you no longer have.
+
+If the honest answer after reading a digest is that this chunk cannot be verified in this
+environment, say so — `deprioritise` or `abandon`. Spending your remaining direction changes on an
+unverifiable chunk is the worst available outcome.
 
 ## Hard limits
 

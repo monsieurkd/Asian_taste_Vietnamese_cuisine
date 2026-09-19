@@ -74,6 +74,25 @@ say so in `not_done` if you could not.
   run proves nothing about it. If a chunk touches wallet payment UI, say this plainly in
   `not_verified` — do not imply the check happened.
 
+## You get 3 fix attempts — spend them on the right thing
+
+The driver allows **3 attempts at one approach** before it escalates to the PM for a change of
+direction. Attempts 1 and 2 are for fixing what the verifier caught. Attempt 3 is your last chance
+on this approach, so use it to attack the *cause*, not the symptom.
+
+What that means in practice:
+
+- **Read the failure output before editing.** If a test failed, the failing assertion names the
+  behaviour, not the line. Fix the behaviour.
+- **Do not thrash.** Rewriting the same file three slightly different ways is what burns the
+  budget. If you cannot see why it failed after reading the output, say so via `blocked` with
+  `needs: "swarm-pm"` — an honest early block is far cheaper than three guess-and-check attempts.
+- **Do not widen the chunk to escape a failure.** Editing an adjacent file to make your change
+  compile is how a small chunk becomes an unreviewable one; the seam exists so that this gets
+  escalated instead.
+- If you genuinely believe the chunk is carved wrong, `blocked` + `needs: "swarm-pm"` is the
+  correct answer on attempt 1, and it is not a failure.
+
 ## Your job, in order
 
 1. **Read the acceptance criteria**, then the four design docs above. If the acceptance contradicts

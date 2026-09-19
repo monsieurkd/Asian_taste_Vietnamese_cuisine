@@ -74,7 +74,14 @@ compiler disagrees, that fact is the most important line in the file.
 ```json
 {
   "chunk": "c1",
-  "attempts": 3,
+  "fix_attempts_spent": 3,
+  "direction_change": 1,
+  "approaches_already_tried": [
+    {"attempt": 1, "role": "swarm-dev-api", "files": ["..."], "approach": "...", "failed_because": "..."}
+  ],
+  "all_failures": [
+    {"attempt": 1, "role": "swarm-dev-api", "status": "implemented", "failure": "..."}
+  ],
   "root_cause": "<the one failure everything else follows from, with file:line if known>",
   "downstream": ["<failures that are consequences of root_cause>"],
   "claimed_vs_observed": "<what the agent said it did | what the machine actually reported>",
@@ -83,6 +90,15 @@ compiler disagrees, that fact is the most important line in the file.
   "pm_should_consider": "<the one thing the PM most likely got wrong>"
 }
 ```
+
+**`all_failures` is the most valuable field you produce.** The PM is deciding a *direction change*
+after three spent attempts, not a retry. If all three failed the same way, say so clearly — the
+pattern is what tells the PM whether to re-carve the chunk, re-route the role, or rewrite the
+acceptance criteria. Reporting only the latest failure hides exactly the signal that matters.
+
+`approaches_already_tried` must record what each attempt actually *did* (its reported summary and
+the files it touched), not just that it failed. A PM that cannot see the three attempts will
+propose a fourth variation of one of them.
 
 `classification` matters more than it looks:
 - **defect** — production code is wrong. The PM must not route around this by weakening acceptance.

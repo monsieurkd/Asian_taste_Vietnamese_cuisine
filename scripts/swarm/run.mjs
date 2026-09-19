@@ -130,8 +130,10 @@ function usage() {
                          revert the merge automatically if either fails. Implies --merge.
   --resume               Resume the most recent run for this repo from its saved state.
   --max-chunks <n>       Hard cap on chunk count accepted from the PM. Default 12
-  --max-attempts <n>     Attempts per chunk before handing back to the PM. Default 3
-  --max-replans <n>      Re-plan cycles before the run halts. Default 3
+  --max-attempts <n>     Fix attempts on ONE approach before the PM must change
+                         direction. Default 3. The first N attempts are for fixing
+                         the current approach; only after N does the PM re-plan.
+  --max-replans <n>      Direction changes before the run halts. Default 3
   --deadline-min <n>     Wall-clock ceiling for the whole run. Default 240
   --model <name>         Model for every agent. Default: the Reasonix default.
   --skip-frontend-gate   Skip the frontend build/lint/test gate (use only when the
@@ -704,7 +706,20 @@ async function runChunk(state, chunk, { args, repoRoot, runDir, statePath, budge
         .filter(Boolean)
         .join('\n');
 
-      setChunk(state, chunk.id, { status: 'retrying', digest: { summary: failures.join('; '), detail: digestText } });
+      setChunk(state, chunk.id, {
+        status: 'retrying',
+        digest: { summary: failures.join('; '), detail: digestText },
+        approaches_tried: [
+          ...(state.chunks[chunk.id]?.approaches_tried || []),
+          {
+            attempt: total,
+            role: chunk.role,
+            files: dev.json?.files_changed || [],
+            approach: dev.json?.summary || '(no summary reported)',
+            failed_because: failures.join('; '),
+          },
+        ],
+      });
       recordAttempt(state, { kind: 'chunk', chunk: chunk.id, attempt: total, failure: failures.join('; ') });
       saveState(statePath, state);
       continue;
@@ -738,6 +753,7 @@ async function runChunk(state, chunk, { args, repoRoot, runDir, statePath, budge
       result: dev.json,
       test_result: test.json,
       digest: null,
+      approaches_tried: [],
     });
     saveState(statePath, state);
     log.ok(
@@ -756,25 +772,47 @@ async function runChunk(state, chunk, { args, repoRoot, runDir, statePath, budge
     return;
   }
 
-  // Attempts exhausted (or a cross-seam block) → hand back to the PM.
-  log.warn(`${chunk.id} did not go green after ${localAttempt} attempt(s); asking the PM to re-plan`);
+  // Attempts exhausted (or a cross-seam block) → the PM must change direction.
+  //
+  // `--max-attempts` is the fix threshold: the first N attempts are for repairing
+  // the CURRENT approach. Only once those are spent does the PM get to re-plan.
+  // Without that separation the loop degenerates — a fresh re-plan every failure
+  // means every attempt is attempt number one, which is how a stuck agent burns a
+  // whole budget retrying one wrong idea.
+  log.warn(
+    `${chunk.id} did not go green after ${localAttempt} fix attempt(s) on one approach; ` +
+      `the PM must now change direction (not repeat it)`,
+  );
   state.replans = (state.replans || 0) + 1;
   if (state.replans > args.maxReplans) {
-    setChunk(state, chunk.id, { status: 'halted', reason: 'attempts exhausted' });
+    setChunk(state, chunk.id, { status: 'halted', reason: 'fix attempts and direction changes exhausted' });
     saveState(statePath, state);
     return halt(
       state,
       statePath,
-      `${chunk.id} failed ${localAttempt} attempt(s) and the re-plan budget (${args.maxReplans}) is spent`,
+      `${chunk.id} failed ${localAttempt} fix attempt(s) and the direction-change budget ` +
+        `(${args.maxReplans}) is spent`,
     );
   }
 
+  // The digest carries EVERY failed attempt, not just the last one. A PM shown only
+  // the most recent failure tends to propose a variation of the approach that
+  // already failed three times; shown the whole history it can see the pattern.
+  const priorAttempts = state.attempts.filter((a) => a.chunk === chunk.id);
   state.digest = {
     chunk: chunk.id,
-    attempts: attemptCountFor(state, chunk.id),
+    fix_attempts_spent: localAttempt,
+    direction_change: state.replans,
+    approaches_already_tried: state.chunks[chunk.id]?.approaches_tried || [],
+    all_failures: priorAttempts
+      .filter((a) => a.failure || a.status)
+      .map((a) => ({ attempt: a.attempt, role: a.role, status: a.status, failure: a.failure })),
     last_failure: state.chunks[chunk.id]?.digest?.summary || 'unknown',
     detail: state.chunks[chunk.id]?.digest?.detail || '',
-    pm_should_consider: 're-carve the chunk, re-route the role, or re-specify acceptance',
+    pm_should_consider:
+      'Do NOT re-propose the approach that just failed. Re-carve the chunk, re-route to a ' +
+      'different specialist, narrow the acceptance criteria, deprioritise the chunk, or ' +
+      'abandon the goal if it cannot be verified here.',
   };
   setChunk(state, chunk.id, { status: 'replanning' });
   saveState(statePath, state);
@@ -787,7 +825,9 @@ async function runChunk(state, chunk, { args, repoRoot, runDir, statePath, budge
       `Goal: ${state.goal}`,
       `Run directory: ${runDir}`,
       `Brief: ${join(runDir, 'brief.md')}`,
-      `The chunk below did not go green. Digest:`,
+      `The chunk below spent its entire fix budget on one approach and did not go green.`,
+      `You are now changing DIRECTION, not retrying. Do not re-propose what already failed.`,
+      `Digest:`,
       '```json',
       jsonForPrompt(state.digest),
       '```',
