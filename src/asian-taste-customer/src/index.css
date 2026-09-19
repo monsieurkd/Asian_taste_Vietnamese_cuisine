@@ -7,3 +7,8 @@
 @import "./styles/foundation.css";
 @import "./styles/screens.css";
 @import "./styles/motion.css";
+
+/* The shared component set lives outside this app, so Tailwind's automatic
+   source detection would miss it. Must come after every @import above, or CSS
+   ordering rules make the browser drop the imports entirely. */
+@source "../../shared";

@@ -282,7 +282,11 @@
   /* ─── panels ────────────────────────────────────────────────────────────
      House rule: a card carries a heading OR a rule, never both. The border
      under every .panel-head produced the "title -> line -> content" rhythm
-     that reads as generated; space does the separating instead. */
+     that reads as generated; space does the separating instead. The same
+     applies to the foot and to every receipt row: a 1px hairline under a
+     footer or above a total is the single loudest generated-UI tell. Lines
+     are reserved for structural edges (sticky bars, tab rails) and data-grid
+     row tracking; content groups separate by space and type hierarchy. */
   .panel {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -308,8 +312,7 @@
     padding-top: 14px;
   }
   .panel-foot {
-    padding: 18px 22px;
-    border-top: 1px solid var(--color-border);
+    padding: 18px 22px 20px;
   }
   .panel-head h2,
   .panel-head h3 {
@@ -890,11 +893,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 1.25rem;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .rowline:last-child {
-    border-bottom: 0;
+    padding: 13px 0;
   }
   .rowline .rl-main {
     min-width: 0;
@@ -920,9 +919,7 @@
     font-size: 19px;
     font-weight: 800;
     color: var(--color-fg);
-    padding-top: 12px;
-    margin-top: 8px;
-    border-top: 1px solid var(--color-border);
+    padding-top: 8px;
   }
   .sum-row.total .num {
     color: var(--color-accent);

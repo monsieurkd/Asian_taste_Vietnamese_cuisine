@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMenuIndex } from '@/hooks/useMenuIndex';
 import { useCartStore } from '@/stores/cartStore';
@@ -115,35 +115,89 @@ export function MenuPage() {
 
   const shown = grouped.reduce((sum, g) => sum + g.items.length, 0);
 
+  /**
+   * Identity of the rendered section set. `useMenuIndex` rebuilds `index` every
+   * render, so `grouped` is a fresh array each time and cannot be a dependency —
+   * the effect would tear down and rebuild on every keystroke and, worse, reset
+   * the click intent it exists to protect. This string changes only when the set
+   * or order of sections actually changes.
+   */
+  const sectionKey = grouped.map((g) => g.category.id).join(',');
+
+  /**
+   * Which section the rail highlights. Two writers feed one state: a rail click
+   * is the reader's explicit intent, and the scroll position is ambient. A click
+   * wins until the reader scrolls the page themselves — because the page cannot
+   * always honour the click. The last sections are shorter than the viewport, so
+   * they can never be scrolled up to the reading line; a position-only spy would
+   * leave the section above the clicked one lit. That is the "one slower than I
+   * press" bug, and it only shows on the way down.
+   *
+   * The intent outlives the click: native smooth scrolling fires `scroll` for as
+   * long as it runs, so the spy must stay out of the way until a real gesture
+   * (wheel, touch drag, key scroll) proves the reader took over again.
+   */
+  const intentRef = useRef<number | null>(null);
+
+  const selectSection = (id: number) => {
+    intentRef.current = id;
+    setActiveCat(id);
+  };
+
   // Highlight the section you are looking at.
   useEffect(() => {
     const sections = Array.from(document.querySelectorAll<HTMLElement>('.cat-section'));
     if (!sections.length) return;
+    intentRef.current = null;
 
-    const onScroll = () => {
-      const headH = parseInt(
-        getComputedStyle(document.documentElement).getPropertyValue('--head-h') || '72',
-        10
-      );
-      const bar = document.querySelector<HTMLElement>('.cat-bar');
-      const barH = bar && getComputedStyle(bar).display !== 'none' ? bar.offsetHeight : 0;
-      const offset = headH + barH + 16;
+    // The y where a section counts as "at the top": the exact offset the browser
+    // lands an anchor on, which is the section's own `scroll-margin-top`. Reading
+    // it live keeps the rail, the chip bar and the spy aligned across the 1080px
+    // breakpoint and every header re-measure.
+    const readingLine = () => parseFloat(getComputedStyle(sections[0]).scrollMarginTop) || 0;
 
-      let current = sections[0].dataset.cat;
+    const sync = () => {
+      if (intentRef.current !== null) return;
+      const line = readingLine() + 4;
+      let id = sections[0].dataset.cat;
       for (const section of sections) {
-        if (section.getBoundingClientRect().top <= offset + 6) current = section.dataset.cat;
+        if (section.getBoundingClientRect().top <= line) id = section.dataset.cat;
+        else break;
       }
-      if (current) setActiveCat(Number(current));
+      if (id) setActiveCat(Number(id));
     };
 
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
+    // A deliberate scroll gesture hands the rail back to the position spy.
+    const release = () => {
+      if (intentRef.current === null) return;
+      intentRef.current = null;
+      sync();
     };
-  }, [grouped.length]);
+
+    // Pointer presses outside the section nav (scrollbar drag, clicking into the
+    // list) are the reader driving the page, so they release the intent too.
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.cat-rail, .cat-bar')) return;
+      release();
+    };
+
+    sync();
+    window.addEventListener('scroll', sync, { passive: true });
+    window.addEventListener('resize', sync);
+    window.addEventListener('wheel', release, { passive: true });
+    window.addEventListener('touchmove', release, { passive: true });
+    window.addEventListener('keydown', release);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('scroll', sync);
+      window.removeEventListener('resize', sync);
+      window.removeEventListener('wheel', release);
+      window.removeEventListener('touchmove', release);
+      window.removeEventListener('keydown', release);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [sectionKey]);
 
   const quickAdd = (dish: Dish) => {
     addConfigured(dish, { selections: {} });
@@ -165,6 +219,7 @@ export function MenuPage() {
                   key={category.id}
                   href={`#cat-${category.id}`}
                   aria-current={activeCat === category.id ? 'true' : undefined}
+                  onClick={() => selectSection(category.id)}
                 >
                   {category.label}
                   <span className="rail-count">{category.count}</span>
@@ -204,6 +259,7 @@ export function MenuPage() {
                     key={category.id}
                     href={`#cat-${category.id}`}
                     aria-current={activeCat === category.id ? 'true' : undefined}
+                    onClick={() => selectSection(category.id)}
                   >
                     {category.label}
                     <span className="rail-count">{category.count}</span>

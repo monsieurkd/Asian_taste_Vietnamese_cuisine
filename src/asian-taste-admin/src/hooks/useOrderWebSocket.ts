@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useToast } from "@/hooks/use-toast"
+import { showAdminToast } from "@/components/ui/AdminToast"
 import { useAuthStore } from "@/stores/authStore"
 import { useQueryClient } from "@tanstack/react-query"
 import type { WebSocketMessage } from "@/types"
@@ -8,7 +8,6 @@ type ConnectionState = "connecting" | "connected" | "disconnected" | "error"
 
 export function useOrderWebSocket() {
   const { token } = useAuthStore()
-  const { toast } = useToast()
   const queryClient = useQueryClient()
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -70,11 +69,7 @@ export function useOrderWebSocket() {
 
             case "new_order":
               // Show toast notification
-              toast({
-                title: "🔔 New Order Received!",
-                description: `Order ${message.data?.toString()} has been placed.`,
-                variant: "info",
-              })
+              showAdminToast(`🔔 New order ${message.data?.toString()} placed`)
               // Play sound
               playNotificationSound()
               // Refresh dashboard data

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useAuthStore } from "@/stores/authStore"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { AdminLayout } from "@/components/AdminLayout"
+import { ToastHost } from "@/components/ui/Toast"
 import { LoginPage } from "@/pages/LoginPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { OrdersPage } from "@/pages/OrdersPage"
@@ -58,6 +59,7 @@ function App() {
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        <ToastHost />
       </BrowserRouter>
     </QueryClientProvider>
   )

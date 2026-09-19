@@ -1,27 +1,9 @@
-let timer: number | undefined;
-
 /**
- * A console toast, as a DOM node rather than React state.
+ * Re-export shim.
  *
- * The console raises toasts from mutation callbacks and WebSocket frames, both
- * of which sit outside the render tree. One element, one timer, one message —
- * a queue of "status updated" toasts is noise at a pass.
+ * The console toast is now the same React toast the storefront uses
+ * (`src/shared/ui/toast.ts`), so a WebSocket frame, a mutation callback and a
+ * cart action all land in one slot with one lifetime. The name is kept so
+ * existing console call sites read unchanged.
  */
-export function showAdminToast(message: string) {
-  let el = document.getElementById('admin-toast');
-
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'admin-toast';
-    el.className = 'toast';
-    el.setAttribute('role', 'status');
-    el.setAttribute('aria-live', 'polite');
-    document.body.appendChild(el);
-  }
-
-  el.textContent = message;
-  el.classList.add('is-open');
-
-  window.clearTimeout(timer);
-  timer = window.setTimeout(() => el?.classList.remove('is-open'), 2400);
-}
+export { showToast as showAdminToast } from '@shared/ui/toastStore';

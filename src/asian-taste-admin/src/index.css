@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,500;0,600;0,700;0,800;1,600;1,700&display=swap');
 
+/* The shared component set lives outside this app, so Tailwind's automatic
+   source detection would miss it. Must come after every @import above, or CSS
+   ordering rules make the browser drop the imports entirely. */
+@source "../../shared";
+
 /* ==========================================================================
    Same locked set as the customer app and docs/DESIGN/mockups/src/brand-spec.md.
    Cream content, deep-brown rail, maroon actions, gold highlight.
@@ -824,8 +829,7 @@
     display: grid;
     grid-template-columns: 34px 1fr auto;
     gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--color-border);
+    padding: 13px 0;
     align-items: start;
   }
   .line-item .li-qty {
@@ -943,11 +947,7 @@
     grid-template-columns: 56px 1fr 130px 120px 44px;
     gap: 14px;
     align-items: center;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .mm-row:last-child {
-    border-bottom: 0;
+    padding: 14px 16px;
   }
   .mm-thumb {
     width: 56px;
@@ -1056,8 +1056,7 @@
     padding-top: 14px;
   }
   .panel-foot {
-    padding: 18px 22px;
-    border-top: 1px solid var(--color-border);
+    padding: 18px 22px 20px;
   }
   .panel-head h2,
   .panel-head h3 {
@@ -1489,9 +1488,7 @@
     font-size: 19px;
     font-weight: 800;
     color: var(--color-fg);
-    padding-top: 12px;
-    margin-top: 8px;
-    border-top: 1px solid var(--color-border);
+    padding-top: 8px;
   }
   .sum-row.total .num {
     color: var(--color-accent);

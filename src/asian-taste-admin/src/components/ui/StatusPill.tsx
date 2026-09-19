@@ -1,18 +1,12 @@
-import { STATUS_META, statusKey } from "@/lib/orderStatus"
+import { StatusPill as SharedStatusPill, type StatusPillProps } from '@shared/ui/StatusPill';
 
 /**
- * A status as a pill.
+ * The console's status pill.
  *
- * Always rendered through `statusKey`, never by lowercasing the API string at
- * the call site — a typo there used to produce an unstyled badge that looked
- * like missing data rather than a bug.
+ * `lens` is pinned to `restaurant` here so every call site reads "Collected"
+ * where the storefront reads "Delivered". The shell itself is shared; only the
+ * vocabulary is fixed.
  */
-export function StatusPill({ status, label }: { status: string; label?: string }) {
-  const meta = STATUS_META[statusKey(status)]
-  return (
-    <span className={`status-pill ${meta.cls}`}>
-      <span className="sdot" aria-hidden="true" />
-      {label ?? meta.label}
-    </span>
-  )
+export function StatusPill(props: Omit<StatusPillProps, 'lens'>) {
+  return <SharedStatusPill {...props} lens="restaurant" />;
 }

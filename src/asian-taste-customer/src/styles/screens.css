@@ -308,9 +308,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 10px 20px;
-    margin-top: 30px;
-    padding-top: 22px;
-    border-top: 1px solid var(--color-border);
+    margin-top: 34px;
   }
   .hero-trust span {
     font-size: 13px;
@@ -583,8 +581,7 @@
     justify-content: space-between;
     gap: 10px;
     margin-top: auto;
-    padding-top: 14px;
-    border-top: 1px solid var(--color-border);
+    padding-top: 16px;
   }
   .price {
     font-weight: 800;
@@ -1208,7 +1205,9 @@
     justify-content: space-between;
     gap: 1.25rem;
     padding: 22px 22px 18px;
-    border-bottom: 1px solid var(--color-border);
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 16px 18px -20px color-mix(in oklch, var(--color-fg) 60%, transparent);
   }
   .drawer-head h2 {
     font-size: 26px;
@@ -1233,11 +1232,7 @@
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 4px 14px;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .cart-item:last-child {
-    border-bottom: 0;
+    padding: 20px 0;
   }
   .cart-item h3 {
     font-family: var(--font-display);
@@ -1275,9 +1270,11 @@
     color: var(--color-accent);
   }
   .drawer-foot {
-    border-top: 1px solid var(--color-border);
+    position: relative;
+    z-index: 2;
     padding: 18px 22px 22px;
     background: var(--color-surface);
+    box-shadow: 0 -16px 18px -20px color-mix(in oklch, var(--color-fg) 60%, transparent);
   }
   .drawer-foot .btn {
     width: 100%;
@@ -1632,9 +1629,7 @@
     justify-content: space-between;
     gap: 1.25rem;
     flex-wrap: wrap;
-    margin-top: 56px;
-    padding-top: 24px;
-    border-top: 1px solid color-mix(in oklch, var(--color-surface) 18%, transparent);
+    margin-top: 48px;
     font-size: 13px;
   }
 
