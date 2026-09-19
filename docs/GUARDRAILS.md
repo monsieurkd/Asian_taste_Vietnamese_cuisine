@@ -155,3 +155,10 @@ Being explicit about the gaps matters as much as the coverage:
 - **`.reasonix/skills/test-author/`** — authors new test cases and *proves each can fail* via a
   mandatory mutation check.
 - **`.reasonix/skills/ci-test-guardian/`** — reproduces the CI sequence locally and keeps it green.
+- **`.reasonix/skills/swarm-*`** — the autonomous build swarm (PM, PM assistant, four dev
+  specialists, unit tester, merger). It **consumes** these guardrails rather than replacing them:
+  `scripts/swarm/run.mjs` runs all three in its per-chunk gate and its pre-merge gate, snapshots
+  `.test-baseline` at run start and refuses to merge if the floor dropped, and refuses to
+  auto-merge any change touching `.github/workflows/**`, `scripts/check-*.sh`, `.githooks/**` or
+  `.test-baseline`. A guardrail cannot audit its own removal, so the swarm does not let itself
+  near one. See `scripts/swarm/README.md`.

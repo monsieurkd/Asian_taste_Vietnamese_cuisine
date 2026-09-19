@@ -48,6 +48,11 @@ npm test         # vitest run             (both apps)
 git config core.hooksPath .githooks             # opt-in fast tier: pre-commit runs the 2 static guards
 
 npm run ui:shots && npm run ui:judge            # repo-root UI quality loop (needs API + a dev server + .env.local)
+
+node scripts/swarm/run.mjs --goal "..."         # autonomous swarm: brief → plan → build → test
+                                                # → integrate → (with --merge) land it.
+                                                # Start WITHOUT --merge. See scripts/swarm/README.md
+node scripts/swarm/selftest.mjs                 # the swarm driver's own logic (38 checks)
 ```
 
 Guardrails are tiered by cost and each check lives in exactly one tier (fast =
@@ -110,6 +115,15 @@ explained commit.
 - The `/api/dev/db/*` endpoints are Development-only and must 404 in production.
 - Refunds, order-number search, menu editing in the UI, and automated DB backups are
   **not built** — see `docs/TODO.md` §9 before assuming they exist.
+- **`scripts/swarm/` is an autonomous build loop** that can merge to `main` unattended
+  (which releases to production). It is bounded and interlocked — it snapshots
+  `.test-baseline` and refuses to merge if the floor dropped, treats
+  `.github/workflows/**`, `scripts/check-*.sh`, `.githooks/**` and `.test-baseline` as
+  never-auto-merge paths, and halts on danger chunks (migration order,
+  `Payment__UseMockGateway`). Irreversible git actions are driver-only and need
+  `--merge`; no model decides to land code. **Read `scripts/swarm/README.md` before
+  running it with `--merge`**, and read the run's `report.md` afterwards — its "open
+  defects" and "integration gaps" sections are where it admits what it did not do.
 
 ## Notes
 
