@@ -497,7 +497,25 @@ app.UseMiddleware<RateLimitMiddleware>(new RateLimitOptions
 {
     MaxRequests = 100,
     Window = TimeSpan.FromMinutes(1),
-    ExemptPaths = new[] { "/api/webhook/test", "/api/dev", "/api/docs", "/openapi", "/ws" }
+    ExemptPaths = new[] { "/api/webhook/test", "/api/dev", "/api/docs", "/openapi", "/ws" },
+
+    // Order creation gets its own, much tighter budget.
+    //
+    // The global 100/minute is right for reads — someone browsing the menu, or the
+    // admin dashboard polling — and useless as protection for the one endpoint that
+    // writes a row, creates a Stripe PaymentIntent and queues an email. 100 of those
+    // per minute from one address is a script, and by the time it trips the global
+    // limit it has already created 100 orders.
+    //
+    // Ten per minute is chosen to be comfortably above a real double-tap, a shared
+    // restaurant-tablet session, or a customer retrying after a declined card, while
+    // being far below anything a script wants. This is a rate limit, not a quota:
+    // a genuine family ordering several dishes places ONE order, so the count here is
+    // orders, not items.
+    PathLimits = new[]
+    {
+        new PathLimit { PathPrefix = "/api/orders", MaxRequests = 10, Window = TimeSpan.FromMinutes(1) },
+    }
 });
 
 // Webhook security middleware (Phase 4) - must be before authentication/authorization

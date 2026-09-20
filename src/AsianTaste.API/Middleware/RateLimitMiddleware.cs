@@ -35,13 +35,21 @@ public class RateLimitMiddleware
             return;
         }
 
+        // A stricter limit for a specific prefix wins over the global one. The counter
+        // key includes the prefix so the two budgets cannot consume each other: browsing
+        // the menu must not use up the allowance for placing orders, and vice versa.
+        var pathLimit = FindPathLimit(path);
+        var maxRequests = pathLimit?.MaxRequests ?? _options.MaxRequests;
+        var window = pathLimit?.Window ?? _options.Window;
+        var bucket = pathLimit is null ? identifier : $"{identifier}|{pathLimit.PathPrefix}";
+
         var counter = _counters.AddOrUpdate(
-            identifier,
+            bucket,
             _ => new RateLimitCounter { Count = 1, WindowStart = DateTime.UtcNow },
             (_, existing) =>
             {
                 // Reset if window expired
-                if (existing.WindowStart + _options.Window < DateTime.UtcNow)
+                if (existing.WindowStart + window < DateTime.UtcNow)
                 {
                     return new RateLimitCounter { Count = 1, WindowStart = DateTime.UtcNow };
                 }
@@ -50,15 +58,23 @@ public class RateLimitMiddleware
             }
         );
 
-        if (counter.Count > _options.MaxRequests)
+        if (counter.Count > maxRequests)
         {
-            _logger.LogWarning("Rate limit exceeded for {Identifier} on {Path}", identifier, path);
+            var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(window.TotalSeconds));
+            _logger.LogWarning(
+                "Rate limit exceeded for {Identifier} on {Path} ({Count} > {Max} per {Window})",
+                identifier, path, counter.Count, maxRequests, window);
+
             context.Response.StatusCode = 429; // Too Many Requests
-            context.Response.Headers.Append("Retry-After", "60");
+            context.Response.Headers.Append("Retry-After", retryAfterSeconds.ToString());
+
+            // A generic message: telling a caller exactly which limit they hit and what it
+            // is helps them tune an attack, and the legitimate caller (a person who
+            // double-tapped Pay) only needs to know to wait.
             await context.Response.WriteAsJsonAsync(new
             {
-                error = "Rate limit exceeded",
-                retryAfter = 60
+                error = "Too many requests. Please wait a moment and try again.",
+                retryAfter = retryAfterSeconds
             });
             return;
         }
@@ -72,11 +88,56 @@ public class RateLimitMiddleware
         return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 
+    /// <summary>
+    /// The per-path limit that applies, if a stricter one is configured.
+    /// </summary>
+    /// <remarks>
+    /// A single global limit cannot express the difference between reading the menu and
+    /// creating an order. Menu reads are idempotent and cheap, so a generous limit is
+    /// right for them; order creation writes a row, calls Stripe and queues an email, so
+    /// a script can do real damage there long before it trips a 100-per-minute ceiling.
+    ///
+    /// The longest matching prefix wins, so a more specific rule always beats a broader
+    /// one regardless of the order they were declared in — otherwise the behaviour would
+    /// depend on array order, which is the kind of thing that silently changes when
+    /// someone adds a prefix to the middle of the list.
+    /// </remarks>
+    private PathLimit? FindPathLimit(string path)
+    {
+        PathLimit? best = null;
+        foreach (var limit in _options.PathLimits)
+        {
+            if (string.IsNullOrEmpty(limit.PathPrefix)) continue;
+            if (!path.StartsWith(limit.PathPrefix, StringComparison.OrdinalIgnoreCase)) continue;
+
+            if (best is null || limit.PathPrefix.Length > best.PathPrefix.Length)
+            {
+                best = limit;
+            }
+        }
+        return best;
+    }
+
     private class RateLimitCounter
     {
         public int Count { get; set; }
         public DateTime WindowStart { get; set; }
     }
+}
+
+/// <summary>
+/// A stricter limit for a specific path prefix.
+/// </summary>
+public class PathLimit
+{
+    /// <summary>Path prefix this limit applies to, e.g. <c>/api/orders</c>.</summary>
+    public string PathPrefix { get; set; } = "";
+
+    /// <summary>Maximum requests allowed per window for this prefix.</summary>
+    public int MaxRequests { get; set; } = 100;
+
+    /// <summary>Window length; falls back to the global window when unset.</summary>
+    public TimeSpan? Window { get; set; }
 }
 
 /// <summary>
@@ -87,4 +148,10 @@ public class RateLimitOptions
     public int MaxRequests { get; set; } = 100;
     public TimeSpan Window { get; set; } = TimeSpan.FromMinutes(1);
     public string[] ExemptPaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Stricter limits for specific path prefixes. A prefix with no entry uses the
+    /// global <see cref="MaxRequests"/>.
+    /// </summary>
+    public PathLimit[] PathLimits { get; set; } = Array.Empty<PathLimit>();
 }
