@@ -418,8 +418,20 @@ public class StripeWebhookService : IWebhookService
             _logger.LogInformation("Refund processed for charge: {ChargeId}, amount: {Amount}",
                 charge.Id, charge.AmountRefunded);
 
-            // Note: Refund status update would go here when payment status tracking is implemented
-            // For now, the order status remains unchanged - refunds are handled via Stripe dashboard
+            // Record the refund against the order.
+            //
+            // This is the AUTHORITATIVE path: a refund made in the Stripe dashboard — which
+            // is how refunds actually happen today, since the API endpoint has no UI calling
+            // it — arrives here and nowhere else. The note that used to sit here said the
+            // order status would be updated "when payment status tracking is implemented";
+            // the tracking existed all along (`orders.payment_status` has had a `Refunded`
+            // value since migration 05), nothing was writing to it. So a refunded order kept
+            // reading as paid, and the day's takings stayed wrong by the refunded amount.
+            //
+            // Best-effort by design: the refund has already happened, so a bookkeeping
+            // failure must not make Stripe retry the event forever. It logs, and returns
+            // success, because the event itself was handled correctly.
+            await TryMarkOrderRefundedAsync(charge, cancellationToken);
 
             return new WebhookProcessingResult { Success = true };
         }
@@ -439,6 +451,70 @@ public class StripeWebhookService : IWebhookService
     /// Queues the order confirmation email for an order, unless it has already
     /// been sent. Stripe retries webhooks, so this keeps delivery idempotent.
     /// </summary>
+    /// <summary>
+    /// Marks the order behind a refunded charge as Refunded or PartiallyRefunded.
+    /// </summary>
+    /// <remarks>
+    /// Resolves the order through the charge's PaymentIntent, because that is the linkage the
+    /// checkout actually writes. The `external_payment_id` column exists but nothing populates
+    /// it, so a lookup by that would silently match nothing and the order would keep reading as
+    /// paid — the exact bug this method exists to close.
+    ///
+    /// Never throws. The refund has already happened at Stripe, so a bookkeeping failure must
+    /// not be reported as a webhook failure: Stripe retries non-2xx responses, and it would
+    /// retry forever over something a retry cannot fix while paging whoever is on call. It logs
+    /// instead, which is what an operator can actually act on.
+    /// </remarks>
+    private async Task TryMarkOrderRefundedAsync(Stripe.Charge charge, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var paymentIntentId = charge.PaymentIntentId;
+            if (string.IsNullOrWhiteSpace(paymentIntentId))
+            {
+                _logger.LogWarning(
+                    "Refunded charge {ChargeId} carries no PaymentIntent id, so the order cannot be located",
+                    charge.Id);
+                return;
+            }
+
+            var order = await _orderRepository.GetOrderByPaymentIntentIdAsync(paymentIntentId, cancellationToken);
+            if (order is null)
+            {
+                _logger.LogWarning(
+                    "Refund recorded for charge {ChargeId} (payment intent {PaymentIntentId}) but no order carries " +
+                    "that payment intent; the order will still read as paid",
+                    charge.Id, paymentIntentId);
+                return;
+            }
+
+            // Compare the refunded total against what was actually captured, not the order
+            // total. A cart can be priced differently from what Stripe captured, and
+            // `paid_amount` is the money that really moved.
+            var paid = order.PaidAmount ?? order.Total;
+            var refunded = (decimal)charge.AmountRefunded / 100m;
+
+            order.PaymentStatus = refunded >= paid
+                ? Models.Enums.PaymentStatus.Refunded
+                : Models.Enums.PaymentStatus.PartiallyRefunded;
+            order.UpdatedAt = DateTime.UtcNow;
+
+            await _orderRepository.UpdateOrderAsync(order, cancellationToken);
+
+            _logger.LogInformation(
+                "Order {OrderNumber} marked {PaymentStatus} after a refund of {Refunded} (paid {Paid})",
+                order.OrderNumber, order.PaymentStatus, refunded, paid);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Could not record the refund for charge {ChargeId} against its order. " +
+                "Stripe has the refund; the local order still reads as paid.",
+                charge.Id);
+        }
+    }
+
     private async Task QueueConfirmationEmailIfNotSentAsync(int orderId, CancellationToken cancellationToken)
     {
         try

@@ -280,14 +280,215 @@ public class StripeWebhookServiceTests
         Assert.Null(repo.LastStatus);
     }
 
+    // ── charge.refunded → the order must stop reading as paid ────────────────
+    //
+    // This is the authoritative refund path: a refund made in the Stripe dashboard
+    // arrives here and nowhere else. Before these tests, the handler logged the
+    // refund and changed nothing, so a refunded order kept showing as paid and the
+    // day's takings stayed overstated by the refunded amount.
+
+    /// <summary>
+    /// Builds a charge.refunded event. Refunds carry a Charge (with a PaymentIntent id),
+    /// not a PaymentIntent, so it cannot use <see cref="BuildStripeEvent"/>.
+    /// </summary>
+    private static Stripe.Event BuildRefundedChargeEvent(
+        string paymentIntentId = "pi_test_1",
+        long amountRefundedCents = 2500,
+        string? chargeId = "ch_test_1")
+    {
+        var charge = new Stripe.Charge
+        {
+            Id = chargeId!,
+            PaymentIntentId = paymentIntentId,
+            AmountRefunded = amountRefundedCents,
+        };
+
+        return new Stripe.Event
+        {
+            Id = "evt_refund_1",
+            Type = "charge.refunded",
+            Data = new Stripe.EventData { Object = charge },
+        };
+    }
+
+    private static Order OrderWithPayment(string paymentIntentId, decimal total, decimal? paid)
+    {
+        return new Order
+        {
+            Id = 1,
+            OrderNumber = "AT-20260312-0001",
+            Total = total,
+            PaidAmount = paid,
+            PaymentIntentId = paymentIntentId,
+            PaymentStatus = PaymentStatus.Succeeded,
+        };
+    }
+
+    [Fact]
+    public async Task ChargeRefunded_Marks_The_Order_Fully_Refunded()
+    {
+        var repo = new StubOrderRepository
+        {
+            OrderByPaymentIntent = OrderWithPayment("pi_test_1", total: 25.00m, paid: 25.00m),
+        };
+        var service = CreateService(repo);
+
+        var result = await service.DispatchEventAsync(BuildRefundedChargeEvent(amountRefundedCents: 2500));
+
+        Assert.True(result.Success);
+        Assert.NotNull(repo.UpdatedOrder);
+        Assert.Equal(PaymentStatus.Refunded, repo.UpdatedOrder!.PaymentStatus);
+    }
+
+    [Fact]
+    public async Task ChargeRefunded_Marks_A_Partial_Refund_As_Partial()
+    {
+        // Refunding less than was paid must NOT read as a full refund, or the day's
+        // numbers swing too far the other way.
+        var repo = new StubOrderRepository
+        {
+            OrderByPaymentIntent = OrderWithPayment("pi_test_1", total: 25.00m, paid: 25.00m),
+        };
+        var service = CreateService(repo);
+
+        var result = await service.DispatchEventAsync(BuildRefundedChargeEvent(amountRefundedCents: 1000));
+
+        Assert.True(result.Success);
+        Assert.Equal(PaymentStatus.PartiallyRefunded, repo.UpdatedOrder!.PaymentStatus);
+    }
+
+    [Fact]
+    public async Task ChargeRefunded_Looks_The_Order_Up_By_PaymentIntent()
+    {
+        // The linkage that actually exists. `external_payment_id` is never written, so
+        // resolving through it would match nothing and the refund would be lost silently.
+        var repo = new StubOrderRepository
+        {
+            OrderByPaymentIntent = OrderWithPayment("pi_lookup_me", total: 10.00m, paid: 10.00m),
+        };
+        var service = CreateService(repo);
+
+        await service.DispatchEventAsync(BuildRefundedChargeEvent(paymentIntentId: "pi_lookup_me"));
+
+        Assert.Equal("pi_lookup_me", repo.LastPaymentIntentLookup);
+    }
+
+    [Fact]
+    public async Task ChargeRefunded_Falls_Back_To_The_Order_Total_When_PaidAmount_Is_Missing()
+    {
+        // Orders captured before paid_amount was populated must still be judged: the
+        // order total is the best available evidence of what was captured.
+        var repo = new StubOrderRepository
+        {
+            OrderByPaymentIntent = OrderWithPayment("pi_test_1", total: 25.00m, paid: null),
+        };
+        var service = CreateService(repo);
+
+        await service.DispatchEventAsync(BuildRefundedChargeEvent(amountRefundedCents: 2500));
+
+        Assert.Equal(PaymentStatus.Refunded, repo.UpdatedOrder!.PaymentStatus);
+    }
+
+    [Fact]
+    public async Task ChargeRefunded_With_No_Matching_Order_Still_Acknowledges_The_Event()
+    {
+        // A refund for an order this app does not know about must not make Stripe retry
+        // forever. The event was handled; there was simply nothing local to update.
+        var repo = new StubOrderRepository { OrderByPaymentIntent = null };
+        var service = CreateService(repo);
+
+        var result = await service.DispatchEventAsync(BuildRefundedChargeEvent());
+
+        Assert.True(result.Success);
+        Assert.Null(repo.UpdatedOrder);
+    }
+
+    [Fact]
+    public async Task ChargeRefunded_With_No_PaymentIntent_Id_Still_Acknowledges_The_Event()
+    {
+        // A charge with no PaymentIntent cannot be traced to an order. That must be
+        // survivable, not an exception that pages someone.
+        var repo = new StubOrderRepository();
+        var service = CreateService(repo);
+
+        var result = await service.DispatchEventAsync(
+            BuildRefundedChargeEvent(paymentIntentId: string.Empty));
+
+        Assert.True(result.Success);
+        Assert.Null(repo.UpdatedOrder);
+    }
+
+    [Fact]
+    public async Task ChargeRefunded_Survives_A_Repository_Failure()
+    {
+        // The money has already moved. A bookkeeping failure must not surface as a
+        // webhook failure, because Stripe would retry something a retry cannot fix.
+        var service = CreateService(new ThrowingOrderRepository());
+
+        var result = await service.DispatchEventAsync(BuildRefundedChargeEvent());
+
+        Assert.True(result.Success);
+    }
+
+    /// <summary>
+    /// A repository whose refund lookup fails, to prove a bookkeeping error cannot turn a
+    /// delivered webhook into a Stripe retry loop.
+    /// </summary>
+    private sealed class ThrowingOrderRepository : IOrderRepository
+    {
+        public Task<Order?> GetOrderByPaymentIntentIdAsync(string paymentIntentId, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("database unavailable");
+
+        public Task<Order?> GetOrderByIdAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task UpdateOrderAsync(Order order, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task UpdateOrderStatusAsync(int orderId, OrderStatus status, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<OrderItem>> GetOrderItemsAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task MarkEmailConfirmationSentAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<Order> CreateOrderAsync(Models.DTOs.CreateCheckoutOrderDto request, string orderNumber, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<Order?> GetOrderByNumberAsync(string orderNumber, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task UpdateOrderLightspeedInfoAsync(int orderId, string thirdPartyReference, DateTime sentAt, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<Order>> GetOrdersByCustomerEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<Order>> GetPendingSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<Order>> GetFailedSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task UpdateOrderSyncInfoAsync(int orderId, string? lightspeedOrderId, SyncStatus status, DateTime? syncedAt, string? errorMessage, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task MarkOrderSyncPendingAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<Models.DTOs.AdminOrderDetailDto?> GetAdminOrderDetailAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<Models.DTOs.DashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<Models.DTOs.DailyStatsDto> GetDailyStatsAsync(DateTime date, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<Order?> GetOrderByExternalPaymentIdAsync(string externalPaymentId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<Order?> GetOrderByLightspeedIdAsync(string lightspeedOrderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task LinkOrderToCustomerAsync(string orderNumber, int customerId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    }
+
     private sealed class StubOrderRepository : IOrderRepository
     {
         public Order? Order { get; set; }
         public int? LastStatusOrderId { get; private set; }
         public OrderStatus? LastStatus { get; private set; }
 
+        /// <summary>The order returned by a PaymentIntent lookup — set to exercise refunds.</summary>
+        public Order? OrderByPaymentIntent { get; set; }
+
+        /// <summary>The order written by the most recent <see cref="UpdateOrderAsync"/>.</summary>
+        public Order? UpdatedOrder { get; private set; }
+
+        public string? LastPaymentIntentLookup { get; private set; }
+
         public Task<Order?> GetOrderByIdAsync(int orderId, CancellationToken cancellationToken = default) =>
             Task.FromResult(Order);
+
+        public Task<Order?> GetOrderByPaymentIntentIdAsync(string paymentIntentId, CancellationToken cancellationToken = default)
+        {
+            LastPaymentIntentLookup = paymentIntentId;
+            return Task.FromResult(OrderByPaymentIntent);
+        }
+
+        public Task UpdateOrderAsync(Order order, CancellationToken cancellationToken = default)
+        {
+            UpdatedOrder = order;
+            return Task.CompletedTask;
+        }
 
         public Task UpdateOrderStatusAsync(int orderId, OrderStatus status, CancellationToken cancellationToken = default)
         {
@@ -311,13 +512,12 @@ public class StripeWebhookServiceTests
         public Task<List<Order>> GetFailedSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task UpdateOrderSyncInfoAsync(int orderId, string? lightspeedOrderId, SyncStatus status, DateTime? syncedAt, string? errorMessage, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task MarkOrderSyncPendingAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Models.DTOs.AdminOrderDetailDto?> GetAdminOrderDetailAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Models.DTOs.DashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Models.DTOs.DailyStatsDto> GetDailyStatsAsync(DateTime date, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Order?> GetOrderByExternalPaymentIdAsync(string externalPaymentId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Order?> GetOrderByLightspeedIdAsync(string lightspeedOrderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task UpdateOrderAsync(Order order, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task LinkOrderToCustomerAsync(string orderNumber, int customerId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 }

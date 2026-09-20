@@ -35,20 +35,38 @@ function SearchIcon() {
 /**
  * The order list.
  *
- * Search and filters run over the fetched page rather than round-tripping per
- * keystroke. The API supports status and date filters but not lookup by order
- * number (docs/TODO.md §9 item 5), so a search that only hit the server would
- * fail on the one thing staff actually search for: an order number a customer
- * just read out over the phone.
+ * Two search paths, deliberately:
+ *
+ *   1. **The order number hits the server.** A customer on the phone reads out a
+ *      number; the kitchen needs THAT order, which may be older than the latest
+ *      page. A client-side filter can only ever search what has been fetched, so
+ *      at any real volume it silently fails at the one lookup staff actually
+ *      perform. `orderNumber` is now a real API filter (docs/TODO.md §9 item 5).
+ *   2. **Name and phone stay client-side**, over the current page. They are
+ *      partial, fuzzy, and typed while someone is still talking — round-tripping
+ *      every keystroke for them would trade a useful latency for nothing.
+ *
+ * When a number is typed, both run: the server narrows, then the local filter
+ * matches the other fields against what came back. The two are additive, so
+ * neither can hide a row the other would have found.
  */
 export function OrdersPage() {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [service, setService] = useState<ServiceFilter>("all")
 
+  // Digits are what an order number is made of, so a query containing any is
+  // treated as a potential number lookup. A name or a phone also contains digits
+  // (a phone is all digits), so this is deliberately a *superset* trigger: the
+  // server match is a substring, and the local filter still runs over the result.
+  const numberQuery = useMemo(() => {
+    const q = query.trim()
+    return /\d/.test(q) ? q : ""
+  }, [query])
+
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["orders", "list"],
-    queryFn: () => ordersApi.getOrders({ limit: 100 }),
+    queryKey: ["orders", "list", numberQuery],
+    queryFn: () => ordersApi.getOrders({ limit: 100, orderNumber: numberQuery || undefined }),
     refetchInterval: 30_000,
   })
 

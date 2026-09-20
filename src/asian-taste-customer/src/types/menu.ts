@@ -236,7 +236,6 @@ export interface CreateCheckoutOrderRequest {
   paymentMethod: PaymentMethod;
   paymentToken?: string;
   paymentIntentId?: string;
-  savePaymentMethod: boolean;
   createAccount: boolean;
   password?: string;
 }

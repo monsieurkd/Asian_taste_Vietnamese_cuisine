@@ -34,6 +34,11 @@ public class AdminOrdersController : ControllerBase
     /// <param name="status">Optional status filter.</param>
     /// <param name="fromDate">Optional start date filter.</param>
     /// <param name="toDate">Optional end date filter.</param>
+    /// <param name="orderNumber">
+    /// Optional partial order-number search. A substring match, so staff can type the
+    /// short form they read off a docket ("42") as well as the full number. Contains
+    /// rather than starts-with, because the date prefix is the part they never read.
+    /// </param>
     /// <param name="limit">Maximum number of orders to return (default: 50).</param>
     /// <param name="offset">Number of orders to skip (default: 0).</param>
     /// <response code="200">Returns list of orders.</response>
@@ -45,6 +50,7 @@ public class AdminOrdersController : ControllerBase
         [FromQuery] string? status,
         [FromQuery] DateTime? fromDate,
         [FromQuery] DateTime? toDate,
+        [FromQuery] string? orderNumber,
         [FromQuery] int limit = 50,
         [FromQuery] int offset = 0)
     {
@@ -56,7 +62,7 @@ public class AdminOrdersController : ControllerBase
                 statusEnum = parsedStatus;
             }
 
-            var orders = await _orderRepository.GetAllOrdersAsync(statusEnum, fromDate, toDate, limit, offset);
+            var orders = await _orderRepository.GetAllOrdersAsync(statusEnum, fromDate, toDate, limit, offset, orderNumber);
             return Ok(orders);
         }
         catch (Exception ex)

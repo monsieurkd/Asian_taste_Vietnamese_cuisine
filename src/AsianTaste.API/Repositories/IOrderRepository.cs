@@ -76,7 +76,7 @@ public interface IOrderRepository
     /// <summary>
     /// Gets all orders with optional filtering.
     /// </summary>
-    Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, CancellationToken cancellationToken = default);
+    Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets order details with items for admin view.
@@ -104,6 +104,18 @@ public interface IOrderRepository
     /// Gets an order by its Lightspeed order ID.
     /// </summary>
     Task<Order?> GetOrderByLightspeedIdAsync(string lightspeedOrderId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets an order by the Stripe PaymentIntent it was paid with.
+    /// </summary>
+    /// <remarks>
+    /// This is the linkage that actually exists for card payments: the checkout stores the
+    /// PaymentIntent id on the order, and Stripe's webhook events carry the same id. Note
+    /// that <see cref="GetOrderByExternalPaymentIdAsync"/> is a different column
+    /// (<c>external_payment_id</c>) which nothing currently writes, so lookups by it find
+    /// nothing — use this one for anything driven by a Stripe event.
+    /// </remarks>
+    Task<Order?> GetOrderByPaymentIntentIdAsync(string paymentIntentId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Updates an order entity.

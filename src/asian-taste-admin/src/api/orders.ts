@@ -13,6 +13,8 @@ export const ordersApi = {
     status?: string
     fromDate?: string
     toDate?: string
+    /** Partial order-number match — the docket's short form or the full number. */
+    orderNumber?: string
     limit?: number
     offset?: number
   }): Promise<Order[]> {

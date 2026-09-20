@@ -598,7 +598,22 @@ public class OrderRepository : IOrderRepository
 
     // Admin methods
 
-    public async Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Escapes the LIKE/ILIKE wildcards in a user-supplied search term.
+    /// </summary>
+    /// <remarks>
+    /// Without this, searching for <c>50%</c> becomes the pattern <c>%50%%</c>, which matches
+    /// every order whose number merely starts with "50" — and a term of just <c>%</c> would
+    /// match the entire table. The backslash is escaped first so it cannot double-escape the
+    /// characters added after it. Callers must pair this with <c>ESCAPE '\'</c> in the SQL.
+    ///
+    /// This is not the injection defence — parameters are. It is there so a wildcard in a
+    /// search box means a literal character, which is what the person typing it expects.
+    /// </remarks>
+    internal static string EscapeLikePattern(string term) =>
+        term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+
+    public async Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();
         connection.Open();
@@ -622,6 +637,25 @@ public class OrderRepository : IOrderRepository
         {
             conditions.Add("created_at <= @ToDate");
             parameters.Add("ToDate", toDate.Value.AddDays(1).AddTicks(-1));
+        }
+
+        // Order-number lookup.
+        //
+        // Two forms are supported because staff type it both ways: the full number
+        // ("AT-20260312-0042") and the short form they read off the docket
+        // ("0042", or just "42"). A plain equality check would match neither
+        // reliably — staff searching "42" expect order 42, not a prefix accident.
+        //
+        // ILIKE with a parameter is used rather than any string interpolation: the
+        // term arrives straight from a query string, so building the pattern into
+        // the SQL would be an injection point. The wildcards are added to the
+        // *parameter value* instead, which is the whole point of parameterisation.
+        //
+        // `%` and `_` are escaped so a search for "50%" cannot become a wildcard.
+        if (!string.IsNullOrWhiteSpace(orderNumber))
+        {
+            conditions.Add(@"order_number ILIKE @OrderNumberPattern ESCAPE '\'");
+            parameters.Add("OrderNumberPattern", $"%{EscapeLikePattern(orderNumber.Trim())}%");
         }
 
         var whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
@@ -976,6 +1010,46 @@ public class OrderRepository : IOrderRepository
 
         return await connection.QueryFirstOrDefaultAsync<Order>(
             new CommandDefinition(sql, new { ExternalPaymentId = externalPaymentId }, cancellationToken: cancellationToken));
+    }
+
+    public async Task<Order?> GetOrderByPaymentIntentIdAsync(string paymentIntentId, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        // Same explicit aliases as every other order query in this file. Without them Dapper
+        // maps by exact name, so `order_number` would not land on `OrderNumber` and the caller
+        // would receive an order with a blank number and no customer — the bug that
+        // OrderQueryColumnMappingTests exists to catch.
+        const string sql = @"
+            SELECT id,
+                   order_number as OrderNumber,
+                   customer_id as CustomerId,
+                   customer_name as CustomerName,
+                   customer_phone as CustomerPhone,
+                   customer_email as CustomerEmail,
+                   order_type::text as OrderType,
+                   requested_time as RequestedTime,
+                   status::text as Status,
+                   payment_status::text as PaymentStatus,
+                   payment_method::text as PaymentMethod,
+                   payment_intent_id as PaymentIntentId,
+                   external_payment_id as ExternalPaymentId,
+                   external_transaction_id as ExternalTransactionId,
+                   paid_amount as PaidAmount,
+                   paid_at as PaidAt,
+                   payment_failure_reason as PaymentFailureReason,
+                   subtotal as Subtotal,
+                   tax as Tax,
+                   total as Total,
+                   notes as Notes,
+                   created_at as CreatedAt,
+                   updated_at as UpdatedAt
+            FROM orders
+            WHERE payment_intent_id = @PaymentIntentId";
+
+        return await connection.QueryFirstOrDefaultAsync<Order>(
+            new CommandDefinition(sql, new { PaymentIntentId = paymentIntentId }, cancellationToken: cancellationToken));
     }
 
     public async Task<Order?> GetOrderByLightspeedIdAsync(string lightspeedOrderId, CancellationToken cancellationToken = default)

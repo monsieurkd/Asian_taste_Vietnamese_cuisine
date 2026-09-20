@@ -38,7 +38,14 @@ public class CreateCheckoutOrderDto
     [StringLength(255)]
     public string? PaymentToken { get; set; }
 
-    public bool SavePaymentMethod { get; set; } = false;
+    // There is deliberately no `SavePaymentMethod` here. One used to exist: the
+    // checkout sent it, and nothing ever read it, so ticking "save my card" saved
+    // nothing and said nothing. A flag that silently does nothing is worse than an
+    // absent feature, because the customer believes a card was stored.
+    //
+    // The read side is kept (`customer_payment_methods` + the Account page), so
+    // finishing saved cards needs a Stripe SetupIntent and an off-session charge
+    // path rather than a rebuild. See docs/TODO.md §9.
 
     public bool CreateAccount { get; set; } = false;
 

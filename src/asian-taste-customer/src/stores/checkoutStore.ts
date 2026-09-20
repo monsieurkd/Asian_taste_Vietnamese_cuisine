@@ -23,7 +23,6 @@ export interface PendingOrderData {
   items: PendingOrderItem[];
   orderTotal: number;
   paymentMethod: PaymentMethod;
-  savePaymentMethod: boolean;
   createAccount: boolean;
   password?: string;
 }
@@ -41,7 +40,6 @@ interface CheckoutState {
 
   // Payment
   paymentMethod: PaymentMethod;
-  savePaymentMethod: boolean;
 
   // Account creation
   createAccount: boolean;
@@ -61,7 +59,6 @@ interface CheckoutState {
   setCustomerInfo: (name: string, phone: string, email: string) => void;
   setOrderPreferences: (orderType: OrderType, pickupTime: PickupTime, instructions?: string) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
-  setSavePaymentMethod: (save: boolean) => void;
   setAccountCreation: (create: boolean, password?: string) => void;
   setPendingOrder: (order: PendingOrderData) => void;
   clearPendingOrder: () => void;
@@ -84,7 +81,6 @@ export const useCheckoutStore = create<CheckoutState>()(
       pickupTime: { type: 'ASAP' },
       specialInstructions: null,
       paymentMethod: 'Card',
-      savePaymentMethod: false,
       createAccount: false,
       password: undefined,
       pendingOrder: null,
@@ -103,7 +99,6 @@ export const useCheckoutStore = create<CheckoutState>()(
 
       setPaymentMethod: (method) => set({ paymentMethod: method }),
 
-      setSavePaymentMethod: (save) => set({ savePaymentMethod: save }),
 
       setAccountCreation: (create, password) =>
         set({ createAccount: create, password }),
@@ -133,8 +128,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           pickupTime: { type: 'ASAP' },
           specialInstructions: null,
           paymentMethod: 'Card',
-          savePaymentMethod: false,
-          createAccount: false,
+              createAccount: false,
           password: undefined,
           pendingOrder: null,
           isLoading: false,

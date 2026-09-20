@@ -175,13 +175,14 @@ public class OrderServicePaymentAndPosTests
         public Task<DashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default) => Task.FromResult(new DashboardSummaryDto());
         public Task<DailyStatsDto> GetDailyStatsAsync(DateTime date, CancellationToken cancellationToken = default) => Task.FromResult(new DailyStatsDto());
         public Task<Order?> GetOrderByExternalPaymentIdAsync(string externalPaymentId, CancellationToken cancellationToken = default) => Task.FromResult<Order?>(null);
+        public Task<Order?> GetOrderByPaymentIntentIdAsync(string paymentIntentId, CancellationToken cancellationToken = default) => Task.FromResult<Order?>(null);
         public Task<Order?> GetOrderByLightspeedIdAsync(string lightspeedOrderId, CancellationToken cancellationToken = default) => Task.FromResult<Order?>(null);
         public Task LinkOrderToCustomerAsync(string orderNumber, int customerId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<List<Order>> GetOrdersByCustomerEmailAsync(string email, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
         public Task<List<OrderItem>> GetOrderItemsAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult(new List<OrderItem>());
         public Task<List<Order>> GetPendingSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
         public Task<List<Order>> GetFailedSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
-        public Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
+        public Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
     }
 
     private sealed class StubCustomerRepository : ICustomerRepository

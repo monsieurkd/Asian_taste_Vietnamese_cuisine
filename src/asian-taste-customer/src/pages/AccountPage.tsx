@@ -333,7 +333,7 @@ export function AccountPage() {
                   <StateBlock
                     icon={StateIcons.card}
                     title="No saved cards"
-                    body="Cards are kept by Stripe, never here. Tick “save this card” at checkout to keep one for next time."
+                    body="Saving a card at checkout is not available yet. For now your card is entered fresh each time — Stripe handles it, and the full number never reaches this site."
                   />
                 )}
               </PanelBody>

@@ -247,7 +247,22 @@ public class PaymentsController : ControllerBase
             refundAmount,
             cancellationToken);
 
-        // TODO: Update order with refund status
+        // Record the refund against the order.
+        //
+        // This used to be a `// TODO: Update order with refund status`, so a refunded
+        // order kept reading as paid — the dashboard's numbers and the order's own
+        // payment column disagreed with Stripe, which is the accounting nobody can
+        // reconcile later. The schema already had `payment_status = Refunded` /
+        // `PartiallyRefunded`; nothing was setting it.
+        //
+        // Deliberately best-effort: the money has already moved at this point, so a
+        // failure to record it must NOT turn a successful refund into a 500 the caller
+        // retries. A retry cannot un-refund, and the webhook (`charge.refunded`) is the
+        // authoritative path that will converge the same row.
+        if (result.Success)
+        {
+            await TryRecordRefundAsync(paymentId, result, cancellationToken);
+        }
 
         _logger.LogInformation("Payment refund {RefundId} for payment {PaymentId}, amount: {Amount}, success: {Success}",
             result.RefundId, paymentId, result.Amount, result.Success);
@@ -260,6 +275,58 @@ public class PaymentsController : ControllerBase
             ErrorMessage = result.ErrorMessage,
             Status = result.Status
         });
+    }
+
+    /// <summary>
+    /// Marks the refunded order's payment status, if the order can be found.
+    /// </summary>
+    /// <remarks>
+    /// Never throws: the refund has already succeeded at the gateway, so failing to
+    /// record it here must not surface as an error to the caller. It logs loudly instead,
+    /// and the <c>charge.refunded</c> webhook remains the authoritative convergence path.
+    /// </remarks>
+    private async Task TryRecordRefundAsync(
+        string paymentId,
+        PaymentRefundResult result,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var order = await _orderRepository.GetOrderByExternalPaymentIdAsync(paymentId, cancellationToken);
+            if (order is null)
+            {
+                _logger.LogWarning(
+                    "Refund succeeded for payment {PaymentId} but no order carries that payment id; " +
+                    "the order will not show as refunded",
+                    paymentId);
+                return;
+            }
+
+            // Partial vs full is decided by comparing the refunded total against what was
+            // actually paid, not against the order total: a cart can be priced differently
+            // from what was captured, and `paid_amount` is the money that really moved.
+            var refundedTotal = result.Amount;
+            var paid = order.PaidAmount ?? order.Total;
+
+            order.PaymentStatus = refundedTotal >= paid
+                ? Models.Enums.PaymentStatus.Refunded
+                : Models.Enums.PaymentStatus.PartiallyRefunded;
+            order.UpdatedAt = DateTime.UtcNow;
+
+            await _orderRepository.UpdateOrderAsync(order, cancellationToken);
+
+            _logger.LogInformation(
+                "Order {OrderNumber} marked {PaymentStatus} after refund of {Refunded}",
+                order.OrderNumber, order.PaymentStatus, refundedTotal);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Refund for payment {PaymentId} succeeded but recording it against the order failed. " +
+                "The charge.refunded webhook should converge this.",
+                paymentId);
+        }
     }
 
     /// <summary>

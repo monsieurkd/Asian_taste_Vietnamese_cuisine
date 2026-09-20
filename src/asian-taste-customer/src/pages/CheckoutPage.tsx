@@ -152,7 +152,6 @@ export function CheckoutPage() {
       })),
       orderTotal: chargedTotal,
       paymentMethod: checkout.paymentMethod,
-      savePaymentMethod: checkout.savePaymentMethod,
       createAccount: false,
     };
 

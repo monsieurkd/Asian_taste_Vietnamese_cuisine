@@ -89,7 +89,6 @@ export function ConfirmationPage() {
         paymentMethod: pendingOrder.paymentMethod,
         paymentToken: stripePaymentIntentId || undefined,
         paymentIntentId: stripePaymentIntentId || undefined,
-        savePaymentMethod: pendingOrder.savePaymentMethod,
         createAccount: pendingOrder.createAccount,
         password: pendingOrder.password,
       });
