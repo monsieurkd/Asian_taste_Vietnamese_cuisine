@@ -131,10 +131,16 @@ not style rules. Raise them only with a reason.
 
 Being explicit about the gaps matters as much as the coverage:
 
-- **Frontend behaviour is mostly untested.** Both apps now have a `test` script and a runner
-  (see `src/asian-taste-admin/src/**/*.test.ts` and the customer app), and CI runs `npm test`,
-  but the suites are thin — three test files across both apps. `npm run build` (typecheck) is
-  still the strongest frontend check that exists.
+- **Frontend behaviour is mostly untested.** Both apps have a `test` script and a runner, and
+  CI runs `npm test`. The suites have grown (142 tests across both apps as of 2026-09-20,
+  from three files) but they still cover **pure logic only** — money arithmetic, opening hours,
+  cart rules, status transitions. No component renders under test, there is no DOM environment
+  configured, and no browser runs in the blocking path, so a component that renders wrong still
+  builds and lints green. `npm run build` (typecheck) remains the strongest frontend check.
+  - One concrete lesson from that work: an opening-hours suite passed 19 tests **while mutated
+    to ignore `Australia/Adelaide`**, because the machine running it happened to be on Adelaide
+    time. It now pins `TZ=UTC` per test. Any test whose result depends on the machine's timezone
+    is testing the machine, not the code — that is worth checking for in new frontend tests.
 - **Lint is blocking in CI.** The earlier `continue-on-error` and the debt behind it (item A8)
   were cleared when the UI work landed, so a lint error now fails the build. The CI-integrity
   guardrail rejects `continue-on-error` on any guardrail step; lint is a normal blocking step.
@@ -145,7 +151,20 @@ Being explicit about the gaps matters as much as the coverage:
   first GitHub Actions run is the real test. `--static-only` and the TRX-reading path in
   `check-test-health.sh` are both new and are the parts most worth watching on that run.
 - **No integration tests.** `Repositories/*.cs` (including the 1000-line `OrderRepository`)
-  need a database; no strategy exists yet.
+  need a database; no strategy exists yet. This is now the sharpest gap in the list: several
+  tests added on 2026-09-20 assert that a *query is shaped correctly* (parameterised, escaped,
+  aliased) by reading the repository source, which proves the shape and **not** that Postgres
+  returns the right rows. See `OrderNumberSearchTests` and `OrderQueryColumnMappingTests`.
+  - **Backups are not scheduled.** `scripts/backup-db.sh` writes and verifies a restorable dump
+    (`pg_restore --list` + a required-tables check, staged through a `.partial` name so an
+    interrupted run cannot leave a truncated file that looks usable), and it has been exercised
+    with stand-in tooling — but nothing runs it on a timer, and it has never been run against
+    the live database end to end because no `pg_dump` or running Docker daemon was available.
+    A backup nobody runs is not a backup. Tracked as decision D1 in `docs/TODO.md` §9.
+  - **`scripts/*.sh` have no test runner.** The guardrail scripts are covered by their own
+    negative controls, but `backup-db.sh` is verified only by hand. Adding a shell-test
+    convention (bats, or plain `sh` assertions) is a real change rather than a small one, so it
+    has not been done unilaterally.
 - **Nothing runs the UI loop before a merge.** It is nightly, so a UI regression introduced
   today is reported tomorrow unless someone dispatches the workflow by hand. That is the
   deliberate trade for taking tens of minutes off every PR.

@@ -9,6 +9,11 @@ decision I've made for now and how to change it.
 live. **v1 is card + Apple Pay, pickup only** — Lightspeed is deferred and does
 not interfere. The design set has been rebuilt into both front-ends (§11).
 
+Five items from §9 were closed on 2026-09-20 without needing you (refund
+recording, order-number search, the silently-ignored `SavePaymentMethod`, order
+rate limiting, and a backup script). What that work left open is in §9's
+**"Decisions this work needs from you"** table — four items, none urgent.
+
 **What needs you, in this order:**
 
 | # | Item | Effort | Why it matters |
@@ -19,6 +24,7 @@ not interfere. The design set has been rebuilt into both front-ends (§11).
 | **6** | Decide admin-dashboard exposure | a decision | It is a public URL with a login page |
 | **7** | Nudge the owner about Lightspeed | one message | A week of silence. Draft message in item 7 — nothing is blocked either way |
 | **12** | Try Paseo from your phone | ~5 min | Free; your laptop is the sandbox |
+| **D1–D4** | Four decisions in §9 | a decision each | Backups, the order rate limit, refunds in the UI, and saved cards. All have a working default, so nothing is blocked |
 
 **Settled on 2026-09-16** (was four open questions): phone, hours, delivery and the
 cash option are all answered and applied — §10.
@@ -464,30 +470,65 @@ where a different answer is genuinely reasonable.
 You've said most of this is for later, so it's recorded rather than recommended.
 The order below is by how much it would bite, not by effort.
 
+**Items 2, 3, 5, 6 and 9 were completed on 2026-09-20 without needing you** —
+they were all resolvable from the code. Details below each. Four things from that
+work do need a decision, marked **needs you**.
+
 1. ~~Deploy the admin app.~~ Done — it is live and verified. What remains is the
    exposure decision, in item 6.
-2. **Refunds via the UI.** `POST /api/payments/{paymentId}/refund` works but
-   nothing calls it, so refunds happen in the Stripe dashboard. The endpoint also
-   carries a `// TODO: Update order with refund status`, so a refunded order may
-   not reflect it locally.
-3. **Automated database backups.** Neon's free tier has none. Either upgrade or
-   schedule a `pg_dump`. Worth doing before there are real orders to lose.
+2. ~~Refund recording.~~ **Done.** `POST /api/payments/{paymentId}/refund` works
+   and now marks the order. The `charge.refunded` webhook — the authoritative path,
+   since refunds actually happen in the Stripe dashboard — did the same thing: it
+   logged the refund and changed nothing, so a refunded order kept reading as paid
+   and the day's takings stayed overstated. Both now set `Refunded` or
+   `PartiallyRefunded`.
+   - **Found while fixing it:** `external_payment_id` is never written by any code
+     path, so the pre-existing `GetOrderByExternalPaymentIdAsync` **and the refund
+     endpoint's use of it** could never match an order. Added a lookup by
+     `payment_intent_id`, which is what the checkout actually stores.
+   - **Still missing: refunds via the UI.** The endpoint exists but nothing calls
+     it, so a refund still means the Stripe dashboard. That is now safe (the order
+     updates either way), but a "Refund" button is unbuilt.
+3. ~~Automated database backups.~~ **Partly done.** `scripts/backup-db.sh` takes a
+   verified, restorable dump — it writes through a `.partial` name, checks the
+   archive reads back with `pg_restore --list`, and confirms the four tables that
+   matter are in it. It falls back to the postgres Docker image when `pg_dump` is
+   not installed, and prefers the unpooled Neon URL because `pg_dump` fails against
+   PgBouncer.
+   - **needs you:** nothing runs it on a schedule. See the decision below.
 4. **Menu editing in the admin app.** You've deferred this. Today the menu lives
    in `02_seed_data.sql` and changes need a deploy. The admin API exists; the UI
    doesn't.
-5. **Search orders by number.** The list supports status and date filters and
-   pagination, but not lookup by order number. Fine at current volume.
-6. **`SavePaymentMethod` is accepted and silently ignored.** It's in
-   `CheckoutDto` and sent by the checkout, but nothing reads it. A customer who
-   ticks "save my card" gets no saved card and no message. Either implement it or
-   remove the checkbox — the current state is the worst of the three.
+5. ~~Search orders by number.~~ **Done.** This was worse than described: the old
+   search filtered only the ~100 orders already fetched, so it silently failed at
+   the one lookup staff actually perform — a customer reading out a number on the
+   phone. Now a real server-side filter. Two hazards are pinned by tests: the term
+   is parameterised (an injection would be trivial otherwise, since it comes
+   straight from a query string), and a typed `%` is escaped so it means a literal
+   character rather than matching every order.
+6. ~~`SavePaymentMethod` silently ignored.~~ **Done — removed, not implemented.**
+   The flag went through the store, the pending order, the request body and the DTO,
+   and nothing read it; no code wrote a row to `customer_payment_methods`. Worse,
+   the Account page told customers to "tick save this card at checkout to keep one
+   for next time" — a promise the app could not keep. That copy is gone and the flag
+   is removed end to end, with a test that makes re-adding it without an
+   implementation fail the build.
+   - **needs you:** if you want saved cards, the read side (table, getter, Account
+     panel) was kept deliberately, so it is additive. It needs a Stripe SetupIntent
+     plus a decision about when a stored card may be charged.
 7. **A real domain, when it matters.** You've said people here don't mind, so
    it's parked. `asiantaste.com.au` would be the choice; point DNS at Vercel.
 8. **Cloudflare Pages instead of Vercel**, if the commercial-use question ever
    becomes a problem. Vercel Hobby is non-commercial and a restaurant taking
    orders is commercial use. Parked for now.
-9. **Order-creation rate limiting.** Only the global 100 req/min applies. Fine
-   now.
+9. ~~Order-creation rate limiting.~~ **Done.** Only the global 100 req/min applied,
+   which is right for browsing and useless for the endpoint that writes a row,
+   creates a PaymentIntent and queues an email — a script could create 100 orders
+   before tripping it. Order creation now has its own 10/minute budget, keyed so
+   that browsing cannot spend it and one abusive address cannot lock out everyone
+   else.
+   - **Worth watching:** 10/minute is a judgement call, not a measured figure. It
+     should be reviewed against real traffic once there is any.
 10. **Reports and analysis** — the owner wants this later, for looking at trends
     rather than day-to-day. The old admin Reports page was removed with the UI
     rebuild because it showed mock numbers; a real one needs a reporting endpoint
@@ -498,6 +539,15 @@ The order below is by how much it would bite, not by effort.
 12. **The delivery pipeline** — the UI offers restaurant delivery marked "subject
     to availability". How it is actually fulfilled (own driver, or Uber Eats only)
     is undecided, so nothing completes a delivery order yet.
+
+### Decisions this work needs from you
+
+| # | Decision | Why it needs you | The default I have taken |
+|---|---|---|---|
+| D1 | **Where database backups live, and whether to schedule them** | A backup on the same machine as the thing it protects is not a backup. Options: a Neon paid tier (real point-in-time restore), a scheduled job writing to object storage, or an external drive you run weekly | **None — `scripts/backup-db.sh` is manual only.** Run it by hand until you decide |
+| D2 | **Order-creation rate limit: is 10/minute right?** | It is a business trade-off, not a technical one. Too low blocks a busy service; too high does not deter a script | 10/minute per IP, global 100/minute unchanged |
+| D3 | **Refunds: build the admin button?** | The endpoint now works correctly, so this is purely about whether you want to refund without opening Stripe | Not built. Refunds happen in the Stripe dashboard, and the order now updates either way |
+| D4 | **Saved cards: finish it or leave it removed?** | Needs a Stripe SetupIntent flow and a rule for off-session charges | Removed. The read side is kept so finishing it is additive |
 
 ---
 
