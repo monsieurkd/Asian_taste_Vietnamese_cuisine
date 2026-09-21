@@ -61,6 +61,11 @@ src/asian-taste-admin/.vercel
 ui-shots/
 .neon
 
+# The rendered preview of the schema diagram. docs/schema.svg is the source of
+# truth and renders directly in the README; the PNG is only for local eyeballing
+# (`node scripts/schema-render.mjs`) and is a 500KB binary nobody needs in history.
+docs/schema.png
+
 # Local shell secrets (see .secrets.local.example). The real file holds live
 # credentials and must never be committed.
 .secrets.local

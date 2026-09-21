@@ -1,0 +1,314 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1388 1423" width="1388" height="1423" role="img" aria-label="Database schema for the Asian Taste ordering system">
+<rect width="1388" height="1423" fill="#ffffff"/>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/></marker></defs>
+<g font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+<path d="M 174.0 174 V 194.0 H 174.0 V 214" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 308 328.0 H 344.0 V 290.0 H 380" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 648 290.0 H 684.0 V 366.5 H 720" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 308 555.5 H 344.0 V 546.0 H 380" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 174.0 641 V 700.5 H 174.0 V 760" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 308 902.5 H 344.0 V 845.5 H 380" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 514.0 931 V 845.5 H 854.0 V 760" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 174.0 442 V 601.0 H 514.0 V 760" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 854.0 433 V 596.5 H 854.0 V 760" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 308 555.5 H 344.0 V 1056.5 H 380" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<path d="M 308 902.5 H 581.0 V 250 H 854.0" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#ah)" opacity="0.7"/>
+<rect x="40" y="60" width="268" height="114" rx="7" fill="#eef6ff" stroke="#4a7fb5" stroke-width="1.6"/>
+<path d="M 40 67 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#4a7fb5"/>
+<text x="174.0" y="80" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">categories</text>
+<text x="51" y="103" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="74" y="103" font-size="11.5" fill="#1f2328">id</text>
+<text x="297" y="103" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="74" y="122" font-size="11.5" fill="#1f2328">name</text>
+<text x="297" y="122" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="74" y="141" font-size="11.5" fill="#1f2328">display_order</text>
+<text x="297" y="141" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="74" y="160" font-size="11.5" fill="#1f2328">is_active</text>
+<text x="297" y="160" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<rect x="40" y="60" width="268" height="114" rx="7" fill="none" stroke="#4a7fb5" stroke-width="1.6"/>
+<rect x="40" y="214" width="268" height="228" rx="7" fill="#eef6ff" stroke="#4a7fb5" stroke-width="1.6"/>
+<path d="M 40 221 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#4a7fb5"/>
+<text x="174.0" y="234" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">menu_items</text>
+<text x="51" y="257" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="74" y="257" font-size="11.5" fill="#1f2328">id</text>
+<text x="297" y="257" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="51" y="276" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="74" y="276" font-size="11.5" fill="#1f2328">category_id</text>
+<text x="297" y="276" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="74" y="295" font-size="11.5" fill="#1f2328">name</text>
+<text x="297" y="295" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="74" y="314" font-size="11.5" fill="#1f2328">base_price</text>
+<text x="297" y="314" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">DECIMAL(10,2)</text>
+<text x="74" y="333" font-size="11.5" fill="#1f2328">is_available</text>
+<text x="297" y="333" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<text x="74" y="352" font-size="11.5" fill="#1f2328">is_popular</text>
+<text x="297" y="352" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<text x="74" y="371" font-size="11.5" fill="#1f2328">is_gluten_free</text>
+<text x="297" y="371" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<text x="74" y="390" font-size="11.5" fill="#1f2328">is_vegetarian</text>
+<text x="297" y="390" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<text x="74" y="409" font-size="11.5" fill="#1f2328">is_vegan</text>
+<text x="297" y="409" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<text x="74" y="428" font-size="11.5" fill="#1f2328">spicy_level</text>
+<text x="297" y="428" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<rect x="40" y="214" width="268" height="228" rx="7" fill="none" stroke="#4a7fb5" stroke-width="1.6"/>
+<rect x="380" y="214" width="268" height="152" rx="7" fill="#eef6ff" stroke="#4a7fb5" stroke-width="1.6"/>
+<path d="M 380 221 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#4a7fb5"/>
+<text x="514.0" y="234" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">modifier_groups</text>
+<text x="391" y="257" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="414" y="257" font-size="11.5" fill="#1f2328">id</text>
+<text x="637" y="257" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="391" y="276" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="414" y="276" font-size="11.5" fill="#1f2328">menu_item_id</text>
+<text x="637" y="276" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="414" y="295" font-size="11.5" fill="#1f2328">name</text>
+<text x="637" y="295" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="414" y="314" font-size="11.5" fill="#1f2328">is_required</text>
+<text x="637" y="314" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<text x="414" y="333" font-size="11.5" fill="#1f2328">min_select</text>
+<text x="637" y="333" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="414" y="352" font-size="11.5" fill="#1f2328">max_select</text>
+<text x="637" y="352" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<rect x="380" y="214" width="268" height="152" rx="7" fill="none" stroke="#4a7fb5" stroke-width="1.6"/>
+<rect x="720" y="300" width="268" height="133" rx="7" fill="#eef6ff" stroke="#4a7fb5" stroke-width="1.6"/>
+<path d="M 720 307 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#4a7fb5"/>
+<text x="854.0" y="320" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">modifiers</text>
+<text x="731" y="343" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="754" y="343" font-size="11.5" fill="#1f2328">id</text>
+<text x="977" y="343" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="731" y="362" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="754" y="362" font-size="11.5" fill="#1f2328">modifier_group_id</text>
+<text x="977" y="362" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="754" y="381" font-size="11.5" fill="#1f2328">name</text>
+<text x="977" y="381" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="754" y="400" font-size="11.5" fill="#1f2328">price_adjustment</text>
+<text x="977" y="400" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">DECIMAL(10,2)</text>
+<text x="754" y="419" font-size="11.5" fill="#1f2328">is_available</text>
+<text x="977" y="419" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<rect x="720" y="300" width="268" height="133" rx="7" fill="none" stroke="#4a7fb5" stroke-width="1.6"/>
+<rect x="40" y="470" width="268" height="171" rx="7" fill="#eefaf1" stroke="#2f8f55" stroke-width="1.6"/>
+<path d="M 40 477 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#2f8f55"/>
+<text x="174.0" y="490" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">customers</text>
+<text x="51" y="513" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="74" y="513" font-size="11.5" fill="#1f2328">id</text>
+<text x="297" y="513" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="51" y="532" font-size="11.5" fill="#0a6c3d" font-weight="700">UQ</text>
+<text x="74" y="532" font-size="11.5" fill="#1f2328">customer_number</text>
+<text x="297" y="532" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(20)</text>
+<text x="51" y="551" font-size="11.5" fill="#0a6c3d" font-weight="700">UQ</text>
+<text x="74" y="551" font-size="11.5" fill="#1f2328">email_normalized</text>
+<text x="297" y="551" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="74" y="570" font-size="11.5" fill="#1f2328">phone</text>
+<text x="297" y="570" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(50)</text>
+<text x="74" y="589" font-size="11.5" fill="#1f2328">is_guest</text>
+<text x="297" y="589" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<text x="74" y="608" font-size="11.5" fill="#1f2328">email_verified</text>
+<text x="297" y="608" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<text x="74" y="627" font-size="11.5" fill="#1f2328">last_order_at</text>
+<text x="297" y="627" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TIMESTAMP</text>
+<rect x="40" y="470" width="268" height="171" rx="7" fill="none" stroke="#2f8f55" stroke-width="1.6"/>
+<rect x="380" y="470" width="268" height="152" rx="7" fill="#eefaf1" stroke="#2f8f55" stroke-width="1.6"/>
+<path d="M 380 477 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#2f8f55"/>
+<text x="514.0" y="490" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">customer_payment_methods</text>
+<text x="391" y="513" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="414" y="513" font-size="11.5" fill="#1f2328">id</text>
+<text x="637" y="513" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="391" y="532" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="414" y="532" font-size="11.5" fill="#1f2328">customer_id</text>
+<text x="637" y="532" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="414" y="551" font-size="11.5" fill="#1f2328">payment_method_token</text>
+<text x="637" y="551" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="414" y="570" font-size="11.5" fill="#1f2328">card_last_four</text>
+<text x="637" y="570" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(4)</text>
+<text x="414" y="589" font-size="11.5" fill="#1f2328">card_brand</text>
+<text x="637" y="589" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(50)</text>
+<text x="414" y="608" font-size="11.5" fill="#1f2328">is_default</text>
+<text x="637" y="608" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<rect x="380" y="470" width="268" height="152" rx="7" fill="none" stroke="#2f8f55" stroke-width="1.6"/>
+<rect x="40" y="760" width="268" height="285" rx="7" fill="#fff4e8" stroke="#b5762f" stroke-width="1.6"/>
+<path d="M 40 767 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#b5762f"/>
+<text x="174.0" y="780" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">orders</text>
+<text x="51" y="803" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="74" y="803" font-size="11.5" fill="#1f2328">id</text>
+<text x="297" y="803" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="51" y="822" font-size="11.5" fill="#0a6c3d" font-weight="700">UQ</text>
+<text x="74" y="822" font-size="11.5" fill="#1f2328">order_number</text>
+<text x="297" y="822" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(20)</text>
+<text x="51" y="841" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="74" y="841" font-size="11.5" fill="#1f2328">customer_id</text>
+<text x="297" y="841" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="74" y="860" font-size="11.5" fill="#1f2328">customer_email</text>
+<text x="297" y="860" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="74" y="879" font-size="11.5" fill="#1f2328">order_type</text>
+<text x="297" y="879" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">order_type</text>
+<text x="74" y="898" font-size="11.5" fill="#1f2328">status</text>
+<text x="297" y="898" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">order_status</text>
+<text x="74" y="917" font-size="11.5" fill="#1f2328">subtotal</text>
+<text x="297" y="917" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">DECIMAL(10,2)</text>
+<text x="74" y="936" font-size="11.5" fill="#1f2328">tax</text>
+<text x="297" y="936" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">DECIMAL(10,2)</text>
+<text x="74" y="955" font-size="11.5" fill="#1f2328">total</text>
+<text x="297" y="955" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">DECIMAL(10,2)</text>
+<text x="74" y="974" font-size="11.5" fill="#1f2328">payment_method</text>
+<text x="297" y="974" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">payment_method</text>
+<text x="74" y="993" font-size="11.5" fill="#1f2328">payment_status</text>
+<text x="297" y="993" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">payment_status</text>
+<text x="74" y="1012" font-size="11.5" fill="#1f2328">paid_amount</text>
+<text x="297" y="1012" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">DECIMAL(10,2)</text>
+<text x="74" y="1031" font-size="11.5" fill="#1f2328">payment_intent_id</text>
+<text x="297" y="1031" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<rect x="40" y="760" width="268" height="285" rx="7" fill="none" stroke="#b5762f" stroke-width="1.6"/>
+<rect x="380" y="760" width="268" height="171" rx="7" fill="#fff4e8" stroke="#b5762f" stroke-width="1.6"/>
+<path d="M 380 767 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#b5762f"/>
+<text x="514.0" y="780" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">order_items</text>
+<text x="391" y="803" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="414" y="803" font-size="11.5" fill="#1f2328">id</text>
+<text x="637" y="803" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="391" y="822" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="414" y="822" font-size="11.5" fill="#1f2328">order_id</text>
+<text x="637" y="822" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="391" y="841" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="414" y="841" font-size="11.5" fill="#1f2328">menu_item_id</text>
+<text x="637" y="841" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="414" y="860" font-size="11.5" fill="#1f2328">menu_item_name</text>
+<text x="637" y="860" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="414" y="879" font-size="11.5" fill="#1f2328">quantity</text>
+<text x="637" y="879" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="414" y="898" font-size="11.5" fill="#1f2328">unit_price</text>
+<text x="637" y="898" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">DECIMAL(10,2)</text>
+<text x="414" y="917" font-size="11.5" fill="#1f2328">total_price</text>
+<text x="637" y="917" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">DECIMAL(10,2)</text>
+<rect x="380" y="760" width="268" height="171" rx="7" fill="none" stroke="#b5762f" stroke-width="1.6"/>
+<rect x="720" y="760" width="268" height="133" rx="7" fill="#fff4e8" stroke="#b5762f" stroke-width="1.6"/>
+<path d="M 720 767 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#b5762f"/>
+<text x="854.0" y="780" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">order_item_modifiers</text>
+<text x="731" y="803" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="754" y="803" font-size="11.5" fill="#1f2328">id</text>
+<text x="977" y="803" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="731" y="822" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="754" y="822" font-size="11.5" fill="#1f2328">order_item_id</text>
+<text x="977" y="822" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="731" y="841" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="754" y="841" font-size="11.5" fill="#1f2328">modifier_id</text>
+<text x="977" y="841" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="754" y="860" font-size="11.5" fill="#1f2328">modifier_name</text>
+<text x="977" y="860" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="754" y="879" font-size="11.5" fill="#1f2328">price_adjustment</text>
+<text x="977" y="879" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">DECIMAL(10,2)</text>
+<rect x="720" y="760" width="268" height="133" rx="7" fill="none" stroke="#b5762f" stroke-width="1.6"/>
+<rect x="380" y="990" width="268" height="133" rx="7" fill="#fff4e8" stroke="#b5762f" stroke-width="1.6"/>
+<path d="M 380 997 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#b5762f"/>
+<text x="514.0" y="1010" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">order_attempts</text>
+<text x="391" y="1033" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="414" y="1033" font-size="11.5" fill="#1f2328">id</text>
+<text x="637" y="1033" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="391" y="1052" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="414" y="1052" font-size="11.5" fill="#1f2328">customer_id</text>
+<text x="637" y="1052" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="414" y="1071" font-size="11.5" fill="#1f2328">cart_snapshot</text>
+<text x="637" y="1071" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">JSONB</text>
+<text x="414" y="1090" font-size="11.5" fill="#1f2328">attempt_status</text>
+<text x="637" y="1090" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(50)</text>
+<text x="414" y="1109" font-size="11.5" fill="#1f2328">failure_reason</text>
+<text x="637" y="1109" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TEXT</text>
+<rect x="380" y="990" width="268" height="133" rx="7" fill="none" stroke="#b5762f" stroke-width="1.6"/>
+<rect x="720" y="60" width="268" height="190" rx="7" fill="#f4eefc" stroke="#7a4fb5" stroke-width="1.6"/>
+<path d="M 720 67 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#7a4fb5"/>
+<text x="854.0" y="80" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">webhook_event_log</text>
+<text x="731" y="103" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="754" y="103" font-size="11.5" fill="#1f2328">id</text>
+<text x="977" y="103" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="731" y="122" font-size="11.5" fill="#0a6c3d" font-weight="700">UQ</text>
+<text x="754" y="122" font-size="11.5" fill="#1f2328">event_id</text>
+<text x="977" y="122" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="754" y="141" font-size="11.5" fill="#1f2328">event_type</text>
+<text x="977" y="141" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(100)</text>
+<text x="731" y="160" font-size="11.5" fill="#8a5a00" font-weight="700">FK</text>
+<text x="754" y="160" font-size="11.5" fill="#1f2328">related_order_id</text>
+<text x="977" y="160" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="754" y="179" font-size="11.5" fill="#1f2328">processing_success</text>
+<text x="977" y="179" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<text x="754" y="198" font-size="11.5" fill="#1f2328">processing_attempts</text>
+<text x="977" y="198" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">INT</text>
+<text x="754" y="217" font-size="11.5" fill="#1f2328">received_at</text>
+<text x="977" y="217" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TIMESTAMPTZ</text>
+<text x="754" y="236" font-size="11.5" fill="#1f2328">processed_at</text>
+<text x="977" y="236" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TIMESTAMPTZ</text>
+<rect x="720" y="60" width="268" height="190" rx="7" fill="none" stroke="#7a4fb5" stroke-width="1.6"/>
+<rect x="1060" y="60" width="268" height="152" rx="7" fill="#f4eefc" stroke="#7a4fb5" stroke-width="1.6"/>
+<path d="M 1060 67 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#7a4fb5"/>
+<text x="1194.0" y="80" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">lightspeed_tokens</text>
+<text x="1071" y="103" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="1094" y="103" font-size="11.5" fill="#1f2328">id</text>
+<text x="1317" y="103" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="1094" y="122" font-size="11.5" fill="#1f2328">account_id</text>
+<text x="1317" y="122" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="1094" y="141" font-size="11.5" fill="#1f2328">access_token</text>
+<text x="1317" y="141" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TEXT</text>
+<text x="1094" y="160" font-size="11.5" fill="#1f2328">refresh_token</text>
+<text x="1317" y="160" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TEXT</text>
+<text x="1094" y="179" font-size="11.5" fill="#1f2328">expires_at</text>
+<text x="1317" y="179" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TIMESTAMP</text>
+<text x="1094" y="198" font-size="11.5" fill="#1f2328">is_active</text>
+<text x="1317" y="198" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<rect x="1060" y="60" width="268" height="152" rx="7" fill="none" stroke="#7a4fb5" stroke-width="1.6"/>
+<rect x="720" y="990" width="268" height="133" rx="7" fill="#f2f4f7" stroke="#6b7280" stroke-width="1.6"/>
+<path d="M 720 997 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#6b7280"/>
+<text x="854.0" y="1010" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">admin_users</text>
+<text x="731" y="1033" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="754" y="1033" font-size="11.5" fill="#1f2328">id</text>
+<text x="977" y="1033" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="731" y="1052" font-size="11.5" fill="#0a6c3d" font-weight="700">UQ</text>
+<text x="754" y="1052" font-size="11.5" fill="#1f2328">username</text>
+<text x="977" y="1052" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(100)</text>
+<text x="731" y="1071" font-size="11.5" fill="#0a6c3d" font-weight="700">UQ</text>
+<text x="754" y="1071" font-size="11.5" fill="#1f2328">email</text>
+<text x="977" y="1071" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(255)</text>
+<text x="754" y="1090" font-size="11.5" fill="#1f2328">role</text>
+<text x="977" y="1090" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(50)</text>
+<text x="754" y="1109" font-size="11.5" fill="#1f2328">last_login_at</text>
+<text x="977" y="1109" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TIMESTAMP</text>
+<rect x="720" y="990" width="268" height="133" rx="7" fill="none" stroke="#6b7280" stroke-width="1.6"/>
+<rect x="40" y="1120" width="268" height="114" rx="7" fill="#f2f4f7" stroke="#6b7280" stroke-width="1.6"/>
+<path d="M 40 1127 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#6b7280"/>
+<text x="174.0" y="1140" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">restaurant_settings</text>
+<text x="51" y="1163" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="74" y="1163" font-size="11.5" fill="#1f2328">id</text>
+<text x="297" y="1163" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="51" y="1182" font-size="11.5" fill="#0a6c3d" font-weight="700">UQ</text>
+<text x="74" y="1182" font-size="11.5" fill="#1f2328">key</text>
+<text x="297" y="1182" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(100)</text>
+<text x="74" y="1201" font-size="11.5" fill="#1f2328">value</text>
+<text x="297" y="1201" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TEXT</text>
+<text x="74" y="1220" font-size="11.5" fill="#1f2328">category</text>
+<text x="297" y="1220" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">VARCHAR(50)</text>
+<rect x="40" y="1120" width="268" height="114" rx="7" fill="none" stroke="#6b7280" stroke-width="1.6"/>
+<rect x="380" y="1200" width="268" height="133" rx="7" fill="#f2f4f7" stroke="#6b7280" stroke-width="1.6"/>
+<path d="M 380 1207 a 7 7 0 0 1 7 -7 h 254 a 7 7 0 0 1 7 7 v 23 h -268 z" fill="#6b7280"/>
+<text x="514.0" y="1220" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">operating_hours</text>
+<text x="391" y="1243" font-size="11.5" fill="#1f2328" font-weight="700">PK</text>
+<text x="414" y="1243" font-size="11.5" fill="#1f2328">id</text>
+<text x="637" y="1243" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SERIAL</text>
+<text x="391" y="1262" font-size="11.5" fill="#0a6c3d" font-weight="700">UQ</text>
+<text x="414" y="1262" font-size="11.5" fill="#1f2328">day_of_week</text>
+<text x="637" y="1262" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">SMALLINT</text>
+<text x="414" y="1281" font-size="11.5" fill="#1f2328">open_time</text>
+<text x="637" y="1281" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TIME</text>
+<text x="414" y="1300" font-size="11.5" fill="#1f2328">close_time</text>
+<text x="637" y="1300" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TIME</text>
+<text x="414" y="1319" font-size="11.5" fill="#1f2328">is_closed</text>
+<text x="637" y="1319" font-size="11.5" fill="#6b7280" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">BOOLEAN</text>
+<rect x="380" y="1200" width="268" height="133" rx="7" fill="none" stroke="#6b7280" stroke-width="1.6"/>
+<text x="40" y="1369" font-size="12" font-weight="700" fill="#1f2328">Domain</text>
+<rect x="40" y="1379" width="12" height="12" rx="3" fill="#eef6ff" stroke="#4a7fb5"/>
+<text x="58" y="1389" font-size="11.5" fill="#1f2328">Menu catalogue</text>
+<rect x="171.60000000000002" y="1379" width="12" height="12" rx="3" fill="#fff4e8" stroke="#b5762f"/>
+<text x="189.60000000000002" y="1389" font-size="11.5" fill="#1f2328">Order &amp; payment</text>
+<rect x="309.6" y="1379" width="12" height="12" rx="3" fill="#eefaf1" stroke="#2f8f55"/>
+<text x="327.6" y="1389" font-size="11.5" fill="#1f2328">Customer</text>
+<rect x="402.8" y="1379" width="12" height="12" rx="3" fill="#f4eefc" stroke="#7a4fb5"/>
+<text x="420.8" y="1389" font-size="11.5" fill="#1f2328">POS &amp; webhook</text>
+<rect x="528.0" y="1379" width="12" height="12" rx="3" fill="#f2f4f7" stroke="#6b7280"/>
+<text x="546.0" y="1389" font-size="11.5" fill="#1f2328">Configuration</text>
+<text x="1348" y="1389" font-size="11.5" fill="#6b7280" text-anchor="end">PK primary key · FK foreign key · UQ unique · all FKs are 1:N</text>
+</g></svg>

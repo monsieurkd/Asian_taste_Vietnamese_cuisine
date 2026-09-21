@@ -1,41 +1,190 @@
-# Asian Taste Vietnamese Cuisine — Online Ordering
+# Asian Taste — Restaurant Ordering Data Platform
 
-Online ordering platform for Asian Taste Vietnamese Restaurant
-(329 Henley Beach Rd, Brooklyn Park, Adelaide SA 5032).
+## Overview
 
-- **Customer web app** — browse menu, customise items, checkout (Stripe), order status
-- **Admin dashboard** — live orders, order management, menu management, reports
-- **API** — ASP.NET Core + PostgreSQL, Stripe payments, optional Lightspeed POS sync
+**Asian Taste Vietnamese Cuisine** (329 Henley Beach Rd, Brooklyn Park, Adelaide) takes
+orders online: a customer browses the menu, customises a dish, pays by card or Apple Pay,
+and collects it in-store. Behind that storefront is a small **operational data platform** —
+a normalised OLTP schema, a checkout and payment pipeline, and a POS/webhook integration
+layer that keeps the restaurant's point-of-sale system in step with what was actually
+ordered.
 
-**Start with [`docs/TODO.md`](docs/TODO.md)** — the live list: what's outstanding, the
-decisions taken, and how to reverse each one. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-explains how the parts fit together.
+As a **data/backend engineer**, the work here is building and maintaining pipelines that
+are *correct about money*: every order that reaches the kitchen must correspond to a
+payment that really cleared, and every refund must be reflected in the numbers the owner
+reads at the end of the day. That constraint shapes almost every design decision below —
+idempotent webhook handling, an append-only event log, a queue that retries without ever
+failing an order, and explicit columns for payment state rather than inferring it.
 
-Everything else that describes the project is history, not current state, and lives in
-[`docs/archive/`](docs/archive/README.md) — the superseded PRD and update plan, an
-out-of-date progress tracker, one generated CI report, a dated session log, and the
-owner's answers from 2026-09-16. Review-shaped work is tracked as GitHub
-[issues](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues); `docs/`
-holds reference material only.
+It is a real production system, not an exercise: **card orders are live**, the API runs on
+Fly.io, the database on Neon (Sydney), and the storefront on Vercel.
 
-**Running it:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) explains how the
-whole system fits together — what runs where, how a push reaches production, and
-why the pieces are the way they are. [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
-has the setup commands.
+## Project Goals
 
-**It is live:** [asian-taste-customer.vercel.app](https://asian-taste-customer.vercel.app)
-(customer app) → [asian-taste-api.fly.dev](https://asian-taste-api.fly.dev/health/db) (API).
-Check it with `./scripts/check-deployment-health.sh`.
+- **Model the order lifecycle so payment state is a fact, not an inference.** A paid order,
+  a refunded order and an abandoned attempt are distinguishable from the schema alone.
+- **Make money-affecting ingestion idempotent.** Stripe delivers webhooks more than once;
+  the pipeline must not create a second order or a second confirmation email for one charge.
+- **Never lose an order to a downstream failure.** The POS sync is queued and retried — a
+  failure at the till must not turn a paid order into a user-facing error.
+- **Leave an auditable trail.** Every webhook payload, every failed attempt and every
+  status transition is recorded, so "what happened to order 42" is answerable from data.
+- **Keep the schema honest as it evolves.** Migrations are ordered, idempotent and applied
+  at boot; the diagram below is generated and checked against them.
 
-**What's left:** [`docs/TODO.md`](docs/TODO.md) — the outstanding items, the
-decisions taken (and how to reverse each), and what is known to be missing.
+## System Architecture
 
-**Reviewing the look and structure of this project?** That review is tracked as
-[issue #3](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues/3)
-— scope, access and what is wanted back are in the issue, not in a file here.
-GitHub is the tracker for review work; `docs/` holds reference material only.
+<img src="docs/schema.svg" width="100%" alt="Entity-relationship diagram: 15 tables across the menu, order, customer, POS/webhook and configuration domains">
+
+<sub>Generated from the migrations. Regenerate with `python3 scripts/schema-diagram.py`;
+verify with `python3 scripts/check-schema-diagram.py` (structure) and
+`python3 scripts/check-schema-layout.py` (no overlapping boxes, no clipped types).</sub>
+
+The data flows one way, and each hop is a place a failure can be lost or recorded:
+
+```
+Customer app ──▶ API ──▶ PostgreSQL ──▶ Admin dashboard (kitchen)
+                  │  │
+                  │  └──▶ Stripe ──▶ webhook_event_log ──▶ order status + email queue
+                  │
+                  └──▶ OrderSyncBackgroundService ──▶ Lightspeed POS (queued, retried)
+```
+
+## Data set
+
+Production is a small, fully normalised OLTP set rather than an analytics warehouse. Real
+volumes at the time of writing:
+
+| Entity | Rows | Notes |
+|---|---|---|
+| `menu_items` | 82 | across 14 `categories`; every item has modifier groups |
+| `categories` | 14 | Starters, Pho, Rice Dishes, … |
+| `modifier_groups` / `modifiers` | seeded | the printed menu's options (size, protein, spice) |
+| `orders` | transactional | pickup only in v1 |
+| `order_items` / `order_item_modifiers` | transactional | line-level, with a *snapshot* of name and price |
+| `webhook_event_log` | append-only | one row per Stripe event, with a unique `event_id` |
+
+Two modelling decisions are worth calling out, because both are the kind of thing that is
+painful to retrofit:
+
+**Line items snapshot their own name and price.** `order_items` stores `menu_item_name`,
+`unit_price` and `total_price` rather than only a foreign key to `menu_items`. A menu price
+change must never rewrite the history of an order that was already paid for — the receipt
+has to reflect what the customer was actually charged.
+
+**Modifiers snapshot too.** `order_item_modifiers` keeps `modifier_name` and
+`price_adjustment` alongside `modifier_id`, for the same reason, and because a modifier row
+can be deleted while the order it belonged to must survive.
+
+## Project Workflow
+
+### 1. Schema and migrations
+
+The schema is 13 ordered `.sql` files shipped as **embedded resources** and applied at
+boot. The order is forced — schema → de-dupe → conflict index → seed → payment fields →
+POS tables → indexes → admin user — because later steps depend on earlier ones existing,
+and a reordering silently corrupts databases that already hold data.
+
+Every migration is idempotent (`IF NOT EXISTS`, guarded `DO $$ … $$`), because boot
+re-runs the sequence against a database in an unknown state.
+
+```bash
+# applied automatically by Data/DatabaseInitializationService.cs at API startup
+src/AsianTaste.API/Data/Migrations/*.sql
+```
+
+<sub>Regenerate the diagram after changing a migration: `python3 scripts/schema-diagram.py`</sub>
+
+### 2. Order ingestion
+
+`POST /api/orders` is the write path. It validates the cart, prices it, writes
+`orders` + `order_items` + `order_item_modifiers` in one transaction, then hands off to
+payment. Two properties matter for a data pipeline:
+
+- **Totals are always derived server-side.** Prices are sent by the client, but the server
+  recomputes the subtotal from `menu_items.base_price` and each modifier's own price, summing
+  per line and rejecting any unknown menu item (`Repositories/OrderRepository.cs:176-194`).
+  A tampered request cannot set its own total. Prices are **GST-inclusive** — `tax` is
+  deliberately 0, not added at checkout.
+- **The order number is timezone-derived**, generated against `Australia/Adelaide` rather
+  than UTC, so the number a customer reads out matches the trading day the staff worked.
+
+### 3. Payment + webhook ingestion (the idempotency layer)
+
+Stripe is the system of record for money, and it delivers an event more than once as a
+matter of course. The pipeline handles that with a unique key rather than hope:
+
+```
+charge.succeeded ──▶ webhook_event_log (UNIQUE event_id, INSERT … ON CONFLICT DO NOTHING)
+                          │
+                          ├─ payment_intent.succeeded ──▶ orders.status = Confirmed
+                          ├─ charge.refunded          ──▶ orders.payment_status = Refunded
+                          │                                (or PartiallyRefunded)
+                          └─ ✉  confirmation email queued (guarded by email_confirmation_sent)
+```
+
+- `webhook_event_log` is **append-only** and records the payload, signature, source IP and
+  processing outcome for every delivery. A duplicate delivery is a no-op, not a second
+  order.
+- `orders.payment_status` is an explicit enum (`Pending → Succeeded → Refunded /
+  PartiallyRefunded`), so a refund is a column value rather than something derived from
+  Stripe after the fact. Refunds made in the Stripe dashboard converge through the same
+  webhook.
+- The email queue is drained **outside the request that enqueued it**, so a customer
+  closing the tab cannot cancel their own confirmation email.
+
+### 4. POS sync (queued, never blocking)
+
+`OrderSyncBackgroundService` pushes confirmed orders to Lightspeed. The rule is absolute:
+**the customer has already paid, so a POS failure queues and retries and never fails the
+order.** Failures are recorded with a reason and an attempt count, and surface on
+`/health/pos` as a backlog the staff can act on. This is the pattern for every downstream
+integration here — the order is the durable fact, the sync is best-effort.
+
+### 5. Reporting and verification
+
+The admin dashboard reads aggregates over `orders` (daily totals, status counts). Two habits
+keep those numbers trustworthy:
+
+- **Guardrail scripts** assert the data layer is intact rather than trusting a green build:
+  `check-test-wiring.sh` (every test file can actually run), `check-test-health.sh` (the
+  suite ran, nothing skipped, the count did not shrink below `.test-baseline`),
+  `check-ci-integrity.sh` (the guardrails are still armed).
+- **A deployed health check** proved by query rather than by assertion:
+  `./scripts/check-deployment-health.sh` asserts the API responds, the database reports its
+  menu size, there are no duplicate dishes, and the Development-only `/api/dev/db/*`
+  endpoints 404 in production.
+
+```bash
+./scripts/check-deployment-health.sh   # live stack, including row counts and prod posture
+```
+
+### 6. Backups
+
+Neon's free tier has **no automated backups**, so the only copy of the orders table was the
+running database. `scripts/backup-db.sh` takes a custom-format dump, checks it reads back
+with `pg_restore --list` *before* declaring success, and stages through a `.partial` name so
+an interrupted run cannot leave a truncated file that looks restorable.
+
+```bash
+./scripts/backup-db.sh --out ~/backups --keep 30
+```
+
+<sub>Not scheduled yet — see decision D1 in [`docs/TODO.md`](docs/TODO.md).</sub>
 
 ---
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Database | PostgreSQL (Neon, `ap-southeast-2`), Dapper with hand-written SQL |
+| API | ASP.NET Core (`net10.0`), controllers → services → repositories |
+| Customer app | React 19 + Vite + Zustand |
+| Admin dashboard | React 19 + Vite + React Query |
+| Payments | Stripe (PaymentIntents; Apple Pay/Google Pay via `automatic_payment_methods`) |
+| POS | Lightspeed (optional, queued sync) |
+| Hosting | API on Fly.io (`syd`), DB on Neon, frontends on Vercel |
 
 ## Run the demo
 
@@ -58,262 +207,73 @@ password   nhahangvietnam
 
 > This is the **deployed** password, written down here so a reviewer can get in
 > without asking — which means it now lives in git history: **rotate it after the
-> review** by updating the `admin_users` row, or delete the row and let the next
-> boot re-seed the documented default. (The seed only re-creates an admin when
-> the table has **no** rows, so deleting one admin while others remain is what
-> sticks.) `Admin123!` — the default in
-> `Data/Migrations/03_create_admin_user.sql` — applies to a **fresh local
-> database only**; the deployed one was rotated off it on 2026-09-13.
-
-**A five-minute walkthrough**
-
-Customer app:
-
-1. Open the customer app → **Order Now** (or **Menu**) → pick a category.
-2. Open **Pho – Beef noodle soup (1 choice)**. It has four option groups — Spice
-   level, Allergy, Combo, Extras — which is the customisation path worth
-   inspecting; most dishes have none.
-3. **Add to cart** → **Cart** → **Checkout**. Leave the service on **Pickup**
-   (delivery does not complete a checkout in v1 and the UI says so). Fill in
-   name, mobile and email.
-4. Pay with a test card below → the confirmation screen shows a real order
-   number (`AT-…`) and a status tracker.
-
-Admin dashboard (same order, the kitchen's view):
-
-5. Log in and open **Orders**. The order you just placed is there; in a second
-   tab it arrives by itself over WebSocket — the list is live.
-6. Open the order → move it **Placed → Confirmed → Ready**. The customer's
-   tracker reflects each step.
-
-Tear-down: the order is test data in a live database. Cancel it in the admin, or
-ask for it to be deleted — there is no delete endpoint yet
-([`docs/TODO.md`](docs/TODO.md) §6).
-
-### Payments (test mode)
-
-The Stripe **publishable** key in the deployed customer bundle is a `pk_test_…`
-key, so the whole checkout runs in test mode: real Stripe API, no money moved, a
-test card is required. (Which mode the API is in is printed in its logs — `fly
-logs -a asian-taste-api | grep STRIPE`.)
-
-Test cards — use **any future expiry** and **any 3-digit CVC**:
-
-| Card number | What it does | Why you'd use it |
-|---|---|---|
-| `4242 4242 4242 4242` | Succeeds | The normal demo path |
-| `4000 0025 0000 3155` | Requires 3-D Secure authentication | Exercises the challenge step in the PaymentElement |
-| `4000 0000 0000 0002` | Declined (generic) | Confirms a decline surfaces as a message, not a crash |
-| `4000 0000 0000 9995` | Declined — insufficient funds | Same, with the specific decline reason |
-
-The full list is Stripe's own: <https://docs.stripe.com/testing#cards>.
-
-**Three things this demo cannot show.** Apple Pay is configured in code but not
-active — it needs a domain registered with Stripe, and a `*.vercel.app` host
-cannot be registered ([`docs/TODO.md`](docs/TODO.md) §3). It also cannot be
-tested in Chrome, on Windows, or on localhost; it needs Safari on an Apple device
-with a card in Wallet, so a green headless run proves nothing about it. Delivery
-is offered in the UI but does not complete a checkout — v1 is pickup only. And it
-is test mode, so orders placed here are not real.
-
----
-
-## Tech stack
-
-| Layer | Technology |
-|---|---|
-| API | ASP.NET Core (net10.0), Dapper, Npgsql |
-| Database | PostgreSQL |
-| Customer app | React 19 + TypeScript + Vite + Zustand + Tailwind v4 |
-| Admin app | React 19 + TypeScript + Vite + React Query + Tailwind v4 |
-| Payments | Stripe |
-
----
-
-## Prerequisites
-
-| Tool | Version | Check |
-|---|---|---|
-| .NET SDK | 10.0+ | `dotnet --version` |
-| Node.js | 20+ | `node --version` |
-| PostgreSQL | 14+ | `psql --version` |
-
----
+> review** (see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)).
 
 ## Repository layout
 
 ```
-AsianTaste.sln              Solution (API + tests)
-src/AsianTaste.API/         ASP.NET Core API
-src/asian-taste-customer/   Customer ordering web app   (http://localhost:5173)
-src/asian-taste-admin/      Admin dashboard             (http://localhost:5174)
-tests/AsianTaste.API.Tests/ xUnit tests
-tests/payloads/             Payment/webhook test fixtures
+src/AsianTaste.API            API + all SQL
+  Data/Migrations/*.sql         ordered, idempotent schema migrations (embedded resources)
+  Repositories/                 Dapper data access; snake_case → PascalCase mapping is manual
+  Services/                     business logic, payment gateways, POS sync, webhook handling
+  Controllers/                  thin HTTP layer
+  WebSockets/                   live order push to the kitchen dashboard
+src/asian-taste-customer      customer storefront
+src/asian-taste-admin         kitchen/admin dashboard
+src/shared                    order-status vocabulary shared by both apps
+tests/AsianTaste.API.Tests    xUnit
+scripts/                      guardrails, health checks, backups, schema diagram
+docs/                         ARCHITECTURE, DEPLOYMENT, TODO, GUARDRAILS, schema.svg
 ```
 
----
-
-## Setup
-
-### 1. Database
-
-Create the development database (the API creates tables and seeds data on first run):
+## Running locally
 
 ```bash
-createdb AsianTaste_Dev
-```
-
-### 2. API configuration
-
-Local secrets are **not** committed. Restore them with .NET user-secrets:
-
-```bash
+# 1. API -> http://localhost:5070
 cd src/AsianTaste.API
+ASPNETCORE_ENVIRONMENT=Development dotnet run    # REQUIRED: without it the API reaches a
+                                                  # different database that has no admin
+                                                  # tables and 500s on login
 
-dotnet user-secrets set "Stripe:SecretKey"       "sk_test_..."
-dotnet user-secrets set "Stripe:PublishableKey"  "pk_test_..."
-dotnet user-secrets set "Encryption:Key"         "<base64 32-byte key>"
-```
-
-The connection string lives in `appsettings.Development.json` (gitignored).
-Start from the template: `cp appsettings.Development.json.example appsettings.Development.json`.
-
-`Encryption:Key` must be a base64-encoded 256-bit key. Generate one:
-
-```bash
-openssl rand -base64 32
-```
-
-### 3. Frontends
-
-```bash
-# Customer app
-cd src/asian-taste-customer
-cp .env.development.example .env.development
-npm install
-
-# Admin app
-cd ../asian-taste-admin
-cp .env.example .env.development
-npm install
-```
-
----
-
-## Running
-
-Three terminals (the API must be on **port 5070** — both apps proxy to it):
-
-```bash
-# 1. API            -> http://localhost:5070
-#    ASPNETCORE_ENVIRONMENT=Development is REQUIRED locally. Without it ASP.NET
-#    falls back to appsettings.json and, historically, a second database that
-#    shadowed this one and could not serve the admin app. It is set on Fly for
-#    production; locally it is yours to pass.
-cd src/AsianTaste.API && ASPNETCORE_ENVIRONMENT=Development dotnet run
-
-# 2. Customer app   -> http://localhost:5173
+# 2. Customer app -> http://localhost:5173
 cd src/asian-taste-customer && npm run dev
 
-# 3. Admin app      -> http://localhost:5174
+# 3. Admin app -> http://localhost:5174
 cd src/asian-taste-admin && npm run dev
 ```
 
-**Admin login (seeded):** username `admin` / password `Admin123!` — **local development
-only.** The deployed database's password has been changed away from this default. A new
-environment must change it before being exposed; the value is not recorded in this repo.
-
-> If a port is stuck: `lsof -ti:5070 | xargs kill -9`
-
----
-
-## Development endpoints
-
-Only available when `ASPNETCORE_ENVIRONMENT=Development`:
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/api/dev/db/status` | Is the schema initialised? |
-| POST | `/api/dev/db/init` | Create schema |
-| POST | `/api/dev/db/seed` | Re-seed menu data |
-| POST | `/api/dev/db/reset` | Drop and recreate all tables |
-| GET | `/api/dev/db/recent-orders` | Last 5 orders |
-| GET | `/api/dev/payment/config` | Which payment gateway is active |
-| GET | `/api/dev/lightspeed/config` | Lightspeed configuration status |
-
-API docs (Swagger UI) are served at `/swagger` in development.
-
----
+Both dev servers proxy to the API on `:5070`.
 
 ## Testing
 
 ```bash
-# API unit tests
-dotnet test
-
-# Frontend typecheck + production build
-cd src/asian-taste-customer && npm run build
-cd src/asian-taste-admin    && npm run build
-
-# Lint
-cd src/asian-taste-customer && npm run lint
-cd src/asian-taste-admin    && npm run lint
+dotnet test                              # API suite (xUnit)
+cd src/asian-taste-customer && npm test  # vitest
+cd src/asian-taste-admin    && npm test  # vitest
+npm run build && npm run lint            # typecheck is the strongest frontend check
 ```
 
-Payment mock fixtures live in `tests/payloads/`; `tests/test-payment-mock.sh`
-exercises the mock payment gateway.
-
-### Guardrails (run before calling a change done)
+Guardrails — run these before calling a data-layer change done:
 
 ```bash
-./scripts/check-test-wiring.sh    # every tracked test file can actually run
-./scripts/check-test-health.sh    # tests really ran; none skipped; count >= .test-baseline
-./scripts/check-ci-integrity.sh   # guardrails intact; change is reviewable
+./scripts/check-test-wiring.sh   # can every tracked test file actually run?
+./scripts/check-test-health.sh   # did the suite really run, and mean something?
+./scripts/check-ci-integrity.sh  # are the guardrails still armed?
+python3 scripts/check-schema-diagram.py   # is the ERD still the schema?
 ```
 
-See [`docs/GUARDRAILS.md`](docs/GUARDRAILS.md) for what each one catches and why they
-are tiered by cost.
+See [`docs/GUARDRAILS.md`](docs/GUARDRAILS.md) for what each one catches, and — importantly —
+**what is still not guarded**.
 
-Checks run at three speeds, and each check lives in exactly one tier:
+## Where to go next
 
-| Tier | When | What |
-|---|---|---|
-| Fast | on commit, via `.githooks/pre-commit` | the two static guardrails (~0.7s) |
-| Mid | every push and PR | the API suite once, `check-test-health.sh` judging that run, frontend lint + test + build |
-| Slow | nightly + manual dispatch | `ui-quality.yml`: the screenshot-and-vision-judge loop |
+- **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — how the whole system fits together.
+- **[`docs/TODO.md`](docs/TODO.md)** — outstanding work, decisions taken, and how to reverse
+  each one. Start here for current state.
+- **[`docs/GUARDRAILS.md`](docs/GUARDRAILS.md)** — the checks, and their honest gaps.
+- **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** — setup and release commands.
+- **[`docs/DESIGN/`](docs/DESIGN/)** — the design system behind both front-ends.
 
-Enable the fast tier once per clone (it is `core.hooksPath`, which a repository cannot
-set for you):
-
-```bash
-git config core.hooksPath .githooks
-```
-
-`check-test-health.sh` reads the TRX that CI's test step wrote when `TEST_RESULTS_DIR`
-is set, so the suite is not run twice. Unset, it runs the suite itself — that is the
-command above.
-
-### UI quality loop (frontend equivalent of a test suite)
-
-```bash
-npm install                       # repo root: playwright-core + dotenv
-# with the API (:5070) and a frontend dev server running:
-npm run ui:shots                  # screenshots the key screens -> ui-shots/
-npm run ui:judge                  # a vision LLM scores them against docs/ui-rubric.md
-```
-
-Needs a vision API key in `.env.local` — see [`.env.example`](.env.example) and
-[`docs/ui-qa-loop.md`](docs/ui-qa-loop.md). Fix `[high]` findings against the tokens,
-re-run, repeat.
-
----
-
-## Configuration notes
-
-- **Secrets** never go in committed files. Use `dotnet user-secrets` locally and
-  environment variables in production (`Stripe__SecretKey`, `Encryption__Key`,
-  `Jwt__SecretKey` — note the double underscore).
-- **Time zone:** the restaurant runs on `Australia/Adelaide`.
-- **Prices are GST-inclusive** (Australian convention); GST is not added at checkout.
-- **CORS:** development allows the local frontend origins; production origins must
-  be configured explicitly in `Program.cs`.
+Everything else that describes the project is history, not current state, and lives in
+[`docs/archive/`](docs/archive/README.md). Review-shaped work is tracked as GitHub
+[issues](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues).
