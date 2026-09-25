@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using AsianTaste.API.Models.DTOs;
+using AsianTaste.API.Models.Entities;
 using AsianTaste.API.Models.Enums;
 using AsianTaste.API.Repositories;
 using AsianTaste.API.Services.Payment.Interfaces;
@@ -278,6 +279,33 @@ public class PaymentsController : ControllerBase
     }
 
     /// <summary>
+    /// Finds the order a payment belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Two lookups, tried in order, because there are two columns that can hold this
+    /// id and only one of them is load-bearing:
+    ///
+    ///   - `payment_intent_id` is what the checkout writes, and what every Stripe
+    ///     webhook resolves against. It is the reliable link.
+    ///   - `external_payment_id` is written from the captured charge. It happens to
+    ///     hold the PaymentIntent id for the Stripe flow, so it works — but it is a
+    ///     coincidence of that gateway rather than a guarantee, and a payment recorded
+    ///     without it would silently fail to find its order.
+    ///
+    /// Trying the intent id first means a refund is recorded even when the other column
+    /// is empty. Getting this wrong is quiet and expensive: the refund succeeds at
+    /// Stripe, the order keeps reading as paid, and the day's takings stay overstated —
+    /// which is exactly the bug `docs/TODO.md` §9 records as already fixed once.
+    /// </remarks>
+    private async Task<Order?> FindOrderForPaymentAsync(string paymentId, CancellationToken cancellationToken)
+    {
+        var byIntent = await _orderRepository.GetOrderByPaymentIntentIdAsync(paymentId, cancellationToken);
+        if (byIntent is not null) return byIntent;
+
+        return await _orderRepository.GetOrderByExternalPaymentIdAsync(paymentId, cancellationToken);
+    }
+
+    /// <summary>
     /// Marks the refunded order's payment status, if the order can be found.
     /// </summary>
     /// <remarks>
@@ -292,7 +320,7 @@ public class PaymentsController : ControllerBase
     {
         try
         {
-            var order = await _orderRepository.GetOrderByExternalPaymentIdAsync(paymentId, cancellationToken);
+            var order = await FindOrderForPaymentAsync(paymentId, cancellationToken);
             if (order is null)
             {
                 _logger.LogWarning(

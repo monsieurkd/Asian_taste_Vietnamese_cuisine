@@ -581,6 +581,7 @@ public class OrderRepository : IOrderRepository
                    paid_amount as PaidAmount,
                    paid_at as PaidAt,
                    payment_failure_reason as PaymentFailureReason,
+                   payment_intent_id as PaymentIntentId,
                    subtotal as Subtotal,
                    tax as Tax,
                    total as Total,

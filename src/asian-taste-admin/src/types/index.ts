@@ -107,6 +107,8 @@ export interface OrderItemModifier {
  */
 export interface OrderDetail extends Order {
   paymentFailureReason?: string | null
+  /** The Stripe PaymentIntent id — what a refund is issued against. */
+  paymentIntentId?: string | null
   /** Present on the detail endpoint only; the list omits the breakdown. */
   tax?: number
   paidAmount?: number | null

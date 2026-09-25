@@ -32,6 +32,17 @@ public class AdminOrderDetailDto
     /// <summary>Why a charge failed, when one did — the counter staff's next question.</summary>
     public string? PaymentFailureReason { get; set; }
 
+    /// <summary>
+    /// The Stripe PaymentIntent id, which is what a refund is issued against.
+    /// </summary>
+    /// <remarks>
+    /// Exposed because the console has to be able to issue the refund itself. Anything
+    /// a screen needs to act, it must be able to read — the alternative is asking staff
+    /// to copy an id out of the Stripe dashboard, which is the round trip the refund
+    /// button exists to remove.
+    /// </remarks>
+    public string? PaymentIntentId { get; set; }
+
     public decimal Subtotal { get; set; }
     public decimal Tax { get; set; }
     public decimal Total { get; set; }

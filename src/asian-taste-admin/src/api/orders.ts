@@ -44,4 +44,21 @@ export const ordersApi = {
   async updateOrderStatus(id: number, request: UpdateOrderStatusRequest): Promise<void> {
     await apiClient.put(`/admin/orders/${id}/status`, request)
   },
+
+  /**
+   * Refund a card payment, in full or in part.
+   *
+   * `amount` is in DOLLARS, and the API converts to cents — the same convention the
+   * checkout uses. Getting the units wrong here refunds a hundredth or a hundred times
+   * what was intended, and a refund cannot be undone from this app.
+   */
+  async refundPayment(
+    paymentIntentId: string,
+    amount?: number,
+  ): Promise<{ success: boolean; refundId: string; amount: number; errorMessage?: string }> {
+    const response = await apiClient.post(`/payments/${paymentIntentId}/refund`, {
+      amount: amount === undefined ? undefined : Math.round(amount * 100),
+    })
+    return response.data
+  },
 }

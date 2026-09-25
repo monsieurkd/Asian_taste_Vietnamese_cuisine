@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ordersApi } from "@/api/orders"
@@ -9,6 +10,8 @@ import { apiStatusValue, isClosed as isOrderClosed, STATUS_META, STATUS_ORDER, s
 import { readPayment } from "@/lib/payment"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { showAdminToast } from "@/components/ui/AdminToast"
+import { AdminModal } from "@/components/ui/AdminModal"
+import { refundEligibility } from "@/lib/refund"
 
 function CheckMark() {
   return (
@@ -29,6 +32,8 @@ export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  /** Whether the refund confirmation is open. See the dialog for why it is a step. */
+  const [refunding, setRefunding] = useState(false)
 
   const { data: order, isLoading } = useQuery({
     queryKey: ["order-detail", id],
@@ -46,6 +51,37 @@ export function OrderDetailPage() {
       showAdminToast("Status updated")
     },
     onError: () => showAdminToast("Couldn't update the status — try again"),
+  })
+
+  /**
+   * Refund the card charge.
+   *
+   * Full refund only, from here: a partial refund is a negotiation about what went
+   * wrong, and doing it by typing a number into a kitchen screen invites a decimal
+   * point in the wrong place. Partial refunds stay in the Stripe dashboard, where the
+   * amount is set beside the charge it applies to.
+   *
+   * The order is refetched after a success rather than patched locally, because the
+   * server decides whether the refund was full or partial (comparing the refunded
+   * total against what was actually paid) — and the row is what the till reconciles.
+   */
+  const refund = useMutation({
+    mutationFn: () => {
+      if (!order?.paymentIntentId) throw new Error("This order has no card payment to refund.");
+      return ordersApi.refundPayment(order.paymentIntentId);
+    },
+    onSuccess: (result) => {
+      if (!result.success) {
+        showAdminToast(result.errorMessage ?? "Stripe refused the refund — try it from the dashboard");
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["order-detail", id] })
+      queryClient.invalidateQueries({ queryKey: ["orders"] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
+      showAdminToast(`Refunded ${formatCurrency(result.amount)}`)
+    },
+    onError: (err: unknown) =>
+      showAdminToast(err instanceof Error ? err.message : "Couldn't refund that order"),
   })
 
   const setStatus = (key: (typeof STATUS_ORDER)[number]) => {
@@ -92,6 +128,11 @@ export function OrderDetailPage() {
   const currentIndex = STATUS_ORDER.indexOf(key)
   const isClosed = isOrderClosed(order.status)
   const payment = readPayment(order.paymentStatus, order.paymentMethod, order.paymentFailureReason)
+
+  // The refund rule lives in lib/refund, where its cases are tested — including the
+  // quiet one: an order with no payment reference cannot have a refund matched to it,
+  // so the money would move while the order kept reading as paid.
+  const refundable = refundEligibility(order.paymentStatus, order.paymentMethod, order.paymentIntentId)
 
   // An ASAP order stores the moment it was placed as its requested time, so the only
   // way to tell a scheduled order from an immediate one is that its time is meaningfully
@@ -248,6 +289,35 @@ export function OrderDetailPage() {
                     {payment.detail}
                   </p>
                 )}
+
+                {/* Refunding from the ticket rather than the Stripe dashboard. The
+                    endpoint has worked for a while and nothing called it, so a refund
+                    still meant a second system and a copied id. */}
+                {(refundable.canRefund || refundable.alreadyRefunded) && (
+                  <div style={{ marginTop: 14 }}>
+                    {refundable.alreadyRefunded ? (
+                      <p className="meta" style={{ margin: 0 }}>
+                        Refunded in full — nothing further to collect or return.
+                      </p>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        onClick={() => setRefunding(true)}
+                        disabled={update.isPending || refund.isPending}
+                      >
+                        {refund.isPending ? 'Refunding…' : 'Refund this order'}
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {/* When a refund is impossible, say so. A control that is simply
+                    absent sends staff to the Stripe dashboard with no explanation. */}
+                {refundable.reason && (
+                  <p className="meta" style={{ marginTop: 12 }}>
+                    {refundable.reason}
+                  </p>
+                )}
               </PanelBody>
             </Panel>
           </div>
@@ -322,6 +392,39 @@ export function OrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {refunding && (
+        <AdminModal
+          title="Refund this order?"
+          labelledBy="refund-title"
+          onClose={() => setRefunding(false)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setRefunding(false)} disabled={refund.isPending}>
+                Keep the payment
+              </Button>
+              <Button variant="primary" onClick={() => refund.mutate()} disabled={refund.isPending}>
+                {refund.isPending ? "Refunding…" : `Refund ${formatCurrency(order.total)}`}
+              </Button>
+            </>
+          }
+        >
+          {/* The confirmation states the amount and the consequence rather than asking
+              "are you sure?" — a refund cannot be undone from this screen, and the two
+              things staff need to check are WHAT is going back and WHICH order it
+              belongs to. The customer's name is here because a refund pressed on the
+              wrong ticket is the expensive mistake. */}
+          <p style={{ margin: "0 0 10px" }}>
+            <strong>{formatCurrency(order.total)}</strong> will be returned to{" "}
+            <strong>{order.customerName}</strong> for order <strong>{order.orderNumber}</strong>.
+          </p>
+          <p className="meta" style={{ margin: 0 }}>
+            The money goes back to the card within a few business days. This cannot be undone
+            here — the order will be marked refunded, and cancelling it afterwards will not take
+            the money back.
+          </p>
+        </AdminModal>
+      )}
     </>
   )
 }
