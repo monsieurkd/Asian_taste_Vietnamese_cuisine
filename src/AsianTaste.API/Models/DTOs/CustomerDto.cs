@@ -3,19 +3,6 @@ using System.ComponentModel.DataAnnotations;
 namespace AsianTaste.API.Models.DTOs;
 
 /// <summary>
-/// DTO for customer's saved payment method.
-/// </summary>
-public class CustomerPaymentMethodDto
-{
-    public int Id { get; set; }
-    public string? CardLastFour { get; set; }
-    public string? CardBrand { get; set; }
-    public int? ExpiryMonth { get; set; }
-    public int? ExpiryYear { get; set; }
-    public bool IsDefault { get; set; }
-}
-
-/// <summary>
 /// Request DTO for customer registration.
 /// </summary>
 public class RegisterCustomerDto
@@ -108,7 +95,6 @@ public class CustomerProfileResponseDto
     public DateTime CreatedAt { get; set; }
     public DateTime? LastOrderAt { get; set; }
     public int OrderCount { get; set; }
-    public List<CustomerPaymentMethodDto> PaymentMethods { get; set; } = new();
 }
 
 /// <summary>

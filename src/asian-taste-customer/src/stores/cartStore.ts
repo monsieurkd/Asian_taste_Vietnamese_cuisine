@@ -96,6 +96,11 @@ function lineFrom(
     imageUrl: dish.image,
     quantity,
     modifiers,
+    // The configuration and the customer's own note are kept apart as well as being
+    // joined: the summary is the only place the chosen extras exist, so a screen that
+    // shows only the note would hide every choice the customer paid for.
+    choicesSummary: summary.join(' · ') || undefined,
+    note: note?.trim() || undefined,
     // Carries the readable configuration to the kitchen whether or not the
     // API accepted modifier rows.
     specialInstructions: [summary.join(' · '), note?.trim() ? `Note: ${note.trim()}` : '']

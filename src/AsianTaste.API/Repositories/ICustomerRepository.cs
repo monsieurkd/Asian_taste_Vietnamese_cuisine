@@ -52,8 +52,4 @@ public interface ICustomerRepository
     /// </summary>
     Task<Customer> FindOrCreateGuestAsync(string name, string email, string phone, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Gets payment methods for a customer.
-    /// </summary>
-    Task<List<CustomerPaymentMethod>> GetPaymentMethodsAsync(int customerId, CancellationToken cancellationToken = default);
 }

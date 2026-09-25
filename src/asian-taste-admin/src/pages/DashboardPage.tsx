@@ -5,25 +5,36 @@ import type { Order, OrderStatus } from "@/types"
 import { AdminTop } from "@/components/AdminLayout"
 import { Avatar, Panel, PanelBody, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
-import { apiStatusValue, isClosed, nextStatus, serviceLabel, statusKey, type StatusKey } from "@/lib/orderStatus"
+import { apiStatusValue, isClosed, nextStatus, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
+import { readPayment } from "@/lib/payment"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 
 /**
  * The kitchen board, in the order the food moves.
  *
- * Three columns, because three states need someone to do something: an order
- * waiting to be accepted, one being cooked, and one waiting to be collected.
- * "Confirmed" and "Preparing" used to be separate columns — they are the same
- * moment, so the second was always empty. Collected orders have no column: the
- * press that finishes them is also the press that clears the board.
+ * One column per open stage, in the order of the shared `OPEN_STATUSES`. Collected
+ * orders have no column: the press that finishes them is also the press that clears
+ * the board.
+ *
+ * The titles come from the shared vocabulary rather than being typed out again. They
+ * used to be a second, hand-written list, and it drifted — the column header said
+ * "Cooking" while the pill underneath said "Confirmed", so one ticket carried two
+ * names for one state.
  */
-const COLUMNS: Array<{ key: StatusKey; title: string; hint: string }> = [
-  { key: "placed", title: "New", hint: "Accept or reject" },
-  { key: "confirmed", title: "Cooking", hint: "Accepted — on the wok" },
-  { key: "ready", title: "Ready", hint: "Waiting to be collected" },
-]
+const COLUMN_HINTS: Record<string, string> = {
+  placed: "Accept or reject",
+  confirmed: "Accepted — on the wok",
+  ready: "Waiting to be collected",
+}
 
+const COLUMNS: Array<{ key: StatusKey; title: string; hint: string }> = OPEN_STATUSES.map((key) => ({
+  key,
+  title: STATUS_META[key].label,
+  hint: COLUMN_HINTS[key] ?? "",
+}))
+
+/** What pressing the advance button does, in the kitchen's own words. */
 const ADVANCE_LABEL: Partial<Record<StatusKey, string>> = {
   placed: "Accept",
   confirmed: "Mark ready",
@@ -33,10 +44,32 @@ const ADVANCE_LABEL: Partial<Record<StatusKey, string>> = {
 /** Matches the customer-side accent budget: one loud thing per screen. */
 const URGENT_MINUTES = 20
 
+/**
+ * When the order is wanted.
+ *
+ * An ASAP order stores the moment it was placed as its requested time, so anything
+ * inside the pickup window reads as "ASAP" and only a genuinely scheduled order shows
+ * a time. Without this the board cannot tell a 6pm order placed at 4pm from one the
+ * customer is waiting for — and cooking the first on arrival puts food on the counter
+ * that nobody will collect for two hours.
+ */
+function wantedFor(order: Order): string {
+  const requested = new Date(order.requestedTime).getTime()
+  const placed = new Date(order.createdAt).getTime()
+  if (!Number.isFinite(requested) || requested - placed <= 5 * 60_000) return "ASAP"
+  return formatDate(order.requestedTime, "time")
+}
+
+function isScheduled(order: Order): boolean {
+  return wantedFor(order) !== "ASAP"
+}
+
 function Ticket({ order }: { order: Order }) {
   const key = statusKey(order.status)
   const next = nextStatus(order.status)
   const mins = minutesAgo(order.createdAt)
+  const payment = readPayment(order.paymentStatus, order.paymentMethod)
+  const scheduled = isScheduled(order)
 
   return (
     <article className={`ticket ${mins > URGENT_MINUTES ? "urgent" : ""}`}>
@@ -45,6 +78,17 @@ function Ticket({ order }: { order: Order }) {
         <StatusPill status={order.status} />
       </div>
 
+      {/* The two things that change what the kitchen should do: a bag that cannot go
+          out because the charge failed, and food wanted later rather than now. */}
+      {(payment.attention || scheduled) && (
+        <div className="ticket-flags">
+          {payment.attention && <span className="ticket-flag flag-warn">{payment.label}</span>}
+          {scheduled && (
+            <span className="ticket-flag flag-time">For {wantedFor(order)}</span>
+          )}
+        </div>
+      )}
+
       <p className="ticket-who">
         <Avatar name={order.customerName} />
         <strong>{order.customerName}</strong>
@@ -52,8 +96,7 @@ function Ticket({ order }: { order: Order }) {
       </p>
 
       <p className="ticket-meta">
-        {serviceLabel(order.orderType)} · placed {formatDate(order.createdAt, "time")} ·{" "}
-        <strong>{mins} min ago</strong>
+        placed {formatDate(order.createdAt, "time")} · <strong>{mins} min ago</strong>
       </p>
 
       {order.notes && (
@@ -114,11 +157,19 @@ export function DashboardPage() {
       .filter((o) => statusKey(o.status) === key)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
-  // Collected is the handover, so it is what "done today" means. Counting
-  // `ready` here instead would report every bag still on the counter as sold.
-  const collectedToday = orders.filter((o) => statusKey(o.status) === "collected")
-  const readyToday = orders.filter((o) => statusKey(o.status) === "ready")
-  const revenueToday = collectedToday.reduce((sum, o) => sum + o.total, 0)
+  // "Collected today" and "Revenue today" come from the SERVER's summary.
+  //
+  // They were computed here instead, by filtering the last 100 orders the page had
+  // fetched — so a busy day silently truncated the numbers, and an order collected
+  // yesterday still counted towards today's takings, because the filter was "is in
+  // the fetched page", not "was collected today". A revenue figure that is wrong at
+  // the end of a busy day is the one number the owner actually reads.
+  const collectedToday = summary?.completedOrdersToday ?? 0
+  const revenueToday = summary?.todayRevenue ?? 0
+
+  // These two are genuinely about what is on the board right now, so the fetched
+  // page is the right source for them.
+  const readyToday = orders.filter((o) => statusKey(o.status) === "ready").length
   const cancelledToday = orders.filter((o) => statusKey(o.status) === "cancelled").length
 
   return (
@@ -147,9 +198,9 @@ export function DashboardPage() {
           </div>
           <div className="stat-card">
             <p className="stat-k">Collected today</p>
-            <p className="stat-v">{collectedToday.length}</p>
+            <p className="stat-v">{collectedToday}</p>
             <p className="stat-delta">
-              {readyToday.length} on the counter · {cancelledToday} cancelled
+              {readyToday} on the counter · {cancelledToday} cancelled
             </p>
           </div>
           <div className="stat-card">
@@ -218,7 +269,7 @@ export function DashboardPage() {
                 <tr>
                   <th scope="col">Order</th>
                   <th scope="col">Customer</th>
-                  <th scope="col">Service</th>
+                  <th scope="col">Wanted</th>
                   <th scope="col">Placed</th>
                   <th scope="col">Status</th>
                   <th scope="col" className="num-col">
@@ -235,7 +286,7 @@ export function DashboardPage() {
                       </Link>
                     </td>
                     <td>{order.customerName}</td>
-                    <td>{serviceLabel(order.orderType)}</td>
+                    <td>{wantedFor(order)}</td>
                     <td>{formatDate(order.createdAt, "time")}</td>
                     <td>
                       <StatusPill status={order.status} />

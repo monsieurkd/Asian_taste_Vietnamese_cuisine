@@ -272,9 +272,6 @@ public class CustomerService
         // Get order count
         var orders = await _orderRepository.GetOrdersByCustomerEmailAsync(customer.Email, cancellationToken);
 
-        // Get payment methods
-        var paymentMethods = await _customerRepository.GetPaymentMethodsAsync(customerId, cancellationToken);
-
         return new CustomerProfileResponseDto
         {
             Id = customer.Id,
@@ -287,15 +284,11 @@ public class CustomerService
             CreatedAt = customer.CreatedAt,
             LastOrderAt = customer.LastOrderAt,
             OrderCount = orders.Count,
-            PaymentMethods = paymentMethods.Select(pm => new CustomerPaymentMethodDto
-            {
-                Id = pm.Id,
-                CardLastFour = pm.CardLastFour,
-                CardBrand = pm.CardBrand,
-                ExpiryMonth = pm.ExpiryMonth,
-                ExpiryYear = pm.ExpiryYear,
-                IsDefault = pm.IsDefault
-            }).ToList()
+            // No PaymentMethods: nothing has ever written a row to
+            // customer_payment_methods, so the list was always empty and the
+            // Account page's "Saved cards" panel could only ever say "none". Saved
+            // cards are unbuilt, and a field that cannot be non-empty is a promise
+            // no screen should render.
         };
     }
 

@@ -3,7 +3,6 @@ using AsianTaste.API.Models.DTOs;
 using AsianTaste.API.Models.Enums;
 using AsianTaste.API.Repositories;
 using AsianTaste.API.Services.Email;
-using AsianTaste.API.Services.Lightspeed;
 using AsianTaste.API.Services.Payment.Interfaces;
 
 using AsianTaste.API.WebSockets;
@@ -21,7 +20,6 @@ public class OrderService
     private readonly IOrderEmailQueue _emailQueue;
     private readonly IRestaurantSettingsRepository _settingsRepository;
     private readonly IPaymentGatewayService _paymentGateway;
-    private readonly ILightspeedOrderService _lightspeed;
     private readonly IOrderNotifier _orderNotifier;
     private readonly ILogger<OrderService> _logger;
 
@@ -32,7 +30,6 @@ public class OrderService
         IOrderEmailQueue emailQueue,
         IRestaurantSettingsRepository settingsRepository,
         IPaymentGatewayService paymentGateway,
-        ILightspeedOrderService lightspeed,
         IOrderNotifier orderNotifier,
         ILogger<OrderService> logger)
     {
@@ -42,7 +39,6 @@ public class OrderService
         _emailQueue = emailQueue;
         _settingsRepository = settingsRepository;
         _paymentGateway = paymentGateway;
-        _lightspeed = lightspeed;
         _orderNotifier = orderNotifier;
         _logger = logger;
     }
@@ -171,11 +167,6 @@ public class OrderService
         // than trusting is the point: without it, a caller could claim payment.
         var paymentOutcome = await ProcessPaymentAsync(order, request, cancellationToken);
 
-        // Push to the POS. A failure here must NOT fail the order — the customer has
-        // paid, and the kitchen can work from the admin dashboard. The order is
-        // marked for retry instead, and OrderSyncBackgroundService picks it up.
-        await PushOrderToPosAsync(order, cancellationToken);
-
         var response = new CheckoutOrderResponseDto
         {
             OrderId = order.Id,
@@ -210,6 +201,11 @@ public class OrderService
         var order = await _orderRepository.GetOrderByNumberAsync(orderNumber, cancellationToken);
         if (order == null) return null;
 
+        // The estimate comes from the restaurant's own setting, exactly as it does at
+        // checkout. It used to be a literal 20 here and a setting there, so the
+        // confirmation screen and the tracking screen could promise different times
+        // for the same order — and changing the setting moved only one of them.
+        var settings = await LoadRestaurantSettingsAsync(cancellationToken);
         var items = await _orderRepository.GetOrderItemsAsync(order.Id, cancellationToken);
 
         return new OrderDetailResponseDto
@@ -218,7 +214,7 @@ public class OrderService
             OrderNumber = order.OrderNumber,
             Status = order.Status,
             CreatedAt = order.CreatedAt,
-            EstimatedReadyTime = order.RequestedTime.AddMinutes(20),
+            EstimatedReadyTime = order.RequestedTime.AddMinutes(settings.PickupMinutes),
             CustomerName = order.CustomerName,
             CustomerPhone = order.CustomerPhone,
             CustomerEmail = order.CustomerEmail,
@@ -239,7 +235,17 @@ public class OrderService
                 UnitPrice = i.UnitPrice,
                 TotalPrice = i.TotalPrice,
                 SpecialInstructions = i.SpecialInstructions,
-                Modifiers = new List<OrderItemModifierDto>()
+                // The modifiers are already loaded by GetOrderItemsAsync above. This
+                // used to emit an empty list regardless, so a customer confirming an
+                // order saw none of the choices they had made — no spice level, no
+                // allergy, no paid extra — while the kitchen's copy of the same order
+                // did show them.
+                Modifiers = i.Modifiers.Select(m => new OrderItemModifierDto
+                {
+                    Id = m.Id,
+                    ModifierName = m.ModifierName,
+                    PriceAdjustment = m.PriceAdjustment
+                }).ToList()
             }).ToList()
         };
     }
@@ -269,6 +275,11 @@ public class OrderService
     {
         var orders = await _orderRepository.GetOrdersByCustomerEmailAsync(email, cancellationToken);
 
+        // Loaded once for the whole history rather than per order, and for the same
+        // reason as above: the customer must not be shown one pickup estimate on the
+        // confirmation and a different one on their order list.
+        var settings = await LoadRestaurantSettingsAsync(cancellationToken);
+
         var result = new List<OrderDetailResponseDto>();
 
         foreach (var order in orders)
@@ -281,7 +292,7 @@ public class OrderService
                 OrderNumber = order.OrderNumber,
                 Status = order.Status,
                 CreatedAt = order.CreatedAt,
-                EstimatedReadyTime = order.RequestedTime.AddMinutes(20),
+                EstimatedReadyTime = order.RequestedTime.AddMinutes(settings.PickupMinutes),
                 CustomerName = order.CustomerName,
                 CustomerPhone = order.CustomerPhone,
                 CustomerEmail = order.CustomerEmail,
@@ -302,7 +313,12 @@ public class OrderService
                     UnitPrice = i.UnitPrice,
                     TotalPrice = i.TotalPrice,
                     SpecialInstructions = i.SpecialInstructions,
-                    Modifiers = new List<OrderItemModifierDto>()
+                    Modifiers = i.Modifiers.Select(m => new OrderItemModifierDto
+                    {
+                        Id = m.Id,
+                        ModifierName = m.ModifierName,
+                        PriceAdjustment = m.PriceAdjustment
+                    }).ToList()
                 }).ToList()
             });
         }
@@ -437,61 +453,6 @@ public class OrderService
 
             _logger.LogError(ex, "Payment attempt threw for order {OrderNumber}", order.OrderNumber);
             return PaymentOutcome.Failed;
-        }
-    }
-
-    /// <summary>
-    /// Pushes a paid order to the POS, and records the outcome.
-    ///
-    /// This is the step that was missing entirely: a customer could pay and the
-    /// kitchen would never see the order, because the service was fully built but
-    /// never called from here.
-    ///
-    /// A POS failure does not fail the order. The customer has paid and the kitchen
-    /// can read the admin dashboard; the order is marked Pending and
-    /// OrderSyncBackgroundService retries it, which is what that service is for.
-    /// Throwing here would turn a POS hiccup into a lost order and a refund.
-    /// </summary>
-    private async Task PushOrderToPosAsync(Order order, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var result = await _lightspeed.CreateOrderAsync(order);
-
-            if (result.Success)
-            {
-                await _orderRepository.UpdateOrderSyncInfoAsync(
-                    order.Id,
-                    result.LightspeedOrderId?.ToString(),
-                    SyncStatus.Synced,
-                    DateTime.UtcNow,
-                    null,
-                    cancellationToken);
-
-                _logger.LogInformation(
-                    "Order {OrderNumber} pushed to Lightspeed as {LightspeedOrderId}.",
-                    order.OrderNumber, result.LightspeedOrderId);
-            }
-            else
-            {
-                // Marked Pending rather than Failed so the background sync retries
-                // it — a POS that is briefly unreachable is the common case, and it
-                // should heal itself without anyone intervening.
-                await _orderRepository.MarkOrderSyncPendingAsync(order.Id, cancellationToken);
-
-                _logger.LogWarning(
-                    "Order {OrderNumber} could not be pushed to Lightspeed ({Reason}); queued for retry.",
-                    order.OrderNumber, result.ErrorMessage ?? "unknown error");
-            }
-        }
-        catch (Exception ex)
-        {
-            await _orderRepository.MarkOrderSyncPendingAsync(order.Id, cancellationToken);
-
-            _logger.LogError(
-                ex,
-                "Pushing order {OrderNumber} to Lightspeed threw; queued for retry.",
-                order.OrderNumber);
         }
     }
 

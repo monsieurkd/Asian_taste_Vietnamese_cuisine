@@ -112,22 +112,6 @@ for path in / /menu /cart; do
     fi
 done
 
-hdr "POS sync backlog ($API_URL/health/pos)"
-# Reported, never failed. A stuck POS order means the kitchen must use the admin
-# dashboard, not that the site is down — so failing here would be wrong, and would
-# train people to ignore the check. It is surfaced because previously a stuck order
-# appeared ONLY as a recurring log line that was itself misleading.
-pos_json=$(curl -sS --max-time 15 "$API_URL/health/pos" 2>/dev/null || echo '')
-if [ -z "$pos_json" ]; then
-    ok "/health/pos not available (older deploy)"
-elif printf '%s' "$pos_json" | grep -q '"status":"attention"'; then
-    failed_orders=$(printf '%s' "$pos_json" | sed -n 's/.*"failedOrders":\([0-9]*\).*/\1/p')
-    printf '  %snote%s     %s order(s) exhausted POS retries — they need the admin dashboard, not a redeploy\n' \
-        "$BOLD" "$RESET" "${failed_orders:-some}"
-else
-    ok "no orders are stuck"
-fi
-
 printf '\n'
 if [ "$failures" -eq 0 ]; then
     printf '%sPASS: the deployed stack is healthy.%s\n' "$GREEN" "$RESET"

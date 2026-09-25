@@ -1,28 +1,36 @@
 /**
  * The shared order-status vocabulary, used by both front-ends.
  *
- * Five canonical stages, keyed the way the design set keys them, so the kitchen
- * board, the order table, the detail timeline and the customer's own tracker all
- * read the same underlying words. The API returns PascalCase (`Preparing`);
- * `statusKey` normalises it, and every screen goes through that one function
- * rather than each lowercasing on its own.
+ * Four stages, one for each thing that actually happens to an order, keyed the way
+ * the design set keys them. Every screen — the kitchen board, the order table, the
+ * detail timeline and the customer's own tracker — reads the same words, because
+ * the API returns PascalCase (`Confirmed`), `statusKey` normalises it, and every
+ * screen goes through that one function rather than each lowercasing on its own.
  *
- * Vocabulary is audience-specific. The same API value reads differently to the
- * customer and to the restaurant:
+ * The words are operational, not procedural:
  *
- *   API `Completed`  →  restaurant "Collected"  |  customer "Delivered"
+ *   placed     →  New        an order nobody has looked at yet
+ *   confirmed  →  Cooking    accepted, and on the wok
+ *   ready      →  Ready      packed, waiting for the counter
+ *   collected  →  Collected   handed over — done
  *
- * so the presentation helpers take a `lens`. The canonical keys and the state
- * machine do not change with the lens — only the words and the pill class do.
+ * "Confirmed" was the old word for the second stage and it told a cook nothing: the
+ * board's own column header already said "Cooking" while the pill beside it said
+ * "Confirmed", so one screen carried two vocabularies for one journey. The keys and
+ * the API values are unchanged — this is a vocabulary, not a schema.
+ *
+ * Only the pill class is audience-specific: the storefront's stylesheet has no
+ * `.status-collected`, so it reuses the settled grey. The words are the same for
+ * both audiences, because they describe the same event.
  */
 export type StatusKey = "placed" | "confirmed" | "ready" | "collected" | "cancelled"
 
 /**
  * Who is looking at the status.
  *
- * `restaurant` is the staff console (the canonical vocabulary); `customer` is the
- * storefront, which calls the handover "Delivered" and can carry delivery-only
- * values the pickup console never sets.
+ * Kept because the two stylesheets define different pill classes, and because the
+ * storefront can receive values the pickup console never sets (`Preparing` from an
+ * older order). The words no longer differ between the two.
  */
 export type StatusLens = "restaurant" | "customer"
 
@@ -37,7 +45,7 @@ export interface StatusMeta {
 export const STATUS_META: Record<StatusKey, StatusMeta> = {
   placed: {
     key: "placed",
-    label: "Placed",
+    label: "New",
     desc: "Waiting for the kitchen to accept",
     cls: "status-placed",
   },
@@ -46,7 +54,7 @@ export const STATUS_META: Record<StatusKey, StatusMeta> = {
   // ticket would sit in a column that lies about where it is.
   confirmed: {
     key: "confirmed",
-    label: "Confirmed",
+    label: "Cooking",
     desc: "Accepted and being cooked",
     cls: "status-confirmed",
   },
@@ -100,7 +108,7 @@ export function isClosed(status: string | null | undefined): boolean {
 }
 
 /**
- * Every value the API can hold, folded onto the five stages.
+ * Every value the API can hold, folded onto the four stages.
  *
  * `preparing` reads as `confirmed` (they are the same moment) and `completed`
  * reads as `collected` — the API value the collected stage is stored as. Both
@@ -191,25 +199,26 @@ function statusToken(status: string | null | undefined): string {
 }
 
 /**
- * The word each audience uses for a canonical stage.
+ * The word for a canonical stage, per audience.
  *
- * They agree everywhere except the handover: the console says "Collected"
- * because that is the operational event; the storefront says "Delivered"
- * because that is what the customer experiences when they press the button.
+ * Identical for both, on purpose. The handover used to read "Delivered" to the
+ * customer while the console said "Collected", which meant a support call about
+ * the same order had two names for one event. Both audiences are describing food
+ * handed over at the counter, so both see the same word.
  */
 const LENS_LABEL: Record<StatusLens, Record<StatusKey, string>> = {
   restaurant: {
-    placed: "Placed",
-    confirmed: "Confirmed",
+    placed: "New",
+    confirmed: "Cooking",
     ready: "Ready",
     collected: "Collected",
     cancelled: "Cancelled",
   },
   customer: {
-    placed: "Placed",
-    confirmed: "Confirmed",
+    placed: "New",
+    confirmed: "Cooking",
     ready: "Ready",
-    collected: "Delivered",
+    collected: "Collected",
     cancelled: "Cancelled",
   },
 };
@@ -238,16 +247,15 @@ const LENS_CLS: Record<StatusLens, Record<StatusKey, string>> = {
 };
 
 /**
- * Raw values only the storefront ever sees, and how they read.
+ * Raw values that fold onto a canonical stage but need a word of their own.
  *
- * These fold onto canonical keys elsewhere (`preparing` → `confirmed`), but the
- * customer should still see the API's own finer wording, so they get their own
- * presentation before the canonical fold happens.
+ * `preparing` and `confirmed` are the same moment — the order key tests pin that —
+ * so an order placed before they were merged still reads as `Cooking`. There is no
+ * delivery or dine-in entry any more: v1 is pickup, and those states can never be
+ * set.
  */
-const CUSTOMER_ONLY: Record<string, StatusPresentation> = {
-  preparing: { label: "Preparing", cls: "status-preparing" },
-  delivery: { label: "On its way", cls: "status-delivery" },
-  outfordelivery: { label: "On its way", cls: "status-delivery" },
+const RAW_STAGE_PRESENTATION: Record<string, StatusPresentation> = {
+  preparing: { label: "Cooking", cls: "status-confirmed" },
 };
 
 /**
@@ -261,10 +269,8 @@ export function statusPresentation(
   status: string | null | undefined,
   lens: StatusLens = "restaurant",
 ): StatusPresentation {
-  if (lens === "customer") {
-    const only = CUSTOMER_ONLY[statusToken(status)];
-    if (only) return only;
-  }
+  const raw = RAW_STAGE_PRESENTATION[statusToken(status)];
+  if (raw) return { label: raw.label, cls: LENS_CLS[lens][statusKey(status)] };
   const key = statusKey(status);
   return { label: LENS_LABEL[lens][key], cls: LENS_CLS[lens][key] };
 }

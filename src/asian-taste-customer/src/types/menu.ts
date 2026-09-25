@@ -169,6 +169,16 @@ export interface CartItem {
   imageUrl: string | null;
   quantity: number;
   modifiers: CartItemModifier[];
+  /**
+   * The configuration in the customer's words — "Spice level: Hot · Extras: Extra
+   * soup". Kept separate from the free-text note because it is the only record of
+   * choices the customer made and paid for, and because it is what the API's
+   * specialInstructions carries when a dish's option groups have no modifier rows.
+   */
+  choicesSummary?: string;
+  /** Anything the customer typed themselves, with no choices mixed in. */
+  note?: string;
+  /** `choicesSummary` joined with `note` — the single string the kitchen reads. */
   specialInstructions?: string;
 }
 

@@ -30,11 +30,6 @@ public interface IOrderRepository
     Task UpdateOrderStatusAsync(int orderId, OrderStatus status, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Updates Lightspeed K-Series integration info for an order.
-    /// </summary>
-    Task UpdateOrderLightspeedInfoAsync(int orderId, string thirdPartyReference, DateTime sentAt, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Gets all orders for a customer by email.
     /// </summary>
     Task<List<Order>> GetOrdersByCustomerEmailAsync(string email, CancellationToken cancellationToken = default);
@@ -49,34 +44,12 @@ public interface IOrderRepository
     /// </summary>
     Task MarkEmailConfirmationSentAsync(int orderId, CancellationToken cancellationToken = default);
 
-    // Lightspeed Sync methods (Phase 3)
-
-    /// <summary>
-    /// Gets orders that are pending sync to Lightspeed.
-    /// </summary>
-    Task<List<Order>> GetPendingSyncOrdersAsync(int limit, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets orders that failed to sync to Lightspeed.
-    /// </summary>
-    Task<List<Order>> GetFailedSyncOrdersAsync(int limit, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Updates Lightspeed sync information for an order.
-    /// </summary>
-    Task UpdateOrderSyncInfoAsync(int orderId, string? lightspeedOrderId, SyncStatus status, DateTime? syncedAt, string? errorMessage, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Marks an order as pending sync to Lightspeed.
-    /// </summary>
-    Task MarkOrderSyncPendingAsync(int orderId, CancellationToken cancellationToken = default);
-
     // Admin methods
 
     /// <summary>
     /// Gets all orders with optional filtering.
     /// </summary>
-    Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default);
+    Task<List<AdminOrderListDto>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets order details with items for admin view.
@@ -88,22 +61,17 @@ public interface IOrderRepository
     /// </summary>
     Task<DashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Gets daily statistics for a specific date.
-    /// </summary>
-    Task<DailyStatsDto> GetDailyStatsAsync(DateTime date, CancellationToken cancellationToken = default);
-
     // Webhook support methods (Phase 4)
 
     /// <summary>
-    /// Gets an order by its external payment ID.
+    /// Gets an order by the gateway's own payment id, if the order recorded one.
     /// </summary>
+    /// <remarks>
+    /// Last-resort lookup for a Stripe event: the checkout stores the PaymentIntent id
+    /// (see <see cref="GetOrderByPaymentIntentIdAsync"/>, which is what actually
+    /// matches), and this column is populated from the captured charge.
+    /// </remarks>
     Task<Order?> GetOrderByExternalPaymentIdAsync(string externalPaymentId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets an order by its Lightspeed order ID.
-    /// </summary>
-    Task<Order?> GetOrderByLightspeedIdAsync(string lightspeedOrderId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets an order by the Stripe PaymentIntent it was paid with.

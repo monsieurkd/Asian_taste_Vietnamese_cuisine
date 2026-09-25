@@ -5,7 +5,6 @@ using AsianTaste.API.Data;
 using AsianTaste.API.Models.Enums;
 using AsianTaste.API.Repositories;
 using AsianTaste.API.Services;
-using AsianTaste.API.Services.Lightspeed;
 using AsianTaste.API.Services.Payment;
 using AsianTaste.API.Services.Payment.Interfaces;
 using AsianTaste.API.Services.Email;
@@ -47,15 +46,15 @@ builder.Services.AddHostedService<OrderEmailBackgroundService>();
 builder.Services.AddScoped<IEmailService, SendGridEmailService>();
 builder.Services.AddHttpClient("SendGrid");
 
-// Lightspeed integration services
+// Encryption. Kept for the OAuth/token material the POS integration used to store;
+// no current code path reads a secret from the database, but the service is a
+// general-purpose one and its key is already an operational secret.
 builder.Services.AddSingleton<IEncryptionService>(sp =>
 {
     var encryptionKey = sp.GetRequiredService<IConfiguration>()["Encryption:Key"]
         ?? throw new InvalidOperationException("Encryption:Key is not configured");
     return new EncryptionService(encryptionKey);
 });
-builder.Services.AddScoped<ILightspeedRepository, LightspeedRepository>();
-builder.Services.AddScoped<ILightspeedAuthService, LightspeedAuthService>();
 
 // Payment gateway services. Stripe is the default; the mock must be asked for.
 //
@@ -95,7 +94,7 @@ else
     builder.Services.AddScoped<StripeConfiguration>(sp =>
         sp.GetRequiredService<IOptions<StripeConfiguration>>().Value);
     builder.Services.AddScoped<IPaymentGatewayService, StripePaymentGateway>();
-    builder.Services.AddScoped<IWebhookService, StripeWebhookService>();
+    builder.Services.AddScoped<StripeWebhookService>();
 
     // Say which mode the real gateway is in. A live deployment running on a
     // test key would take no money, and that is worth noticing immediately
@@ -119,21 +118,8 @@ else
     }
 }
 
-// Order sync services (Phase 3)
-builder.Services.AddScoped<ILightspeedOrderService, LightspeedOrderService>();
-
-// Background services (Phase 3)
-builder.Services.AddHostedService<OrderSyncBackgroundService>();
-
 // Webhook event log repository (for webhook logging)
 builder.Services.AddScoped<IWebhookEventLogRepository, WebhookEventLogRepository>();
-
-// HttpClient for Lightspeed API calls
-builder.Services.AddHttpClient("Lightspeed", client =>
-{
-    client.BaseAddress = new Uri("https://api.lightspeedapp.com/API/");
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
 
 // WebSocket handler for real-time updates (singleton to maintain connections)
 builder.Services.AddSingleton<OrderWebSocketHandler>();
@@ -350,33 +336,6 @@ if (app.Environment.IsDevelopment())
         return Results.Ok(orders);
     });
 
-    // Lightspeed connection status
-    app.MapGet("/api/dev/lightspeed/status", async (ILightspeedAuthService authService) =>
-    {
-        var token = await authService.GetTokenAsync();
-        var isConnected = token != null && authService.IsTokenValid(token);
-        return Results.Ok(new
-        {
-            connected = isConnected,
-            accountId = token?.AccountId,
-            tokenValidUntil = token?.ExpiresAt,
-            hasConfig = !string.IsNullOrEmpty(builder.Configuration["Lightspeed:ClientId"])
-        });
-    });
-
-    // Lightspeed configuration check
-    app.MapGet("/api/dev/lightspeed/config", (IConfiguration config) =>
-    {
-        return Results.Ok(new
-        {
-            hasClientId = !string.IsNullOrEmpty(config["Lightspeed:ClientId"]),
-            hasClientSecret = !string.IsNullOrEmpty(config["Lightspeed:ClientSecret"]),
-            hasRedirectUri = !string.IsNullOrEmpty(config["Lightspeed:RedirectUri"]),
-            hasEncryptionKey = !string.IsNullOrEmpty(config["Encryption:Key"]),
-            redirectUri = config["Lightspeed:RedirectUri"]
-        });
-    });
-
     // Payment configuration check
     app.MapGet("/api/dev/payment/config", (IConfiguration config) =>
     {
@@ -436,54 +395,6 @@ app.MapGet("/health/db", async (IDbConnectionFactory dbFactory) =>
         // names the host and port, never the password.
         return Results.Json(
             new { status = "unhealthy", error = ex.Message },
-            statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-}).AllowAnonymous();
-
-// Readiness for POS sync: are any orders stuck?
-//
-// This exists because a stuck order was previously visible ONLY as a recurring
-// log line ("Retrying 1 failed order(s)" every 30 seconds) that was itself
-// misleading — it was emitted for an order the retrier had already given up on.
-// Nothing anywhere said "an order needs a human".
-//
-// Deliberately separate from /health/db and deliberately not an error status: a
-// stuck POS order must NOT make the API look unhealthy, because the API is fine
-// and the restaurant can keep taking orders. It reports; it does not gate.
-app.MapGet("/health/pos", async (IDbConnectionFactory dbFactory) =>
-{
-    try
-    {
-        using var connection = dbFactory.CreateConnection();
-        connection.Open();
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = @"
-            SELECT
-                COUNT(*) FILTER (WHERE lightspeed_sync_status::text = 'Failed') AS failed,
-                COUNT(*) FILTER (WHERE lightspeed_sync_status::text = 'NotSynced') AS pending
-            FROM orders
-            WHERE lightspeed_sync_status IS NULL
-               OR lightspeed_sync_status::text <> 'Synced'";
-        using var reader = cmd.ExecuteReader();
-        reader.Read();
-        var failed = reader.GetInt64(0);
-        var pending = reader.GetInt64(1);
-
-        return Results.Ok(new
-        {
-            status = failed > 0 ? "attention" : "ok",
-            failedOrders = failed,
-            pendingOrders = pending,
-            note = failed > 0
-                ? "Orders have exhausted their POS retries and will not be retried again. "
-                  + "They are visible in the admin dashboard and can be completed there."
-                : "No orders need attention."
-        });
-    }
-    catch (Exception ex)
-    {
-        return Results.Json(
-            new { status = "unknown", error = ex.Message },
             statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 }).AllowAnonymous();

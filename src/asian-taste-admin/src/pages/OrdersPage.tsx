@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
+import type { Order } from "@/types"
 import { useQuery } from "@tanstack/react-query"
 import { ordersApi } from "@/api/orders"
 import { AdminTop } from "@/components/AdminLayout"
-import { Panel, PanelBody, SkeletonRows } from "@/components/ui/Primitives"
+import { Panel, PanelBody, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
-import { serviceLabel, STATUS_META, STATUS_ORDER, statusKey, type StatusKey } from "@/lib/orderStatus"
+import { STATUS_META, STATUS_ORDER, statusKey, type StatusKey } from "@/lib/orderStatus"
+import { readPayment } from "@/lib/payment"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 
 type StatusFilter = "all" | StatusKey
-type ServiceFilter = "all" | "delivery" | "pickup"
 
 const STATUS_FILTERS: Array<{ id: StatusFilter; label: string }> = [
   { id: "all", label: "All statuses" },
@@ -17,11 +18,33 @@ const STATUS_FILTERS: Array<{ id: StatusFilter; label: string }> = [
   { id: "cancelled", label: "Cancelled" },
 ]
 
-const SERVICE_FILTERS: Array<{ id: ServiceFilter; label: string }> = [
-  { id: "all", label: "All services" },
-  { id: "delivery", label: "Delivery" },
-  { id: "pickup", label: "Pickup" },
-]
+/**
+ * The list used to filter by service — Pickup, Delivery or all. v1 is pickup only, so
+ * every row said "Pickup" and the filter could not change what was shown. A control
+ * that cannot do anything is worse than no control: it suggests a choice that is not
+ * there. The Service COLUMN stays, because the API can hold a dine-in order and the
+ * column is how anyone would notice one.
+ */
+
+/** The money, per row. A declined card must be visible without opening the order. */
+function paymentFor(order: Order) {
+  return readPayment(order.paymentStatus, order.paymentMethod)
+}
+
+/**
+ * When the order is wanted.
+ *
+ * An ASAP order stores the moment it was placed as its requested time, so anything
+ * inside the pickup window reads as "ASAP" and only a genuinely scheduled order shows
+ * a time. That is the distinction the board needs: a 6pm order appearing at 4pm must
+ * not be cooked on arrival.
+ */
+function wantedFor(order: Order): string {
+  const requested = new Date(order.requestedTime).getTime()
+  const placed = new Date(order.createdAt).getTime()
+  if (!Number.isFinite(requested) || requested - placed <= 5 * 60_000) return "ASAP"
+  return formatDate(order.requestedTime, "time")
+}
 
 function SearchIcon() {
   return (
@@ -53,7 +76,6 @@ function SearchIcon() {
 export function OrdersPage() {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<StatusFilter>("all")
-  const [service, setService] = useState<ServiceFilter>("all")
 
   // Digits are what an order number is made of, so a query containing any is
   // treated as a potential number lookup. A name or a phone also contains digits
@@ -75,22 +97,20 @@ export function OrdersPage() {
     return orders.filter((order) => {
       const key = statusKey(order.status)
       if (status !== "all" && key !== status) return false
-      if (service !== "all" && order.orderType.toLowerCase() !== service) return false
       if (q) {
         const hay = `${order.orderNumber} ${order.customerName} ${order.customerPhone}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-  }, [orders, query, status, service])
+  }, [orders, query, status])
 
   const clearFilters = () => {
     setQuery("")
     setStatus("all")
-    setService("all")
   }
 
-  const isFiltered = query !== "" || status !== "all" || service !== "all"
+  const isFiltered = query !== "" || status !== "all"
 
   return (
     <>
@@ -115,31 +135,18 @@ export function OrdersPage() {
                 />
               </div>
 
-              <div className="seg-sm" role="group" aria-label="Filter by service">
-                {SERVICE_FILTERS.map((option) => (
+              <div className="seg-sm" role="group" aria-label="Filter by status">
+                {STATUS_FILTERS.map((option) => (
                   <button
                     key={option.id}
                     type="button"
-                    aria-pressed={service === option.id}
-                    onClick={() => setService(option.id)}
+                    aria-pressed={status === option.id}
+                    onClick={() => setStatus(option.id)}
                   >
                     {option.label}
                   </button>
                 ))}
               </div>
-            </div>
-
-            <div className="seg-sm" role="group" aria-label="Filter by status" style={{ marginTop: 12 }}>
-              {STATUS_FILTERS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={status === option.id}
-                  onClick={() => setStatus(option.id)}
-                >
-                  {option.label}
-                </button>
-              ))}
             </div>
 
             <p className="meta" aria-live="polite" style={{ margin: "12px 0 0" }}>
@@ -173,7 +180,7 @@ export function OrdersPage() {
                   <tr>
                     <th scope="col">Order</th>
                     <th scope="col">Customer</th>
-                    <th scope="col">Service</th>
+                    <th scope="col">Wanted</th>
                     <th scope="col">Placed</th>
                     <th scope="col">Status</th>
                     <th scope="col" className="num-col">
@@ -212,8 +219,14 @@ export function OrdersPage() {
                           <strong>{order.customerName}</strong>
                           <br />
                           <span className="meta">{order.customerPhone}</span>
+                          {paymentFor(order).attention && (
+                            <>
+                              <br />
+                              <Pill className="pill-warn">{paymentFor(order).label}</Pill>
+                            </>
+                          )}
                         </td>
-                        <td>{serviceLabel(order.orderType)}</td>
+                        <td>{wantedFor(order)}</td>
                         <td>
                           {formatDate(order.createdAt, "time")}
                           <br />

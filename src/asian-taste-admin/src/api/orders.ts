@@ -1,4 +1,4 @@
-import { type Order, type OrderDetail, type DashboardSummary, type DailyStats, type UpdateOrderStatusRequest } from "@/types"
+import { type Order, type OrderDetail, type DashboardSummary, type UpdateOrderStatusRequest } from "@/types"
 import apiClient from "./client"
 
 /**
@@ -35,15 +35,6 @@ export const ordersApi = {
    */
   async getDashboardSummary(): Promise<DashboardSummary> {
     const response = await apiClient.get<DashboardSummary>("/admin/orders/summary")
-    return response.data
-  },
-
-  /**
-   * Get daily statistics.
-   */
-  async getDailyStats(date?: string): Promise<DailyStats> {
-    const params = date ? { date } : {}
-    const response = await apiClient.get<DailyStats>("/admin/orders/stats/daily", { params })
     return response.data
   },
 

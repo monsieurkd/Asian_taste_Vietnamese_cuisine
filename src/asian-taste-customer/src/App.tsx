@@ -15,7 +15,6 @@ import { CheckoutPage } from '@/pages/CheckoutPage';
 import { ConfirmationPage } from '@/pages/ConfirmationPage';
 import { AccountPage } from '@/pages/AccountPage';
 import { NotBuiltYet } from '@/pages/NotBuiltYet';
-import { StatesShowcase } from '@/pages/StatesShowcase';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -61,7 +60,6 @@ function Shell() {
           {/* A designed "not yet" beats a "Coming Soon" that looks broken. */}
           <Route path="/about" element={<NotBuiltYet title="Our story" />} />
           <Route path="/contact" element={<NotBuiltYet title="Contact" />} />
-          <Route path="/states" element={<StatesShowcase />} />
           <Route path="/order" element={<Navigate to="/menu" replace />} />
 
           <Route

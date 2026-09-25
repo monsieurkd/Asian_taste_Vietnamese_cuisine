@@ -55,12 +55,18 @@ public class OrdersController : ControllerBase
             return BadRequest(new { error = "Customer email is required" });
         }
 
-        // Note: Payment token validation temporarily disabled for testing
-        // TODO: Re-enable when Lightspeed Payments integration is complete
-        // if (request.PaymentMethod == Models.Enums.PaymentMethod.Card && string.IsNullOrWhiteSpace(request.PaymentToken))
-        // {
-        //     return BadRequest(new { error = "Payment token is required for card payments" });
-        // }
+        // A card order without a confirmed PaymentIntent id is not rejected here. The
+        // server does not trust the client's word either way: ProcessPaymentAsync asks
+        // the gateway to confirm the intent, and a charge that cannot be verified marks
+        // the order unpaid rather than declined at the door. Rejecting early would only
+        // remove the customer's chance to pay cash at the counter.
+        if (request.PaymentMethod == Models.Enums.PaymentMethod.Card
+            && string.IsNullOrWhiteSpace(request.PaymentToken))
+        {
+            _logger.LogInformation(
+                "Card order {Email} arrived without a payment token; it will be recorded as unpaid.",
+                request.CustomerEmail);
+        }
 
         // Log incoming request for debugging
         _logger.LogInformation("Creating order: {Email}, {ItemCount} items, {PaymentMethod}",

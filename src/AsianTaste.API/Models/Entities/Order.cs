@@ -66,15 +66,12 @@ public class Order
     /// <summary>Idempotency key to prevent duplicate payment processing.</summary>
     public string? IdempotencyKey { get; set; }
 
-    // ==================== LEGACY PAYMENT FIELDS (retained for compatibility) ====================
+    // ==================== PAYMENT FIELDS CONTINUED ====================
 
-    /// <summary>Square payment ID (from Square API - legacy).</summary>
-    public string? SquarePaymentId { get; set; }
-
-    /// <summary>Square order ID (from Square API - legacy).</summary>
-    public string? SquareOrderId { get; set; }
-
-    /// <summary>Payment intent ID from payment processor (legacy).</summary>
+    /// <summary>
+    /// Stripe PaymentIntent id. Written by the checkout when a card order is placed,
+    /// and the linkage every Stripe webhook relies on to find its order.
+    /// </summary>
     public string? PaymentIntentId { get; set; }
 
     /// <summary>Reason for payment failure (if applicable).</summary>
@@ -96,12 +93,6 @@ public class Order
 
     /// <summary>Error message if sync failed.</summary>
     public string? SyncError { get; set; }
-
-    /// <summary>Third-party reference (Lightspeed K-Series - legacy field, kept for compatibility).</summary>
-    public string? ThirdPartyReference { get; set; }
-
-    /// <summary>When order was sent to Lightspeed (legacy field, kept for compatibility).</summary>
-    public DateTime? LightspeedSentAt { get; set; }
 
     // ==================== OTHER FIELDS ====================
 

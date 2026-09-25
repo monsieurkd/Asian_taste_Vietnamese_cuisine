@@ -101,8 +101,11 @@ export function CartPage() {
                         {line.modifiers.length > 0 && (
                           <div className="ci-note">{line.modifiers.map((m) => m.name).join(' · ')}</div>
                         )}
-                        {!line.modifiers.length && line.specialInstructions && (
-                          <div className="ci-note">{line.specialInstructions}</div>
+                        {!line.modifiers.length && line.choicesSummary && (
+                          <div className="ci-choices">{line.choicesSummary}</div>
+                        )}
+                        {line.note && (
+                          <div className="ci-note">Note: {line.note}</div>
                         )}
                         <Link
                           to={`/cart/edit/${line.id}`}

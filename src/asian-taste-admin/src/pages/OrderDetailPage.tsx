@@ -5,7 +5,8 @@ import type { OrderStatus } from "@/types"
 import { AdminTop } from "@/components/AdminLayout"
 import { Avatar, Button, Kv, KvRow, Panel, PanelBody, PanelHead, Pill, SkeletonRows, SumRow } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
-import { apiStatusValue, isClosed as isOrderClosed, serviceLabel, STATUS_META, STATUS_ORDER, statusKey } from "@/lib/orderStatus"
+import { apiStatusValue, isClosed as isOrderClosed, STATUS_META, STATUS_ORDER, statusKey } from "@/lib/orderStatus"
+import { readPayment } from "@/lib/payment"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { showAdminToast } from "@/components/ui/AdminToast"
 
@@ -90,6 +91,14 @@ export function OrderDetailPage() {
   const key = statusKey(order.status)
   const currentIndex = STATUS_ORDER.indexOf(key)
   const isClosed = isOrderClosed(order.status)
+  const payment = readPayment(order.paymentStatus, order.paymentMethod, order.paymentFailureReason)
+
+  // An ASAP order stores the moment it was placed as its requested time, so the only
+  // way to tell a scheduled order from an immediate one is that its time is meaningfully
+  // ahead of when it arrived. Anything inside the pickup window is "now".
+  const requestedAt = new Date(order.requestedTime).getTime()
+  const placedAt = new Date(order.createdAt).getTime()
+  const isScheduled = Number.isFinite(requestedAt) && requestedAt - placedAt > 5 * 60_000
 
   return (
     <>
@@ -99,7 +108,7 @@ export function OrderDetailPage() {
         actions={
           <>
             <StatusPill status={order.status} />
-            <Pill neutral>{serviceLabel(order.orderType)}</Pill>
+            {payment.attention && <Pill className="pill-warn">{payment.label}</Pill>}
           </>
         }
       />
@@ -217,15 +226,28 @@ export function OrderDetailPage() {
               </PanelBody>
             </Panel>
 
-            <Panel>
+            <Panel data-od-id="detail-payment">
               <PanelHead>
                 <h3>Payment</h3>
-                <Pill>{order.paymentMethod === "Cash" ? "Pay at counter" : "Paid online"}</Pill>
+                {/* The outcome, not the method. This said "Paid online" for every
+                    card order — including a declined one — because the payment
+                    status was never fetched. */}
+                <Pill className={payment.attention ? "pill-warn" : undefined}>{payment.label}</Pill>
               </PanelHead>
               <PanelBody>
                 <SumRow label="Subtotal" value={formatCurrency(order.subtotal)} />
                 <SumRow label="GST" value="included" />
                 <SumRow label="Total" value={formatCurrency(order.total)} total />
+                {payment.attention && (
+                  <p className="pay-warning" role="status">
+                    {payment.detail}
+                  </p>
+                )}
+                {!payment.attention && payment.detail && (
+                  <p className="meta" style={{ marginTop: 8 }}>
+                    {payment.detail}
+                  </p>
+                )}
               </PanelBody>
             </Panel>
           </div>
@@ -246,7 +268,14 @@ export function OrderDetailPage() {
                   </div>
                 </div>
                 <Kv>
-                  <KvRow label="Service" value={serviceLabel(order.orderType)} />
+                  <KvRow
+                    label={isScheduled ? "Wanted for" : "Time"}
+                    value={
+                      isScheduled
+                        ? formatDate(order.requestedTime, "time")
+                        : "As soon as possible"
+                    }
+                  />
                   <KvRow label="Email" value={order.customerEmail} />
                   <KvRow label="Placed" value={formatDate(order.createdAt, "long")} />
                 </Kv>

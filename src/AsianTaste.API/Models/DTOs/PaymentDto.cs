@@ -197,9 +197,4 @@ public class OrderPaymentDetailsDto
     /// <summary>External payment ID.</summary>
     public string? ExternalPaymentId { get; set; }
 
-    /// <summary>Lightspeed sync status.</summary>
-    public SyncStatus LightspeedSyncStatus { get; set; }
-
-    /// <summary>Lightspeed order ID.</summary>
-    public string? LightspeedOrderId { get; set; }
 }

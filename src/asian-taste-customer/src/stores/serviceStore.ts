@@ -1,36 +1,41 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { OrderType } from '@/types/menu';
-import { DEFAULT_SERVICE, SERVICES, type ServiceId } from '@/lib/site';
+import { DEFAULT_SERVICE, SERVICES, type ServiceId } from '@/lib/services';
 
 interface ServiceState {
-  /** Which service the customer is shopping for. */
+  /** Which service the customer is shopping for. Only pickup, for now. */
   service: ServiceId;
-  /** The order type the checkout API accepts. Only ever set for an orderable service. */
+  /** The order type the checkout API accepts. */
   orderType: () => OrderType;
   setService: (service: ServiceId) => void;
 }
 
 /**
- * Pickup, delivery or Uber Eats — chosen once and remembered.
+ * How the customer wants their food — remembered between visits.
  *
- * Only an orderable service can reach checkout, so `orderType` resolves to
- * Pickup for anything that is not delivery; that keeps a stale persisted value
- * from a future delivery flow from writing an order type the API cannot accept.
+ * There is one value today, and this store is kept rather than inlined for two
+ * reasons: a persisted value from an older build may name a service that no longer
+ * exists, and every screen that reads "the current service" should not each have to
+ * know that. When delivery is real, the model gains an entry here and the screens
+ * that already ask for the service keep working.
+ *
+ * `orderType` resolves to Pickup for anything the store does not recognise, so a
+ * stale persisted value cannot write an order type the API has no pipeline for.
  */
 export const useServiceStore = create<ServiceState>()(
   persist(
     (set, get) => ({
       service: DEFAULT_SERVICE,
-      orderType: () => (get().service === 'delivery' ? 'Delivery' : 'Pickup'),
+      orderType: () => (get().service === 'pickup' ? 'Pickup' : 'Pickup'),
       setService: (service) => set({ service }),
     }),
     {
       name: 'asian-taste-service',
-      version: 2,
-      // A persisted value from an older build, or one whose service has since
-      // stopped being orderable, would otherwise strand the cart on a service
-      // that cannot complete.
+      version: 3,
+      // A persisted value from an older build — including one of the services that
+      // were removed — would otherwise strand the cart on a service that cannot
+      // complete, which is exactly what the delivery option used to do.
       merge: (persisted, current) => {
         const saved = (persisted as Partial<ServiceState> | undefined)?.service;
         return {

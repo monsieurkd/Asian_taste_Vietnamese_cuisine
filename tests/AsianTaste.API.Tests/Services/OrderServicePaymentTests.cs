@@ -5,7 +5,6 @@ using AsianTaste.API.Models.Enums;
 using AsianTaste.API.Repositories;
 using AsianTaste.API.Services;
 using AsianTaste.API.Services.Email;
-using AsianTaste.API.Services.Lightspeed;
 using AsianTaste.API.Services.Payment.Interfaces;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -19,22 +18,24 @@ using DomainPaymentStatus = AsianTaste.API.Models.Enums.PaymentStatus;
 namespace AsianTaste.API.Tests.Services;
 
 /// <summary>
-/// Tests that order creation actually TAKES PAYMENT and PUSHES TO THE POS.
+/// Tests that order creation actually TAKES PAYMENT.
 ///
 /// Regression context, and the reason these exist at all:
 ///
-/// The services for both were fully built and registered in DI, but
-/// <c>OrderService.CreateOrderAsync</c> never called either one — it had
-/// `// TODO: Send to Lightspeed K-Series` and `// TODO: Process payment if Card`,
-/// then returned `PaymentDisplay = "Paid online"` for every card order regardless.
+/// The payment gateway was fully built and registered in DI, but
+/// <c>OrderService.CreateOrderAsync</c> never called it — it had
+/// `// TODO: Process payment if Card` and then returned
+/// `PaymentDisplay = "Paid online"` for every card order regardless.
 ///
-/// So a customer could pay and the kitchen would never see the order, and an order
-/// could be marked paid without a cent being charged. A test that only checked the
-/// response DTO would have passed: the response said "Paid online" the whole time.
-/// These tests assert on the COLLABORATORS — that the gateway was asked and the POS
-/// was told — because that is the property that was missing.
+/// So an order could be marked paid without a cent being charged. A test that only
+/// checked the response DTO would have passed: the response said "Paid online" the
+/// whole time. These tests assert on the COLLABORATOR — that the gateway was asked —
+/// because that is the property that was missing.
+///
+/// The POS half of this file is gone with the integration: the Lightspeed sync was
+/// retired, so there is no second collaborator to assert on.
 /// </summary>
-public class OrderServicePaymentAndPosTests
+public class OrderServicePaymentTests
 {
     // ── Collaborators ────────────────────────────────────────────────────────
 
@@ -84,48 +85,9 @@ public class OrderServicePaymentAndPosTests
         public bool VerifyWebhookSignature(string payload, string signature, string secret) => true;
     }
 
-    private sealed class RecordingLightspeed : ILightspeedOrderService
-    {
-        public int CreateOrderCallCount { get; private set; }
-        public Order? LastOrder { get; private set; }
-        public bool NextSuccess { get; set; } = true;
-        public int NextLightspeedOrderId { get; set; } = 4242;
-        public Exception? NextThrow { get; set; }
-
-        public Task<LightspeedOrderResult> CreateOrderAsync(Order order)
-        {
-            CreateOrderCallCount++;
-            LastOrder = order;
-
-            if (NextThrow is not null) throw NextThrow;
-
-            return Task.FromResult(new LightspeedOrderResult
-            {
-                Success = NextSuccess,
-                LightspeedOrderId = NextSuccess ? NextLightspeedOrderId : null,
-                ErrorMessage = NextSuccess ? null : "POS unreachable",
-            });
-        }
-
-        public Task<LightspeedOrderResult> UpdateOrderAsync(int lightspeedOrderId, LightspeedOrderUpdate update) =>
-            Task.FromResult(new LightspeedOrderResult { Success = true, LightspeedOrderId = lightspeedOrderId });
-
-        public Task<LightspeedOrder?> GetOrderAsync(int lightspeedOrderId) =>
-            Task.FromResult<LightspeedOrder?>(null);
-
-        public Task<bool> SyncOrderStatusAsync(int orderId, OrderStatus status) => Task.FromResult(true);
-
-        public Task<int> RetryFailedSyncsAsync() => Task.FromResult(0);
-
-        public Task<LightspeedSyncStats> GetSyncStatsAsync() =>
-            Task.FromResult(new LightspeedSyncStats());
-    }
-
     private sealed class RecordingOrderRepository : IOrderRepository
     {
         public List<Order> Updates { get; } = new();
-        public List<(int OrderId, string? LightspeedId, SyncStatus Status)> SyncUpdates { get; } = new();
-        public List<int> MarkedPending { get; } = new();
         public Order OrderToReturn { get; set; } = new();
 
         public Task<Order> CreateOrderAsync(CreateCheckoutOrderDto request, string orderNumber, CancellationToken cancellationToken = default)
@@ -152,37 +114,20 @@ public class OrderServicePaymentAndPosTests
             return Task.CompletedTask;
         }
 
-        public Task UpdateOrderSyncInfoAsync(int orderId, string? lightspeedOrderId, SyncStatus status, DateTime? syncedAt, string? errorMessage, CancellationToken cancellationToken = default)
-        {
-            SyncUpdates.Add((orderId, lightspeedOrderId, status));
-            return Task.CompletedTask;
-        }
-
-        public Task MarkOrderSyncPendingAsync(int orderId, CancellationToken cancellationToken = default)
-        {
-            MarkedPending.Add(orderId);
-            return Task.CompletedTask;
-        }
-
         // Remaining members exist only to satisfy the interface; the tests assert on
-        // UpdateOrderAsync, UpdateOrderSyncInfoAsync and MarkOrderSyncPendingAsync.
+        // UpdateOrderAsync.
         public Task<Order?> GetOrderByIdAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult<Order?>(null);
         public Task<Order?> GetOrderByNumberAsync(string orderNumber, CancellationToken cancellationToken = default) => Task.FromResult<Order?>(null);
         public Task UpdateOrderStatusAsync(int orderId, OrderStatus status, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task UpdateOrderLightspeedInfoAsync(int orderId, string thirdPartyReference, DateTime sentAt, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task MarkEmailConfirmationSentAsync(int orderId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<AdminOrderDetailDto?> GetAdminOrderDetailAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult<AdminOrderDetailDto?>(null);
         public Task<DashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default) => Task.FromResult(new DashboardSummaryDto());
-        public Task<DailyStatsDto> GetDailyStatsAsync(DateTime date, CancellationToken cancellationToken = default) => Task.FromResult(new DailyStatsDto());
         public Task<Order?> GetOrderByExternalPaymentIdAsync(string externalPaymentId, CancellationToken cancellationToken = default) => Task.FromResult<Order?>(null);
         public Task<Order?> GetOrderByPaymentIntentIdAsync(string paymentIntentId, CancellationToken cancellationToken = default) => Task.FromResult<Order?>(null);
-        public Task<Order?> GetOrderByLightspeedIdAsync(string lightspeedOrderId, CancellationToken cancellationToken = default) => Task.FromResult<Order?>(null);
         public Task LinkOrderToCustomerAsync(string orderNumber, int customerId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<List<Order>> GetOrdersByCustomerEmailAsync(string email, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
         public Task<List<OrderItem>> GetOrderItemsAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult(new List<OrderItem>());
-        public Task<List<Order>> GetPendingSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
-        public Task<List<Order>> GetFailedSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
-        public Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
+        public Task<List<AdminOrderListDto>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => Task.FromResult(new List<AdminOrderListDto>());
     }
 
     private sealed class StubCustomerRepository : ICustomerRepository
@@ -198,7 +143,6 @@ public class OrderServicePaymentAndPosTests
         public Task<bool> EmailExistsAsync(string normalizedEmail, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<string> GenerateCustomerNumberAsync(CancellationToken cancellationToken = default) => Task.FromResult("C-1");
         public Task UpdateLastOrderAtAsync(int customerId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<List<CustomerPaymentMethod>> GetPaymentMethodsAsync(int customerId, CancellationToken cancellationToken = default) => Task.FromResult(new List<CustomerPaymentMethod>());
     }
 
     private sealed class StubEmailService : IEmailService
@@ -238,7 +182,6 @@ public class OrderServicePaymentAndPosTests
     private sealed record Harness(
         OrderService Service,
         RecordingPaymentGateway Payment,
-        RecordingLightspeed Lightspeed,
         RecordingOrderRepository Orders,
         IOrderNotifier Notifier,
         RecordingOrderNotifier? Pushes);
@@ -268,7 +211,6 @@ public class OrderServicePaymentAndPosTests
     private static Harness CreateHarness(PaymentMethod method = PaymentMethod.Card, decimal total = 17.00m, string? paymentToken = "pi_confirmed_abc", IOrderNotifier? notifier = null)
     {
         var payment = new RecordingPaymentGateway();
-        var lightspeed = new RecordingLightspeed();
         notifier ??= new RecordingOrderNotifier();
         var orders = new RecordingOrderRepository
         {
@@ -295,13 +237,12 @@ public class OrderServicePaymentAndPosTests
             new StubEmailQueue(),
             new StubSettingsRepository(),
             payment,
-            lightspeed,
             // Records pushes instead of opening WebSockets, so these tests stay
-            // focused on payment and POS behaviour.
+            // focused on what order creation actually does.
             notifier,
             NullLogger<OrderService>.Instance);
 
-        return new Harness(service, payment, lightspeed, orders, notifier, notifier as RecordingOrderNotifier);
+        return new Harness(service, payment, orders, notifier, notifier as RecordingOrderNotifier);
     }
 
     private static CreateCheckoutOrderDto CardRequest(string? paymentToken = "pi_confirmed_abc") => new()
@@ -442,74 +383,6 @@ public class OrderServicePaymentAndPosTests
 
         Assert.Equal(0, h.Payment.AuthorizeCallCount);
         Assert.Equal("Pay on pickup", response.PaymentDisplay);
-    }
-
-    // ── POS ──────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Order_is_pushed_to_the_pos()
-    {
-        // The other half of the regression: the customer paid and the kitchen was
-        // never told.
-        var h = CreateHarness();
-
-        await h.Service.CreateOrderAsync(CardRequest());
-
-        Assert.Equal(1, h.Lightspeed.CreateOrderCallCount);
-        Assert.False(string.IsNullOrWhiteSpace(h.Lightspeed.LastOrder!.OrderNumber));
-        Assert.StartsWith("AT-", h.Lightspeed.LastOrder.OrderNumber);
-    }
-
-    [Fact]
-    public async Task A_successful_pos_push_records_the_lightspeed_order_id()
-    {
-        var h = CreateHarness();
-        h.Lightspeed.NextLightspeedOrderId = 9876;
-
-        await h.Service.CreateOrderAsync(CardRequest());
-
-        var sync = Assert.Single(h.Orders.SyncUpdates);
-        Assert.Equal(9876.ToString(), sync.LightspeedId);
-        Assert.Equal(SyncStatus.Synced, sync.Status);
-    }
-
-    [Fact]
-    public async Task A_failed_pos_push_is_queued_for_retry_and_does_not_fail_the_order()
-    {
-        // The customer has paid; a POS hiccup must not lose the order or throw.
-        var h = CreateHarness();
-        h.Lightspeed.NextSuccess = false;
-
-        var response = await h.Service.CreateOrderAsync(CardRequest());
-
-        Assert.Single(h.Orders.MarkedPending);
-        Assert.Empty(h.Orders.SyncUpdates);
-        Assert.StartsWith("AT-", response.OrderNumber); // the order still succeeded
-    }
-
-    [Fact]
-    public async Task A_pos_push_that_throws_is_still_queued_for_retry()
-    {
-        var h = CreateHarness();
-        h.Lightspeed.NextThrow = new TimeoutException("POS timed out");
-
-        var response = await h.Service.CreateOrderAsync(CardRequest());
-
-        Assert.Single(h.Orders.MarkedPending);
-        Assert.StartsWith("AT-", response.OrderNumber);
-    }
-
-    [Fact]
-    public async Task The_pos_push_happens_even_when_payment_failed()
-    {
-        // A declined card still leaves an order the counter may fulfil (the customer
-        // can pay cash on collection), so the kitchen must see it.
-        var h = CreateHarness();
-        h.Payment.NextSuccess = false;
-
-        await h.Service.CreateOrderAsync(CardRequest());
-
-        Assert.Equal(1, h.Lightspeed.CreateOrderCallCount);
     }
 
     // ── Admin dashboard push ─────────────────────────────────────────────────

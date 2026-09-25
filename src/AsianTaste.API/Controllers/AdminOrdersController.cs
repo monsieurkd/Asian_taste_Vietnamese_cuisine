@@ -44,7 +44,7 @@ public class AdminOrdersController : ControllerBase
     /// <response code="200">Returns list of orders.</response>
     /// <response code="401">Unauthorized - invalid or missing token.</response>
     [HttpGet]
-    [ProducesResponseType(typeof(List<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(List<AdminOrderListDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> GetAllOrders(
         [FromQuery] string? status,
@@ -120,30 +120,6 @@ public class AdminOrdersController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving dashboard summary");
             return StatusCode(500, new { error = "An error occurred while retrieving dashboard summary" });
-        }
-    }
-
-    /// <summary>
-    /// Gets daily statistics for a specific date.
-    /// </summary>
-    /// <param name="date">The date to get statistics for (format: YYYY-MM-DD). Defaults to today.</param>
-    /// <response code="200">Returns daily statistics.</response>
-    /// <response code="401">Unauthorized - invalid or missing token.</response>
-    [HttpGet("stats/daily")]
-    [ProducesResponseType(typeof(DailyStatsDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<DailyStatsDto>> GetDailyStats([FromQuery] DateTime? date = null)
-    {
-        try
-        {
-            var targetDate = date ?? DateTime.UtcNow.Date;
-            var stats = await _orderRepository.GetDailyStatsAsync(targetDate);
-            return Ok(stats);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving daily stats for date {Date}", date);
-            return StatusCode(500, new { error = "An error occurred while retrieving daily statistics" });
         }
     }
 

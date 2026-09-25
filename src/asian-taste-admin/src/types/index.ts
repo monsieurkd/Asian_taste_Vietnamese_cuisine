@@ -42,6 +42,22 @@ export type OrderType = "Pickup" | "DineIn"
 export type PaymentMethod = "Card" | "Cash"
 
 /**
+ * Payment status enum.
+ *
+ * Needed by the console to tell a declined card from a paid one. Inferring it from
+ * the method is what made every card order read as a sale.
+ */
+export type PaymentStatus =
+  | "Pending"
+  | "Processing"
+  | "Succeeded"
+  | "Failed"
+  | "Refunded"
+  | "PartiallyRefunded"
+  | "RequiresAction"
+  | "Canceled"
+
+/**
  * Order entity.
  */
 export interface Order {
@@ -54,12 +70,12 @@ export interface Order {
   requestedTime: string
   status: OrderStatus
   paymentMethod?: PaymentMethod
+  /** What happened to the money, or null when nothing was ever taken. */
+  paymentStatus?: PaymentStatus | null
   subtotal: number
-  tax: number
   total: number
   notes?: string
   createdAt: string
-  updatedAt?: string
 }
 
 /**
@@ -90,6 +106,12 @@ export interface OrderItemModifier {
  * Detailed order with items.
  */
 export interface OrderDetail extends Order {
+  paymentFailureReason?: string | null
+  /** Present on the detail endpoint only; the list omits the breakdown. */
+  tax?: number
+  paidAmount?: number | null
+  paidAt?: string | null
+  updatedAt?: string
   items: OrderItem[]
 }
 
@@ -117,18 +139,6 @@ export interface RecentOrder {
   total: number
   createdAt: string
   orderType: OrderType
-}
-
-/**
- * Daily statistics.
- */
-export interface DailyStats {
-  date: string
-  revenue: number
-  totalOrders: number
-  averageOrderValue: number
-  ordersByStatus: Record<string, number>
-  hourlyDistribution: Record<number, number>
 }
 
 /**

@@ -14,15 +14,4 @@ export const authApi = {
     return response.data
   },
 
-  /**
-   * Validate JWT token.
-   */
-  async validateToken(token: string): Promise<boolean> {
-    try {
-      const response = await apiClient.post("/auth/validate", { token })
-      return response.status === 200
-    } catch {
-      return false
-    }
-  },
 }

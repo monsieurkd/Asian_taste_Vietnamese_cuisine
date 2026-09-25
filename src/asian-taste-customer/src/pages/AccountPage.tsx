@@ -311,34 +311,6 @@ export function AccountPage() {
         ) : (
           <div className="flex flex-col gap-5">
             <Panel>
-              <PanelHead>
-                <h3>Saved cards</h3>
-              </PanelHead>
-              <PanelBody>
-                {profile?.paymentMethods && profile.paymentMethods.length > 0 ? (
-                  profile.paymentMethods.map((method) => (
-                    <div className="rowline" key={method.id}>
-                      <div className="rl-main">
-                        <strong>
-                          {method.cardBrand ?? 'Card'} •••• {method.cardLastFour ?? '****'}
-                        </strong>
-                        <span>
-                          Expires {method.expiryMonth}/{method.expiryYear}
-                        </span>
-                      </div>
-                      {method.isDefault && <span className="pill">Default</span>}
-                    </div>
-                  ))
-                ) : (
-                  <StateBlock
-                    icon={StateIcons.card}
-                    title="No saved cards"
-                    body="Saving a card at checkout is not available yet. For now your card is entered fresh each time — Stripe handles it, and the full number never reaches this site."
-                  />
-                )}
-              </PanelBody>
-            </Panel>
-            <Panel>
               <PanelBody>
                 <p className="helpline">
                   Payments are processed by Stripe. Your full card number never reaches this site —

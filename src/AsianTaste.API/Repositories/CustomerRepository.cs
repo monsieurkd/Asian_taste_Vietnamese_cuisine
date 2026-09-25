@@ -285,31 +285,4 @@ public class CustomerRepository : ICustomerRepository
 
         return await CreateAsync(customer, cancellationToken);
     }
-
-    public async Task<List<CustomerPaymentMethod>> GetPaymentMethodsAsync(int customerId, CancellationToken cancellationToken = default)
-    {
-        using var connection = _dbConnectionFactory.CreateConnection();
-        connection.Open();
-
-        const string sql = @"
-            SELECT id,
-                   customer_id as CustomerId,
-                   payment_method_token as PaymentMethodToken,
-                   card_last_four as CardLastFour,
-                   card_brand as CardBrand,
-                   expiry_month as ExpiryMonth,
-                   expiry_year as ExpiryYear,
-                   is_default as IsDefault,
-                   created_at as CreatedAt,
-                   is_active as IsActive
-            FROM customer_payment_methods
-            WHERE customer_id = @CustomerId
-              AND is_active = true
-            ORDER BY is_default DESC, created_at DESC";
-
-        var methods = await connection.QueryAsync<CustomerPaymentMethod>(
-            new CommandDefinition(sql, new { CustomerId = customerId }, cancellationToken: cancellationToken));
-
-        return methods.AsList();
-    }
 }

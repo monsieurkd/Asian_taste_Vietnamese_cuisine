@@ -13,9 +13,9 @@ namespace AsianTaste.API.Controllers;
 public class WebhookController : ControllerBase
 {
     private readonly ILogger<WebhookController> _logger;
-    private readonly IWebhookService _webhookService;
+    private readonly StripeWebhookService _webhookService;
 
-    public WebhookController(ILogger<WebhookController> logger, IWebhookService webhookService)
+    public WebhookController(ILogger<WebhookController> logger, StripeWebhookService webhookService)
     {
         _logger = logger;
         _webhookService = webhookService;
@@ -131,17 +131,7 @@ public class WebhookController : ControllerBase
         // Run the handler directly rather than signing and verifying a mock JSON
         // payload: Stripe's SDK deserializer rejects synthetic event JSON. The
         // signature-verification path is covered by unit tests and real deliveries.
-        if (_webhookService is not StripeWebhookService stripeService)
-        {
-            return Ok(new
-            {
-                message = "Webhook simulation is only available for the Stripe gateway",
-                eventType,
-                success = false,
-            });
-        }
-
-        var result = await stripeService.SimulateEventAsync(eventType, paymentIntentId, orderId, status);
+        var result = await _webhookService.SimulateEventAsync(eventType, paymentIntentId, orderId, status);
 
         return Ok(new
         {

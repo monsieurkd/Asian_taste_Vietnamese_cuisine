@@ -385,8 +385,6 @@ public class PaymentsController : ControllerBase
             PaidAmount = order.PaidAmount,
             PaidAt = order.PaidAt,
             ExternalPaymentId = order.ExternalPaymentId,
-            LightspeedSyncStatus = order.LightspeedSyncStatus,
-            LightspeedOrderId = order.LightspeedOrderId
         });
     }
 }

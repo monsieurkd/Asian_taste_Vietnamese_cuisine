@@ -120,7 +120,7 @@ public class OrderQueryColumnMappingTests
     {
         // GetOrderByIdAsync and GetOrderByNumberAsync were fixed before this and
         // must not regress while attention is on the list query. They are the ones
-        // that feed the POS payload and the order detail page.
+        // that feed the order detail page and the confirmation email.
         var source = OrderRepositorySource();
 
         foreach (var signature in new[] { "GetOrderByIdAsync(", "GetOrderByNumberAsync(" })
@@ -133,5 +133,71 @@ public class OrderQueryColumnMappingTests
                 Regex.IsMatch(body, @"\bcustomer_name\s+as\s+CustomerName\b", RegexOptions.IgnoreCase),
                 $"{signature} lost its 'customer_name as CustomerName' alias.");
         }
+    }
+
+    [Fact]
+    public void The_admin_ticket_aliases_the_columns_it_shows()
+    {
+        // The kitchen's ticket. This query aliased NOTHING, and every property it
+        // maps is a multi-word name, so the ticket page rendered a blank order
+        // number, a blank customer, a blank status and a blank service — while the
+        // page itself looked fine, which is what made it read as missing data.
+        var body = MethodBody(OrderRepositorySource(), "GetAdminOrderDetailAsync(");
+
+        foreach (var (column, property) in new[]
+                 {
+                     ("order_number", "OrderNumber"),
+                     ("customer_name", "CustomerName"),
+                     ("customer_phone", "CustomerPhone"),
+                     ("customer_email", "CustomerEmail"),
+                     ("requested_time", "RequestedTime"),
+                     ("payment_status::text", "PaymentStatus"),
+                     ("paid_amount", "PaidAmount"),
+                     ("paid_at", "PaidAt"),
+                     ("payment_failure_reason", "PaymentFailureReason"),
+                     ("created_at", "CreatedAt"),
+                 })
+        {
+            var pattern = $@"\b{column}\s+as\s+{property}\b";
+            Assert.True(
+                Regex.IsMatch(body, pattern, RegexOptions.IgnoreCase),
+                $"GetAdminOrderDetailAsync selects '{column}' without 'as {property}', so the kitchen's " +
+                $"ticket shows nothing for it. Dapper maps by exact name and underscore matching is off.");
+        }
+    }
+
+    [Fact]
+    public void The_admin_ticket_aliases_both_id_columns_in_its_item_join()
+    {
+        // order_items and order_item_modifiers are both joined and both have an `id`.
+        // Unaliased, the second one silently overrides the first, so an item row's
+        // own id becomes its modifier's id.
+        var body = MethodBody(OrderRepositorySource(), "GetAdminOrderDetailAsync(");
+
+        Assert.True(
+            Regex.IsMatch(body, @"\boi\.id\s+as\s+\w+", RegexOptions.IgnoreCase),
+            "GetAdminOrderDetailAsync selects oi.id without an alias, so it collides with oim.id.");
+        Assert.True(
+            Regex.IsMatch(body, @"\boim\.id\s+as\s+\w+", RegexOptions.IgnoreCase),
+            "GetAdminOrderDetailAsync selects oim.id without an alias, so it collides with oi.id.");
+    }
+
+    [Fact]
+    public void The_admin_order_list_carries_the_payment_state()
+    {
+        // The console has to be able to tell a declined card from a paid one. Without
+        // payment_status in the list's projection the only signal left is the payment
+        // METHOD, which says "card" for a charge that never succeeded.
+        var body = MethodBody(OrderRepositorySource(), "GetAllOrdersAsync(");
+
+        Assert.True(
+            Regex.IsMatch(body, @"\bpayment_status::text\s+as\s+PaymentStatus\b", RegexOptions.IgnoreCase),
+            "GetAllOrdersAsync does not select payment_status, so the console cannot tell a declined " +
+            "card from a paid one.");
+
+        Assert.True(
+            Regex.IsMatch(body, @"\bQueryAsync<AdminOrderListDto>", RegexOptions.IgnoreCase),
+            "GetAllOrdersAsync must map onto AdminOrderListDto rather than the Order entity: the entity " +
+            "publishes every column the table has, including the ones the console never shows.");
     }
 }

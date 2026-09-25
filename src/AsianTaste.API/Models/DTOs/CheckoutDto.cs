@@ -151,18 +151,3 @@ public class CustomerResponseDto
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
 }
-
-/// <summary>
-/// Response DTO for order item in checkout context.
-/// </summary>
-public class OrderItemResponseDto
-{
-    public int Id { get; set; }
-    public int MenuItemId { get; set; }
-    public string MenuItemName { get; set; } = string.Empty;
-    public int Quantity { get; set; }
-    public decimal UnitPrice { get; set; }
-    public decimal TotalPrice { get; set; }
-    public string? SpecialInstructions { get; set; }
-    public List<OrderItemModifierDto> Modifiers { get; set; } = new();
-}

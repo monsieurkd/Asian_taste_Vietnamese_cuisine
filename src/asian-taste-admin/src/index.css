@@ -801,6 +801,31 @@
     padding: 8px 14px;
     font-size: 13px;
   }
+  /* The two things that change what the kitchen should do with a ticket: a bag that
+     must not go out because the charge failed, and food wanted later rather than now.
+     Rendered above the customer's name so a glance down a column catches them
+     without reading a single word of the rest. */
+  .ticket-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ticket-flag {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+  .ticket-flag.flag-warn {
+    background-color: color-mix(in oklch, var(--color-deal) 16%, transparent);
+    color: var(--color-deal);
+  }
+  .ticket-flag.flag-time {
+    background-color: var(--color-gold-soft);
+    color: color-mix(in oklch, var(--color-fg) 78%, var(--color-gold));
+  }
   .col .ticket:last-child {
     margin-bottom: 0;
   }
@@ -1190,6 +1215,27 @@
   .status-cancelled {
     background-color: color-mix(in oklch, var(--color-deal) 14%, transparent);
     color: var(--color-deal);
+  }
+
+  /* Money that has not been taken. Deliberately the one loud pill on the screen:
+     a card order whose charge was declined must not look like every other order
+     while the customer is standing at the counter. Uses the same deal red as
+     cancelled, because both mean "this order cannot simply go out". */
+  .pill-warn {
+    background-color: color-mix(in oklch, var(--color-deal) 16%, transparent);
+    color: var(--color-deal);
+    border-color: color-mix(in oklch, var(--color-deal) 34%, transparent);
+  }
+  .pay-warning {
+    margin: 10px 0 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm, 6px);
+    background-color: color-mix(in oklch, var(--color-deal) 9%, transparent);
+    border-left: 3px solid var(--color-deal);
+    color: color-mix(in oklch, var(--color-deal) 80%, var(--color-fg));
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
   }
 
   .state-block {

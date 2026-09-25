@@ -20,6 +20,7 @@ only, and `docs/TODO.md` records what is outstanding and where each item came fr
 | Customer app | `src/asian-taste-customer` | React 19 + Vite + Zustand, `:5173` |
 | Admin app | `src/asian-taste-admin` | React 19 + Vite + React Query, `:5174` |
 | Tests | `tests/AsianTaste.API.Tests` (xUnit) | solution `AsianTaste.sln` = API + tests only |
+| Shared FE code | `src/shared` | `@shared/*` alias in both apps: `lib/orderStatus.ts` is the ONE status vocabulary |
 
 Production: customer app on Vercel, API on Fly (`asian-taste-api.fly.dev`, region
 `syd`), DB on Neon (`ap-southeast-2`). Pushes to `main` → CI green → deploy.
@@ -27,7 +28,7 @@ Production: customer app on Vercel, API on Fly (`asian-taste-api.fly.dev`, regio
 ## Commands
 
 ```bash
-dotnet test                                     # API suite; floor is .test-baseline (117)
+dotnet test                                     # API suite; floor is .test-baseline (170)
 ASPNETCORE_ENVIRONMENT=Development dotnet run   # from src/AsianTaste.API, must be on :5070
                                                 # both apps' Vite dev proxy points at :5070
                                                 # the env var is required locally — without it
@@ -72,14 +73,12 @@ explained commit.
   (`IOrderRepository`, …). `OrderRepository` is ~1k lines and does its own
   snake_case → PascalCase mapping; that mapping breaking is a repeat offender.
 - **`Services/`** — business logic. `Payment/` (Stripe + a mock gateway),
-  `Lightspeed/`, `Webhooks/`, `Email/`, `JwtService`, `PasswordHasher`, `EncryptionService`.
+  `Webhooks/`, `Email/`, `JwtService`, `PasswordHasher`, `EncryptionService`.
 - **`Controllers/`** — thin, `[ApiController]` + `[Route("api/[controller]")]`, XML-doc'd
   for Swagger, delegating to a service. `Admin*` controllers are JWT-protected.
 - **`WebSockets/`** — pushes live orders to the admin dashboard (the kitchen's view).
-- **`OrderSyncBackgroundService`** — POS sync queue/retry. **Never fails the order**:
-  the customer has paid, so a POS failure queues and retries.
 - **`HealthChecks`** — `/healthz` is liveness and is the only one wired to Fly;
-  `/health/db` and `/health/pos` report without killing the process.
+  `/health/db` reports without killing the process.
 
 ## Conventions
 
@@ -93,6 +92,14 @@ explained commit.
 - **Secrets never go in committed files.** `dotnet user-secrets` locally, Fly/Vercel env
   vars in production; local copies in gitignored `.secrets.local`. Never paste a live
   credential into a chat. `VITE_*` values are public by design (they ship in the bundle).
+- **The order stages are New → Cooking → Ready → Collected**, defined once in
+  `src/shared/lib/orderStatus.ts` and imported by both apps. The API's values are
+  unchanged (`Pending`/`Confirmed`/`Ready`/`Completed`); `apiStatusValue` is the only
+  translation. Do not add a second list — the storefront had one and it made a
+  collected order read as "waiting on the counter".
+- **The storefront is pickup only.** `ServiceId` is `'pickup'`; Uber Eats is a footer
+  link. Restoring delivery is a model change plus a delivery-fee field the API does
+  not have (see `docs/TODO.md` §13.3), not a UI toggle.
 - Customer app reads **`VITE_API_BASE_URL`** (admin app reads `VITE_API_URL`; the
   customer client accepts either but warns). The value must **include `/api`**, and it is
   baked in at build time — changing it in a dashboard does nothing until the next deploy.
@@ -113,8 +120,24 @@ explained commit.
 - Apple Pay needs a registered domain; test and live are separate registrations. It
   cannot be verified in Chrome/on localhost — a green headless UI run proves nothing.
 - The `/api/dev/db/*` endpoints are Development-only and must 404 in production.
-- Refunds, order-number search, menu editing in the UI, and automated DB backups are
-  **not built** — see `docs/TODO.md` §9 before assuming they exist.
+- Refunds (the endpoint works; no admin button), menu editing in the UI, saved cards,
+  and automated DB backups are **not built** — see `docs/TODO.md` §9/§13 before
+  assuming they exist. Saved cards are *removed*, not merely unbuilt: nothing writes
+  `customer_payment_methods`, so finishing them means adding a write path.
+- **Reported bugs are usually mapping bugs.** Dapper maps columns by exact name and
+  underscore matching is OFF in this repo, so a query that forgets `as PropertyName`
+  returns empty strings and 0s, not an error — the screen renders and reads as "no
+  data". Every query in `OrderRepository.cs` aliases for this reason, and
+  `OrderQueryColumnMappingTests` pins the important ones. Check the alias before
+  believing the data.
+- **"Today" is the restaurant's today.** `Australia/Adelaide`, so a UTC day boundary
+  files the whole evening service under tomorrow. Use `GetLocalDayStartUtcAsync`.
+- **Never infer payment from the payment METHOD.** `payment_status` is the fact; a
+  declined card is the common case the console must show. `readPayment` (admin
+  `src/lib/payment.ts`) is the one place that decides how money is described.
+- **Lightspeed is retired** (2026-09-25): the code is gone, the database tables and
+  their migrations are NOT. Do not add new code against `lightspeed_*` columns
+  without reading `docs/TODO.md` §7 first.
 - **`scripts/swarm/` is an autonomous build loop** that can merge to `main` unattended
   (which releases to production). It is bounded and interlocked — it snapshots
   `.test-baseline` and refuses to merge if the floor dropped, treats

@@ -5,7 +5,8 @@ import { checkoutApi } from '@/api/checkoutApi';
 import { useCheckoutStore } from '@/stores/checkoutStore';
 import { useCartStore } from '@/stores/cartStore';
 import { useServiceStore } from '@/stores/serviceStore';
-import { SERVICES, SITE, money } from '@/lib/site';
+import { SERVICES } from '@/lib/services';
+import { SITE, money } from '@/lib/site';
 import type { OrderDetailResponse } from '@/types/menu';
 import { isCancelled, STAGES, stageIndex } from '@/lib/orderLifecycle';
 import { Panel, PanelBody, PanelHead, RowLine, SumRow, Fact, Facts } from '@/components/ui/Panel';
@@ -202,6 +203,10 @@ export function ConfirmationPage() {
   const current = stageIndex(order.status);
   const cancelled = isCancelled(order.status);
   const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
+  // A card order only reads as paid once the API says a charge was captured. This
+  // screen said "Total paid" and "Paid" for every order, which on a declined card
+  // told the customer their money had gone when it had not.
+  const paid = order.paymentStatus === 'Succeeded';
 
   return (
     <>
@@ -224,7 +229,11 @@ export function ConfirmationPage() {
             <Fact label="Order number" value={order.orderNumber} />
             <Fact label="Service" value={meta.label} />
             <Fact label="Ready" value={countdown} />
-            <Fact label="Total paid" value={money(order.total)} />
+            {paid ? (
+              <Fact label="Total paid" value={money(order.paidAmount ?? order.total)} />
+            ) : (
+              <Fact label="Total to pay" value={money(order.total)} />
+            )}
           </Facts>
         </div>
       </section>
@@ -291,13 +300,27 @@ export function ConfirmationPage() {
                   <RowLine
                     key={item.id}
                     main={`${item.quantity} × ${item.menuItemName}`}
-                    sub={item.specialInstructions}
+                    sub={
+                      item.modifiers.length
+                        ? item.modifiers.map((m) => m.modifierName).join(' · ')
+                        : item.specialInstructions
+                    }
                     value={money(item.totalPrice)}
                   />
                 ))}
                 <div style={{ marginTop: 10 }}>
-                  <SumRow label="Paid" value={money(order.total)} total />
+                  <SumRow
+                    label={paid ? 'Paid' : 'Pay at the counter'}
+                    value={money(order.total)}
+                    total
+                  />
                 </div>
+                {!paid && !cancelled && (
+                  <p className="meta" style={{ marginTop: 10 }}>
+                    Nothing was charged online. Bring a card or cash to the counter when you
+                    collect.
+                  </p>
+                )}
               </PanelBody>
             </Panel>
           </div>
@@ -310,12 +333,8 @@ export function ConfirmationPage() {
                     <path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z" />
                     <circle cx="12" cy="10" r="2.6" />
                   </svg>
-                  <span className="factline-k">
-                    {service === 'delivery' ? 'Delivering to' : 'Pickup from'}
-                  </span>
-                  <span className="factline-v">
-                    {service === 'delivery' ? 'Your saved address' : SITE.addressLine}
-                  </span>
+                  <span className="factline-k">Pickup from</span>
+                  <span className="factline-v">{SITE.addressLine}</span>
                 </p>
                 <p className="factline" style={{ marginTop: 10 }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

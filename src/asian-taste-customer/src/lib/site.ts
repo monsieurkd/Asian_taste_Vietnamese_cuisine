@@ -124,67 +124,8 @@ export function prettyTime(value: string): string {
 }
 
 /* ─── services ──────────────────────────────────────────────────────────────
-   v1 is pickup only. Delivery is offered online but is subject to availability
-   and never completes a checkout yet — the fulfilment pipeline is not built, and
-   a button that took an order the shop cannot serve would be worse than no
-   button. Uber Eats is a link out, not an order path here. */
-
-export type ServiceId = 'pickup' | 'delivery' | 'ubereats';
-
-export interface ServiceMeta {
-  id: ServiceId;
-  label: string;
-  /** What this choice means, shown under the control. */
-  note: string;
-  /** Minutes for the ETA copy. */
-  etaMinutes: number;
-  etaLabel: string;
-  /** True only for the service that can complete a checkout today. */
-  orderable: boolean;
-  /** Shown as a caveat next to the label. */
-  caveat?: string;
-  /** External services hand off rather than continue to checkout. */
-  external?: string;
-  /** Icon path data, so the control carries a mark rather than only words. */
-  icon: 'bag' | 'car' | 'scooter';
-}
-
-export const SERVICES: Record<ServiceId, ServiceMeta> = {
-  pickup: {
-    id: 'pickup',
-    label: 'Pickup',
-    note: 'Ready to collect at 329 Henley Beach Rd',
-    etaMinutes: 15,
-    etaLabel: '15–20 min',
-    orderable: true,
-    icon: 'bag',
-  },
-  delivery: {
-    id: 'delivery',
-    label: 'Delivery',
-    note: 'Delivered by our own driver within range',
-    etaMinutes: 40,
-    etaLabel: '35–45 min',
-    orderable: false,
-    caveat: 'Subject to availability · additional charge',
-    icon: 'car',
-  },
-  ubereats: {
-    id: 'ubereats',
-    label: 'Uber Eats',
-    note: 'Order through Uber Eats',
-    etaMinutes: 35,
-    etaLabel: '35–45 min',
-    orderable: false,
-    external: SITE.uberEatsUrl,
-    icon: 'scooter',
-  },
-};
-
-/** Pickup is the default and the first option: it is the service v1 can fulfil. */
-export const SERVICE_ORDER: ServiceId[] = ['pickup', 'delivery', 'ubereats'];
-
-export const DEFAULT_SERVICE: ServiceId = 'pickup';
+   The service model lives in `./services` — v1 is pickup only, and the reasoning
+   for dropping the delivery and Uber Eats options from it is recorded there. */
 
 /** Currency formatting for every price in the app. */
 export function money(value: number): string {

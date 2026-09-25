@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCartStore } from '@/stores/cartStore';
 import { useServiceStore } from '@/stores/serviceStore';
-import { SERVICES, money } from '@/lib/site';
+import { SERVICES } from '@/lib/services';
+import { money } from '@/lib/site';
 import { SumRow } from '@/components/ui/Panel';
 import { focusableIn } from '@/lib/focusable';
 
@@ -140,7 +141,8 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                   {line.modifiers.length > 0 && (
                     <div className="ci-note">{line.modifiers.map((m) => m.name).join(' · ')}</div>
                   )}
-                  {line.specialInstructions && <div className="ci-note">Note: {line.specialInstructions}</div>}
+                  {line.choicesSummary && <div className="ci-choices">{line.choicesSummary}</div>}
+                  {line.note && <div className="ci-note">Note: {line.note}</div>}
                 </div>
                 <div className="ci-price num">{money(line.basePrice * line.quantity)}</div>
                 <div className="cart-controls">
@@ -182,15 +184,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
 
           <p className="fulfil">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              {service === 'delivery' ? (
-                <>
-                  <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z" />
-                  <circle cx="7" cy="18" r="1.6" />
-                  <circle cx="17" cy="18" r="1.6" />
-                </>
-              ) : (
-                <path d="M6 8h12l-1 12H7zM9 8V6a3 3 0 0 1 6 0v2" />
-              )}
+              <path d="M6 8h12l-1 12H7zM9 8V6a3 3 0 0 1 6 0v2" />
             </svg>
             {meta.note}
           </p>

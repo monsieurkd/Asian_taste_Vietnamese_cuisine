@@ -446,18 +446,11 @@ public class StripeWebhookServiceTests
         public Task MarkEmailConfirmationSentAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Order> CreateOrderAsync(Models.DTOs.CreateCheckoutOrderDto request, string orderNumber, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Order?> GetOrderByNumberAsync(string orderNumber, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task UpdateOrderLightspeedInfoAsync(int orderId, string thirdPartyReference, DateTime sentAt, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<List<Order>> GetOrdersByCustomerEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<List<Order>> GetPendingSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<List<Order>> GetFailedSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task UpdateOrderSyncInfoAsync(int orderId, string? lightspeedOrderId, SyncStatus status, DateTime? syncedAt, string? errorMessage, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task MarkOrderSyncPendingAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<Models.DTOs.AdminOrderListDto>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Models.DTOs.AdminOrderDetailDto?> GetAdminOrderDetailAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Models.DTOs.DashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<Models.DTOs.DailyStatsDto> GetDailyStatsAsync(DateTime date, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Order?> GetOrderByExternalPaymentIdAsync(string externalPaymentId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<Order?> GetOrderByLightspeedIdAsync(string lightspeedOrderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task LinkOrderToCustomerAsync(string orderNumber, int customerId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 
@@ -506,18 +499,11 @@ public class StripeWebhookServiceTests
         // --- Unused members for these tests ---
         public Task<Order> CreateOrderAsync(Models.DTOs.CreateCheckoutOrderDto request, string orderNumber, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Order?> GetOrderByNumberAsync(string orderNumber, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task UpdateOrderLightspeedInfoAsync(int orderId, string thirdPartyReference, DateTime sentAt, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<List<Order>> GetOrdersByCustomerEmailAsync(string email, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<List<Order>> GetPendingSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<List<Order>> GetFailedSyncOrdersAsync(int limit, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task UpdateOrderSyncInfoAsync(int orderId, string? lightspeedOrderId, SyncStatus status, DateTime? syncedAt, string? errorMessage, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task MarkOrderSyncPendingAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<List<Order>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<Models.DTOs.AdminOrderListDto>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Models.DTOs.AdminOrderDetailDto?> GetAdminOrderDetailAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Models.DTOs.DashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<Models.DTOs.DailyStatsDto> GetDailyStatsAsync(DateTime date, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Order?> GetOrderByExternalPaymentIdAsync(string externalPaymentId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<Order?> GetOrderByLightspeedIdAsync(string lightspeedOrderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task LinkOrderToCustomerAsync(string orderNumber, int customerId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 }

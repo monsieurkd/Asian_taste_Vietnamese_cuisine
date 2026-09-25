@@ -414,8 +414,7 @@ export function MenuPage() {
               </li>
             </ul>
             <p className="helpline" style={{ marginTop: 24 }} data-service={service}>
-              Ordering for {service === 'delivery' ? 'delivery' : 'pickup'}? Service is set above and
-              follows you through checkout.
+              Collection only for now, and it follows you through checkout.
             </p>
           </div>
           <div className="story-media">

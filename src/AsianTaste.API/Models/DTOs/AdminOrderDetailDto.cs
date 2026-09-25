@@ -14,6 +14,24 @@ public class AdminOrderDetailDto
     public DateTime RequestedTime { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? PaymentMethod { get; set; }
+
+    // What happened to the money, as opposed to what was attempted.
+    //
+    // The detail screen used to print "Paid online" for every order that was not
+    // Cash, because these fields were not selected at all — so a declined card read
+    // as a completed sale, and the kitchen had no way to tell. The truth has to come
+    // from the row; it cannot be inferred from the payment method.
+    public string? PaymentStatus { get; set; }
+
+    /// <summary>Amount actually captured, which is null until a charge succeeds.</summary>
+    public decimal? PaidAmount { get; set; }
+
+    /// <summary>When the charge was captured.</summary>
+    public DateTime? PaidAt { get; set; }
+
+    /// <summary>Why a charge failed, when one did — the counter staff's next question.</summary>
+    public string? PaymentFailureReason { get; set; }
+
     public decimal Subtotal { get; set; }
     public decimal Tax { get; set; }
     public decimal Total { get; set; }

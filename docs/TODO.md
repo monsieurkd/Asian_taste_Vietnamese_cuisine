@@ -6,8 +6,15 @@ each item unblocks the next. Every item says what I need from you, or which
 decision I've made for now and how to change it.
 
 **Where things stand:** the API, database, customer site and admin dashboard are
-live. **v1 is card + Apple Pay, pickup only** — Lightspeed is deferred and does
-not interfere. The design set has been rebuilt into both front-ends (§11).
+live. **v1 is card + Apple Pay, pickup only** — and the storefront now offers only
+pickup, so nothing can be ordered that the shop cannot serve (§13). The design set
+has been rebuilt into both front-ends (§11).
+
+On 2026-09-25 the order workflow was taken end to end — how the stages are named,
+what each screen says about payment and timing, and what data a screen may show —
+and the codebase was cleaned around it. **§13 is the record of what changed and
+which decisions it implements.** Two long-standing promises were kept on the way:
+the kitchen ticket now shows the real payment state and the time an order is wanted.
 
 Five items from §9 were closed on 2026-09-20 without needing you (refund
 recording, order-number search, the silently-ignored `SavePaymentMethod`, order
@@ -22,9 +29,8 @@ rate limiting, and a backup script). What that work left open is in §9's
 | **3** | Buy a domain (cheap path in §3) | ~$15/yr | The only thing between you and Apple Pay. A `*.vercel.app` host cannot be registered |
 | **4** | Switch Stripe to live, using the checklist | ~15 min + ~50¢ | Prove it works with one real order, then refund it |
 | **6** | Decide admin-dashboard exposure | a decision | It is a public URL with a login page |
-| **7** | Nudge the owner about Lightspeed | one message | A week of silence. Draft message in item 7 — nothing is blocked either way |
 | **12** | Try Paseo from your phone | ~5 min | Free; your laptop is the sandbox |
-| **D1–D4** | Four decisions in §9 | a decision each | Backups, the order rate limit, refunds in the UI, and saved cards. All have a working default, so nothing is blocked |
+| **D1–D3** | Three decisions in §9 | a decision each | Backups, the order rate limit and refunds in the UI. All have a working default, so nothing is blocked. **D4 (saved cards) was settled on 2026-09-25: removed** — see §13 |
 
 **Settled on 2026-09-16** (was four open questions): phone, hours, delivery and the
 cash option are all answered and applied — §10.
@@ -356,27 +362,28 @@ no app install, no POS API. Set the browser to remember the session.
 
 ---
 
-## 7. Lightspeed POS — deferred until you talk to the owner
+## 7. Lightspeed POS — retired on 2026-09-25, the tables kept
 
-**Where this stands:** the integration is written, tested and deployed. Feeding it
-a real order is the only step left, and it's blocked on a conversation rather than
-on code.
+**Where this stands:** the integration's **code is gone**. It was written and
+deployed but never configured, so it had no producer and no consumer: a full service
+layer, a background retry host, a webhook service, an OAuth flow, two dev endpoints,
+`/health/pos` and a deployment-health check — all sitting in the DI graph doing
+nothing, with a POS push in the order-creation path that always failed and queued.
 
-**Your decision for now:** a **tablet running the admin dashboard**, alongside
-Uber Eats, where the restaurant manages orders and sees which are prepaid. Cash
-and pay-in-store happen in Lightspeed, and the Lightspeed API gets configured
-later once you know what's available.
+The **database tables and migrations stay**, deliberately. A shipped migration cannot
+be un-applied, the tables hold real rows, and dropping them would be a destructive
+change with nothing to gain.
 
-That's a sound choice and it means **nothing blocks the restaurant going live**.
-The admin dashboard is the kitchen's view; the POS push simply stays queued.
+**Your decision, unchanged:** a **tablet running the admin dashboard**, alongside Uber
+Eats, where the restaurant manages orders and sees which are prepaid. Cash and
+pay-in-store happen in Lightspeed. Nothing blocks the restaurant going live, which
+has been true since v1.
 
-**What that implies:**
-
-- The POS push keeps failing and queueing, which is expected and harmless. Orders
-  still reach the kitchen via the dashboard. `lightspeed_sync_status = Failed` on
-  older orders is the retrier giving up, not a broken order.
-- Nothing needs building for the tablet yet — the admin app just has to be
-  *reachable* (item in "not yet done" below).
+**To bring it back if the owner ever says yes:** it is a rebuild from
+`docs/research/lightspeed/PLAN.md` rather than a flag, because the code is not there
+any more — and this time it should start from what the POS needs, not from what the
+API happens to expose. The order flow no longer has a POS hook at all, so nothing is
+half-wired in the meantime.
 - When credentials do arrive, orders queued in the meantime can be requeued.
 
 **What to ask the owner — full detail in `docs/research/lightspeed/PLAN.md`.**
@@ -663,7 +670,11 @@ Tailwind drops an unknown utility silently, so any survivor would render nothing
 rather than erroring. Headings are Plus Jakarta Sans, body is Manrope — Playfair
 is retired.
 
-### Verified (commands that actually ran)
+### Verified (commands that actually ran, on 2026-09-18)
+
+Kept as a record of that change, not as the current state — the suite has moved on
+(it is 170 API tests plus 93 customer and 61 admin front-end tests as of §13), and
+the commands to run today are under "Verifying anything" at the end of this file.
 
 ```bash
 cd src/asian-taste-customer && npm run build && npm run lint && npm test   # all pass
@@ -826,7 +837,7 @@ orders had been sitting in that state for hours.
    would emit ~2,880 identical lines a day and bury real messages. It now fires
    only when the count **changes** — a newly stuck order still announces itself,
    and clearing the backlog is confirmed instead of silent.
-3. **`/health/pos` reports it** without failing anything, since a stuck POS order
+3. **`/health/pos` reported it** without failing anything, since a stuck POS order
    means the kitchen should use the dashboard, not that the site is down.
 
 **Verified in production:** the last warning was at `10:25:47`; it's now `10:32:41`
@@ -912,11 +923,149 @@ which is why migration 13 has dedupe guards). Remove the container afterwards.
 ## Verifying anything
 
 ```bash
-./scripts/check-deployment-health.sh    # is production working? (includes POS backlog)
-dotnet test                             # 117 tests
+./scripts/check-deployment-health.sh    # is production working?
+dotnet test                             # 170 tests (the floor lives in .test-baseline)
 fly logs -a asian-taste-api             # what the API is doing
-curl -s https://asian-taste-api.fly.dev/health/pos   # any orders stuck on POS sync?
+curl -s https://asian-taste-api.fly.dev/healthz      # liveness
+curl -s https://asian-taste-api.fly.dev/health/db    # can it reach the database?
+
+# The three guardrails, run locally before pushing:
+./scripts/check-test-wiring.sh          # can every tracked test file run?
+./scripts/check-test-health.sh          # did the suite really run, and mean something?
+./scripts/check-ci-integrity.sh --static-only   # are the guardrails still armed?
+
+# Front-ends (from each app directory):
+npm run build && npm run lint && npm test
 ```
 
 `docs/ARCHITECTURE.md` explains how all the pieces fit together.
 `docs/research/` holds the Apple Pay, CI timing and Paseo write-ups.
+
+---
+
+## 13. The order workflow, and the cleanup around it — 2026-09-25
+
+The brief was "clean the repo, and fix the UI/UX and the backend so the order flow
+is smooth", with the order workflow as the part that matters most. That is what this
+section records: the decisions taken, what changed, and what is deliberately still
+open. §10 and §11 are the older scope records and are unchanged.
+
+### The decisions this work implemented
+
+| Decision | Answer | Where it shows |
+|---|---|---|
+| **The stage vocabulary** | One set of stages, the shop's own words: **New → Cooking → Ready → Collected** | Both front-ends, one module (§13.1) |
+| **What a ticket must carry** | The real payment state, and the time an order is wanted | Console board, order list and ticket (§13.2) |
+| **Delivery** | **Pickup only in the UI.** Uber Eats stays a link in the footer | Storefront (§13.3) |
+| **Lightspeed** | Retire the code and the endpoints, **keep the tables** | API, DI, health checks, deploy script (§13.4) |
+| **Cleanup depth** | Also delete endpoints nothing calls, plus the deferred scaffold | §13.4 |
+| **How it lands** | Merge to `main` and deploy once everything is green | CI → Fly (API) + Vercel (apps) |
+
+### 13.1 One vocabulary for the order journey
+
+`src/shared/lib/orderStatus.ts` is now the only place the stages are named, and both
+apps import it. The words are the shop's, not the API's:
+
+    placed → New       confirmed → Cooking      ready → Ready      collected → Collected
+
+- **"Confirmed" was the problem.** The kitchen board's column header already said
+  "Cooking" while the pill on the same card said "Confirmed", so one screen carried
+  two names for one state — and neither word tells a cook what to do next.
+- **The keys and the API values did not change.** `apiStatusValue` still sends
+  `Pending`/`Confirmed`/`Ready`/`Completed`, and `statusKey` still folds `Preparing`
+  onto the cooking stage. This is a vocabulary change, not a schema change.
+- **The storefront had its own second list** (`lib/orderLifecycle.ts`, three stages)
+  in which `Completed` read as **"Ready"**. A collected order therefore still read as
+  waiting on the counter to the customer. That list is now derived from the shared
+  one, so the two apps cannot drift apart again.
+- **The customer's tracker gained the handover stage** (`Collected`) for the same
+  reason, and the board's columns are built from `OPEN_STATUSES` rather than a
+  hand-written copy.
+
+### 13.2 What a screen may now say
+
+Four defects were found in the order path while doing this. Each is fixed, and each
+has a test that fails without the fix.
+
+1. **The kitchen ticket showed nothing.** `GetAdminOrderDetailAsync` selected its
+   columns with **no aliases at all**, and Dapper maps by exact name with underscore
+   matching off — so every multi-word property (order number, customer, status,
+   service, times) came back empty. Only the single-word columns were left standing.
+   The page rendered correctly, which is what made it read as missing data.
+2. **A declined card read as paid.** Neither admin query selected `payment_status`,
+   and the ticket's payment panel printed "Paid online" for anything that was not
+   Cash. Both the detail endpoint and the list now carry the payment state, and the
+   console reads it through one helper (`readPayment`), which flags money that has
+   not been taken on the ticket and in the list.
+3. **A scheduled order looked identical to an ASAP one.** `requested_time` was
+   stored and never displayed, so an order wanted at 6pm appeared on the board at 4pm
+   and would have been cooked on arrival. The list, the ticket and the detail page
+   now say "For 4:30 PM" or "ASAP".
+4. **"Today" was a UTC day, and the last 100 rows.** `GetDashboardSummaryAsync`
+   compared against `DateTime.UtcNow.Date`, so the whole Adelaide evening service was
+   counted as *tomorrow's* takings; and the dashboard recomputed "Collected today"
+   and "Revenue today" from the fetched page, so a busy day truncated both. The
+   summary now uses the restaurant's own timezone, and the dashboard uses the
+   server's figures.
+
+Also fixed on the way: the customer's order detail now returns the modifiers it had
+already loaded (spice level, allergy, paid extras were being discarded, so the
+customer's copy of an order showed fewer choices than the kitchen's), the pickup
+estimate on the customer's screens comes from the restaurant setting rather than a
+literal `+20` minutes that disagreed with the checkout's `+15`, and the confirmation
+screen reports "Paid" only when a charge was actually captured.
+
+### 13.3 The storefront offers only what the shop can serve
+
+Delivery was shown with a "subject to availability" caveat and could never complete a
+checkout — a customer built a basket, chose delivery, reached payment and was told to
+switch to pickup. `ServiceId` is now `'pickup'`, that panel is gone, and `ServiceBar`
+states the service instead of offering three answers of which two were dead ends.
+Uber Eats is a footer link, where leaving this site is what a customer expects.
+
+**To bring delivery back:** add an entry to `SERVICES` in
+`src/asian-taste-customer/src/lib/services.ts` and its icon to `ICONS` in
+`ServiceBar.tsx`, then give the order a delivery fee field (the API has none, which
+is why no fee is charged online, and why the charged total currently equals the
+subtotal).
+
+### 13.4 What came out of the repository
+
+Deleted because nothing could reach it, verified by grep across both front-ends,
+the tests and the scripts:
+
+| Removed | Why |
+|---|---|
+| `StripeController` (`/api/stripe/config`, `/status`) | No caller |
+| `AdminReportsController`, `/admin/orders/stats/daily` and `DailyStatsDto` | No caller; the old Reports page was removed with the UI rebuild |
+| `AdminSyncController` | Belonged to the retired POS sync |
+| `AdminSettingsController` (`/api/admin/settings`) | No caller — the settings it edits are served by the seed and read by the order flow |
+| `CreateOrderRequestDto.cs`, `OrderItemResponseDto` | Zero references; superseded by the checkout DTOs |
+| `Order.SquarePaymentId`, `Order.SquareOrderId`, `ThirdPartyReference`, `LightspeedSentAt` | Legacy columns nothing writes or reads; the database columns stay |
+| The **Lightspeed scaffold** — services, `OrderSyncBackgroundService`, webhook service, `OAuthController`, token entity/repository, `/api/dev/lightspeed/*`, `/health/pos`, its HttpClient and config block, and the POS push in `OrderService` | Deferred and doing nothing; it occupied the DI graph, two health checks and the deploy script |
+| The **saved-cards read side** (`GetPaymentMethodsAsync`, `PaymentMethods`, the Account page panel) | Nothing ever wrote a row, so it could only ever say "none" — a promise the app could not keep |
+| Customer app: `register`/`login`/`createFromOrder`/`validateToken` and the uncalled `paymentApi`/`menuApi` methods | Defined, never called; several had no API route at all. **They read as features that exist** |
+| `StatesShowcase` and its `/states` route | Reachable only by typing the URL; no navigation led to it |
+| `hi.md` | Contained a fragment of a live Neon database credential, untracked but not gitignored (§13.5) |
+
+**Kept deliberately:** the Lightspeed migration files and the database tables (a
+shipped migration cannot be un-applied, and dropping the tables would break the
+data that is already there), `customer_payment_methods`, the menu management page,
+`Reports` as future work, and every `admin/*` endpoint the dashboard actually calls.
+
+`.test-baseline` dropped 197 → 170 in the same change. Three test files were retired
+with their subjects (`OrderSyncRetryTests`, `LightspeedOrderPayloadTests`,
+`AdminSettingsControllerTests`), and the POS half of the payment test file went with
+the POS code. The same change added coverage for the order flow itself — column
+mapping, the payment state, the pickup estimate, modifier mapping and the local day
+boundary — and the reasons are written into `.test-baseline`.
+
+### 13.5 One thing you should do, not me
+
+`hi.md` at the repository root contained a fragment of a real Neon database
+password. It was **never committed** (`git log --all` confirms), and it has been
+deleted — but `docs/SECRET-AUDIT.md` records that the same credential is already
+recoverable from git history via another file. **Rotate that password in the Neon
+console.** Nothing in this change can do that for you, and until it is rotated the
+production database password should be treated as public.
+

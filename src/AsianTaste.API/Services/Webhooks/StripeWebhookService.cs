@@ -10,7 +10,7 @@ namespace AsianTaste.API.Services.Webhooks;
 /// Stripe webhook service for processing payment events.
 /// Handles Stripe webhook events and updates order status accordingly.
 /// </summary>
-public class StripeWebhookService : IWebhookService
+public class StripeWebhookService
 {
     private readonly IOrderRepository _orderRepository;
     private readonly IConfiguration _configuration;
@@ -216,33 +216,6 @@ public class StripeWebhookService : IWebhookService
             Success = false,
             ErrorMessage = "Use HandleChargeRefundedAsync for Stripe webhooks"
         });
-    }
-
-    /// <inheritdoc />
-    public Task<WebhookProcessingResult> HandleOrderUpdatedEventAsync(
-        OrderWebhookData data,
-        CancellationToken cancellationToken = default)
-    {
-        // Stripe doesn't send order updates
-        return Task.FromResult(new WebhookProcessingResult { Success = true });
-    }
-
-    /// <inheritdoc />
-    public Task<WebhookProcessingResult> HandleOrderCompletedEventAsync(
-        OrderWebhookData data,
-        CancellationToken cancellationToken = default)
-    {
-        // Stripe doesn't send order completion events
-        return Task.FromResult(new WebhookProcessingResult { Success = true });
-    }
-
-    /// <inheritdoc />
-    public Task<WebhookProcessingResult> HandleProductUpdatedEventAsync(
-        ProductWebhookData data,
-        CancellationToken cancellationToken = default)
-    {
-        // Stripe doesn't send product updates
-        return Task.FromResult(new WebhookProcessingResult { Success = true });
     }
 
     /// <summary>
@@ -576,4 +549,33 @@ public class StripeWebhookService : IWebhookService
             _logger.LogError(ex, "Failed to queue confirmation email for order {OrderId}", orderId);
         }
     }
+}
+
+/// <summary>
+/// Result of processing one webhook delivery.
+/// </summary>
+/// <remarks>
+/// Lives here because Stripe's webhook service is now the only producer. It used to
+/// sit alongside a Lightspeed webhook contract whose events nothing could send.
+/// </remarks>
+public record WebhookProcessingResult
+{
+    public bool Success { get; init; }
+    public string? ErrorMessage { get; init; }
+    public System.Net.HttpStatusCode StatusCode { get; init; } = System.Net.HttpStatusCode.OK;
+}
+
+/// <summary>
+/// Payment fields a webhook event can carry.
+/// </summary>
+public record PaymentWebhookData
+{
+    public string PaymentId { get; set; } = string.Empty;
+    public string OrderId { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime ProcessedAt { get; set; }
+    public string? Currency { get; set; }
+    public string? TransactionId { get; set; }
+    public Dictionary<string, string>? Metadata { get; set; }
 }

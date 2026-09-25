@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCartStore } from '@/stores/cartStore';
 import { useCheckoutStore } from '@/stores/checkoutStore';
-import { isOrderable, useServiceStore } from '@/stores/serviceStore';
-import { SERVICES, SITE, money } from '@/lib/site';
+import { useServiceStore } from '@/stores/serviceStore';
+import { SERVICES } from '@/lib/services';
+import { money } from '@/lib/site';
 import type { PendingOrderData } from '@/stores/checkoutStore';
 import { Panel, PanelBody, PanelFoot, PanelHead, RowLine, SumRow } from '@/components/ui/Panel';
 import { StateBlock } from '@/components/ui/State';
@@ -49,7 +50,6 @@ export function CheckoutPage() {
   const navigate = useNavigate();
   const items = useCartStore((s) => s.items);
   const service = useServiceStore((s) => s.service);
-  const setService = useServiceStore((s) => s.setService);
   const orderType = useServiceStore((s) => s.orderType());
   const checkout = useCheckoutStore();
 
@@ -64,18 +64,13 @@ export function CheckoutPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof DetailsForm, string>>>({});
 
   const meta = SERVICES[service];
-  // Only pickup completes a checkout in v1. Delivery is offered in the UI but
-  // its fulfilment pipeline does not exist, so reaching a pay button with it
-  // selected would take an order the shop cannot serve.
-  const orderable = isOrderable(service);
   const subtotal = useMemo(
     () => items.reduce((sum, i) => sum + i.basePrice * i.quantity, 0),
     [items]
   );
-  // The API derives an order's total from its item prices alone — there is no
-  // delivery-fee field on CreateOrderRequestDto. So the amount charged here has
-  // to equal what the order will record, or the customer pays more than their
-  // receipt says. Keep these two equal until the API can carry a fee.
+  // The API derives an order's total from its item prices alone, so the amount
+  // charged here has to equal what the order will record — anything else is a
+  // customer paying more than their receipt says. Keep these two equal.
   const chargedTotal = subtotal;
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
@@ -109,10 +104,6 @@ export function CheckoutPage() {
   }
 
   function goToPayment() {
-    if (!orderable) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
     if (!validate()) {
       document.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus();
       return;
@@ -266,9 +257,7 @@ export function CheckoutPage() {
                     <option value="120">In 2 hours</option>
                   </select>
                   <p className="hint">
-                    {service === 'pickup'
-                      ? `Ready in about ${meta.etaMinutes} minutes at 329 Henley Beach Rd.`
-                      : `Delivered in about ${meta.etaLabel}.`}
+                    Ready in about {meta.etaMinutes} minutes at 329 Henley Beach Rd.
                   </p>
                 </div>
 
@@ -288,49 +277,17 @@ export function CheckoutPage() {
             </PanelBody>
           </Panel>
 
-          {step === 'payment' &&
-            (orderable ? (
-              <Panel data-od-id="checkout-payment">
-                <PanelHead>
-                  <h3>Payment</h3>
-                  <span className="pill pill-neutral">Card · Apple Pay · Google Pay</span>
-                </PanelHead>
-                <PanelBody>
-                  <PaymentSection orderTotal={chargedTotal} onPaid={placeOrder} />
-                </PanelBody>
-              </Panel>
-            ) : (
-              <Panel data-od-id="checkout-unavailable">
-                <PanelHead>
-                  <h3>{meta.label} isn&rsquo;t available online yet</h3>
-                  <span className="pill pill-neutral">Pickup only for now</span>
-                </PanelHead>
-                <PanelBody>
-                  <p className="helpline" style={{ marginBottom: 12 }}>
-                    {meta.note}. We&rsquo;re not taking {meta.label.toLowerCase()} orders on the
-                    website yet, so nothing will be charged. Switch to pickup to finish this order,
-                    or order {meta.label.toLowerCase()} through Uber Eats.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={() => setService('pickup')}
-                    >
-                      Switch to pickup
-                    </button>
-                    <a
-                      className="btn btn-secondary"
-                      href={SITE.uberEatsUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Order on Uber Eats
-                    </a>
-                  </div>
-                </PanelBody>
-              </Panel>
-            ))}
+          {step === 'payment' && (
+            <Panel data-od-id="checkout-payment">
+              <PanelHead>
+                <h3>Payment</h3>
+                <span className="pill pill-neutral">Card · Apple Pay · Google Pay</span>
+              </PanelHead>
+              <PanelBody>
+                <PaymentSection orderTotal={chargedTotal} onPaid={placeOrder} />
+              </PanelBody>
+            </Panel>
+          )}
 
           <Panel data-od-id="checkout-service">
             <PanelHead>
@@ -361,7 +318,10 @@ export function CheckoutPage() {
               <RowLine
                 key={line.id}
                 main={`${line.quantity} × ${line.name}`}
-                sub={line.specialInstructions}
+                // The choices the customer made, which is what they are checking
+                // before they pay. `specialInstructions` also carries their free-text
+                // note and the "Note:" prefix that only the kitchen needs.
+                sub={line.choicesSummary}
                 value={money(line.basePrice * line.quantity)}
               />
             ))}

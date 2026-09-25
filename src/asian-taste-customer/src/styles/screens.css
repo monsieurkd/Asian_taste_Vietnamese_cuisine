@@ -1249,6 +1249,14 @@
     font-size: 12px;
     color: var(--color-muted);
   }
+  /* The choices the customer made and paid for. Kept above the note and slightly
+     darker than it: this is what the kitchen cooks from, the note is an aside. */
+  .cart-item .ci-choices,
+  .ci-choices {
+    font-size: 12px;
+    line-height: 1.5;
+    color: color-mix(in oklch, var(--color-fg) 78%, transparent);
+  }
   .cart-controls {
     grid-column: 1 / -1;
     display: flex;
