@@ -1039,9 +1039,20 @@ Four things now guard it, each pinned by a test that fails without the fix
 4. The intent's amount must equal the order's own server-computed total, so a client
    cannot confirm a cheaper amount and have the order recorded at the full price.
 
-**The probe left one order behind:** `AT-251703-5CFF` (orderId 17) is a synthetic
-untouched probe in production, created before the fix. Cancel it from the admin
-dashboard so it does not sit on the kitchen board.
+**The probe left three orders behind**, all synthetic and untouched, all in
+production, all `Pending` on the kitchen board. Cancel them from the admin dashboard:
+
+| Order number | orderId | Why it exists | What it returned |
+|---|---|---|---|
+| `AT-251703-5CFF` | 17 | the probe, before the fix | `"Paid online"` with nothing charged |
+| `AT-251709-74F7` | 18 | the same probe, after the fix | `"Payment failed — please try again"` (correct) |
+| one earlier probe | 16 | the probe, before the fix | same defect as order 17 |
+
+Order 18 is worth keeping a moment as the after-the-fact evidence that the fix works
+in production. None of these is a real customer order: the customer names are
+"Probe Test" and "Probe Fixed", and the email addresses are not real. Delete or
+cancel them; order 18 shows a failed payment rather than a paid one, which is the
+whole point.
 
 ### 13.3 The storefront offers only what the shop can serve
 
