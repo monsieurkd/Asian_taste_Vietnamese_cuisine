@@ -30,9 +30,14 @@
 # The same change ADDED tests for the order flow itself (admin column mapping, the
 # real payment state, the pickup estimate, modifier mapping, the local day boundary)
 # and those more than replaced the deleted coverage in the areas that matter.
-174
+214
 
 # Raised 170 -> 174 on 2026-09-25, in the same commit as four tests for a defect
 # found in production by the deployment probe: StripePaymentVerificationTests pins
 # that a card order is only recorded as paid when a charge was VERIFIED with Stripe.
 # A card order with no payment token returned "Paid online" having taken no money.
+
+# Raised 174 -> 214 in the next session's work: the trading-hours rule (27 boundary
+# tests plus 6 proving the rule is wired in and a refusal has no side effects), the
+# menu writes that ten endpoints only pretended to make (13 tests asserting on the
+# write rather than the status), and the board's legal-move rule (9 tests).

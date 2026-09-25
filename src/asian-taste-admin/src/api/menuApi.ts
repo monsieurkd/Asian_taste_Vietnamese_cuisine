@@ -183,9 +183,15 @@ export const menuAdminApi = {
 
   /**
    * Update a menu item.
+   *
+   * Returns the STORED dish rather than nothing, so the screen can show what the
+   * database holds instead of echoing what it sent. That distinction is what made the
+   * old silent no-op invisible: a caller given no response body cannot tell a save
+   * from a save that never happened.
    */
-  async updateMenuItem(id: number, data: UpdateMenuItemRequest): Promise<void> {
-    await apiClient.put(`/admin/menu/items/${id}`, data)
+  async updateMenuItem(id: number, data: UpdateMenuItemRequest): Promise<MenuItemDetail> {
+    const response = await apiClient.put<MenuItemDetail>(`/admin/menu/items/${id}`, data)
+    return response.data
   },
 
   /**

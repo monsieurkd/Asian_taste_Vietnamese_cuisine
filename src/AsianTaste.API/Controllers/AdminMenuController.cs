@@ -245,7 +245,8 @@ public class AdminMenuController : ControllerBase
     /// Updates an existing menu item.
     /// </summary>
     [HttpPut("items/{id}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(MenuItemDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> UpdateMenuItem(
             int id,
@@ -261,9 +262,55 @@ public class AdminMenuController : ControllerBase
                 return NotFound(new { error = $"Menu item with ID {id} not found" });
             }
 
-            // TODO: Implement IMenuRepository.UpdateMenuItemAsync
-            _logger.LogInformation("Updating menu item {ItemId}", id);
-            return NoContent();
+            // Validation, now that the write is real. The DataAnnotations on the DTO are
+            // enforced by [ApiController], but two rules are business rules rather than
+            // shape rules and belong here.
+            if (dto.Name is not null && string.IsNullOrWhiteSpace(dto.Name))
+            {
+                return BadRequest(new { error = "A dish needs a name." });
+            }
+
+            // A free dish is almost always a typo, and the printed menu has no free
+            // items. Zero is accepted because a legitimate comp exists; negative is not.
+            if (dto.Price is < 0)
+            {
+                return BadRequest(new { error = "A price cannot be negative." });
+            }
+
+            if (dto.CategoryId is <= 0)
+            {
+                return BadRequest(new { error = "Choose a section for this dish." });
+            }
+
+            // Only the fields the caller supplied are touched — see MenuItemUpdate.
+            var update = new MenuItemUpdate
+            {
+                Name = dto.Name,
+                Description = dto.Description,
+                BasePrice = dto.Price,
+                CategoryId = dto.CategoryId,
+                ImageUrl = dto.ImageUrl,
+                IsAvailable = dto.IsActive,
+                IsVegetarian = dto.IsVegetarian,
+                IsVegan = dto.IsVegan,
+                IsGlutenFree = dto.IsGlutenFree,
+                SpicyLevel = dto.SpicyLevel,
+            };
+
+            var updated = await _menuRepository.UpdateItemAsync(id, update, cancellationToken);
+            if (updated == null)
+            {
+                // Either the row vanished between the existence check and the write, or
+                // the category it names does not exist — both are "this edit did not
+                // land", and saying so beats a 204 that means nothing.
+                return NotFound(new { error = $"Menu item with ID {id} could not be updated" });
+            }
+
+            _logger.LogInformation("Updated menu item {ItemId} ({Name})", id, updated.Name);
+
+            // The updated dish, so the console renders what is actually stored rather
+            // than the values it sent.
+            return Ok(updated);
         }
         catch (Exception ex)
         {
@@ -306,7 +353,7 @@ public class AdminMenuController : ControllerBase
     /// Toggles the active status of a menu item.
     /// </summary>
     [HttpPost("items/{id}/toggle-availability")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> ToggleItemAvailability(
             int id,
@@ -322,9 +369,19 @@ public class AdminMenuController : ControllerBase
                 return NotFound(new { error = $"Menu item with ID {id} not found" });
             }
 
-            // TODO: Implement IMenuRepository.ToggleItemAvailabilityAsync
-            _logger.LogInformation("Toggling availability for item {ItemId} to {IsActive}", id, dto.IsActive);
-            return NoContent();
+            // The switch the console already ships. It reported 204 and wrote nothing,
+            // so marking a sold-out dish unavailable silently left it on sale.
+            var changed = await _menuRepository.SetItemAvailabilityAsync(id, dto.IsActive, cancellationToken);
+            if (!changed)
+            {
+                return NotFound(new { error = $"Menu item with ID {id} not found" });
+            }
+
+            _logger.LogInformation("Item {ItemId} availability set to {IsActive}", id, dto.IsActive);
+
+            // The new state, not "no content": the switch reads its own position from
+            // this response, so a silent success cannot be distinguished from a no-op.
+            return Ok(new { id, isAvailable = dto.IsActive });
         }
         catch (Exception ex)
         {

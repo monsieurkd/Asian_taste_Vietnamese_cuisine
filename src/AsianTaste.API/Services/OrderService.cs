@@ -21,6 +21,7 @@ public class OrderService
     private readonly IRestaurantSettingsRepository _settingsRepository;
     private readonly IPaymentGatewayService _paymentGateway;
     private readonly IOrderNotifier _orderNotifier;
+    private readonly TradingHours _tradingHours;
     private readonly ILogger<OrderService> _logger;
 
     public OrderService(
@@ -31,6 +32,7 @@ public class OrderService
         IRestaurantSettingsRepository settingsRepository,
         IPaymentGatewayService paymentGateway,
         IOrderNotifier orderNotifier,
+        TradingHours tradingHours,
         ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository;
@@ -40,6 +42,7 @@ public class OrderService
         _settingsRepository = settingsRepository;
         _paymentGateway = paymentGateway;
         _orderNotifier = orderNotifier;
+        _tradingHours = tradingHours;
         _logger = logger;
     }
 
@@ -51,6 +54,27 @@ public class OrderService
         // Load restaurant settings once (Adelaide timezone, pickup estimate, contact details).
         var settings = await LoadRestaurantSettingsAsync(cancellationToken);
         var pickupMinutes = settings.PickupMinutes;
+
+        // Refuse an order the kitchen cannot cook, BEFORE anything is written or charged.
+        //
+        // This is the only real control on trading hours: the storefront shows "Closed"
+        // as a courtesy, but the API is public, so a script, a stale tab or a bookmark
+        // could otherwise place and pay for an order at 2am. The cost of that is a
+        // refund, a phone call and a customer who now distrusts the site.
+        //
+        // Ordering matters. This runs before the order row, before the charge and before
+        // the confirmation email, so a refusal leaves nothing behind to clean up.
+        //
+        // A scheduled order is judged against its OWN time, not now: ordering at 4pm for
+        // a 7pm pickup is fine even though the shop is shut at 7pm.
+        var trading = EvaluateTrading(settings, request);
+        if (!trading.Open)
+        {
+            _logger.LogInformation(
+                "Refused order for {Email}: {Reason}", request.CustomerEmail, trading.Reason);
+
+            throw new ShopClosedException(trading.Reason);
+        }
 
         // Generate order number (uses the restaurant's local time, not UTC)
         string orderNumber = await GenerateOrderNumberAsync(cancellationToken);
@@ -327,6 +351,39 @@ public class OrderService
     }
 
     /// <summary>
+    /// Whether this order may be placed, judged at the instant it is wanted.
+    /// </summary>
+    /// <remarks>
+    /// Two rules that look like edge cases and are not:
+    ///
+    /// 1. **A scheduled order is judged at its own time.** Ordering at 4pm for a 7pm
+    ///    pickup is legitimate even though 7pm is past closing; judging it against now
+    ///    would refuse the shop's most useful orders. The reverse — ordering at 4pm for
+    ///    a pickup inside opening hours — is judged there too.
+    /// 2. **Windows we could not read mean refuse, not allow.** If `restaurant_settings`
+    ///    or `operating_hours` cannot be read, there is no evidence the kitchen is open,
+    ///    and the failure mode of guessing "open" is an order nobody cooks. The order
+    ///    path already has a rule for this shape (see Payment__UseMockGateway): when a
+    ///    fact cannot be established, take the safe branch and say why.
+    /// </remarks>
+    private TradingState EvaluateTrading(OrderServiceRestaurantSettings settings, CreateCheckoutOrderDto request)
+    {
+        if (settings.Windows.Count == 0)
+        {
+            return TradingState.Shut(
+                "The kitchen is not taking orders at the moment. Please call the shop.");
+        }
+
+        // An ASAP order is wanted now; a scheduled one is judged at the time chosen.
+        DateTime? wantedAt = request.PickupTime.Type == "SCHEDULED"
+            && request.PickupTime.ScheduledTime.HasValue
+            ? request.PickupTime.ScheduledTime.Value
+            : null;
+
+        return _tradingHours.Evaluate(settings.Windows, settings.Timezone, wantedAt);
+    }
+
+    /// <summary>
     /// Generates a unique order number using the restaurant's local time.
     /// Format: AT-DDHHMM-XXXX (e.g. AT-08021030-A1B2).
     /// </summary>
@@ -475,12 +532,27 @@ public class OrderService
                 pickupMinutes = parsed;
             }
 
+            // The trading windows, read alongside the settings because both are needed
+            // to judge whether an order may be placed at all.
+            var hours = await _settingsRepository.GetHoursAsync(cancellationToken);
+            var windows = hours
+                .Where(h => !h.IsClosed && h.OpenTime.HasValue && h.CloseTime.HasValue)
+                .Select(h => new TradingWindow(
+                    h.DayOfWeek,
+                    h.OpenTime!.Value,
+                    h.CloseTime!.Value,
+                    h.BreakStart,
+                    h.BreakEnd))
+                .ToList();
+
             return new OrderServiceRestaurantSettings
             {
                 RestaurantName = Get("restaurant_name", "Asian Taste Vietnamese Cuisine"),
                 Phone = Get("phone", ""),
                 Address = Get("address", "329 Henley Beach Rd, Brooklyn Park SA 5032"),
                 PickupMinutes = pickupMinutes,
+                Timezone = Get("timezone", "Australia/Adelaide"),
+                Windows = windows,
             };
         }
         catch (Exception ex)
@@ -516,4 +588,26 @@ public class OrderServiceRestaurantSettings
     public string Phone { get; set; } = "";
     public string Address { get; set; } = "329 Henley Beach Rd, Brooklyn Park SA 5032";
     public int PickupMinutes { get; set; } = 15;
+
+    /// <summary>Restaurant-local timezone, used to judge whether the kitchen is open.</summary>
+    public string Timezone { get; set; } = "Australia/Adelaide";
+
+    /// <summary>
+    /// The trading windows, in local time. Empty means the hours could not be read,
+    /// which the order path treats as "cannot prove the shop is open" — see
+    /// CreateOrderAsync.
+    /// </summary>
+    public List<TradingWindow> Windows { get; set; } = new();
+}
+
+/// <summary>
+/// Thrown when an order arrives outside the kitchen's trading hours.
+///
+/// A distinct type rather than a generic exception, so the controller can answer with
+/// an honest 409 and the reason the customer needs, instead of a 500 that reads as a
+/// broken site when the site is working exactly as intended.
+/// </summary>
+public class ShopClosedException : Exception
+{
+    public ShopClosedException(string reason) : base(reason) { }
 }

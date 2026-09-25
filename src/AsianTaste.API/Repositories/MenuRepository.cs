@@ -112,6 +112,104 @@ public class MenuRepository : IMenuRepository
         return items.AsList();
     }
 
+
+    /// <summary>
+    /// Sets whether a dish can be ordered.
+    /// </summary>
+    /// <remarks>
+    /// Availability rather than deletion, because that is the real situation: the
+    /// kitchen runs out of a dish mid-service and needs it off the menu until it is
+    /// restocked, not gone from the printed menu.
+    ///
+    /// This is the endpoint the console's switch already called. It used to log and
+    /// return 204 without writing anything, so a switch that looked like it worked
+    /// did nothing at all.
+    /// </remarks>
+    public async Task<bool> SetItemAvailabilityAsync(int id, bool isAvailable, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        var affected = await connection.ExecuteAsync(
+            new CommandDefinition(
+                @"UPDATE menu_items
+                  SET is_available = @IsAvailable,
+                      updated_at = CURRENT_TIMESTAMP
+                  WHERE id = @Id",
+                new { Id = id, IsAvailable = isAvailable },
+                cancellationToken: cancellationToken));
+
+        return affected > 0;
+    }
+
+    /// <summary>
+    /// Updates the editable fields of a dish.
+    /// </summary>
+    /// <remarks>
+    /// Built as a partial UPDATE: the SET list is assembled from the fields the caller
+    /// actually supplied, so a caller cannot blank a column by omitting it. The
+    /// alternative — an UPDATE naming every column — turns "the console did not render
+    /// the image field" into "delete the image", which is how a menu quietly loses its
+    /// data during an unrelated edit.
+    ///
+    /// The variable names are generated (`@p0`, `@p1`, …) and their VALUES are always
+    /// parameters. The column names come from this method's own literal strings, never
+    /// from the caller, so this is not an interpolation point.
+    /// </remarks>
+    public async Task<MenuItemDetailDto?> UpdateItemAsync(int id, MenuItemUpdate update, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        var sets = new List<string>();
+        var parameters = new DynamicParameters();
+        parameters.Add("Id", id);
+
+        void Add(string column, string value, object? parameter)
+        {
+            if (parameter is null) return;
+            var name = $"p{sets.Count}";
+            sets.Add($"{column} = @{name}");
+            parameters.Add(name, value);
+        }
+
+        // Text fields are NOT skipped when empty: clearing a description is a legitimate
+        // edit. They are only skipped when the caller did not supply the field at all,
+        // which is what null means here.
+        if (update.Name is not null) Add("name", update.Name.Trim(), update.Name);
+        if (update.Description is not null) Add("description", update.Description.Trim(), update.Description);
+        if (update.BasePrice is not null) Add("base_price", "x", update.BasePrice.Value);
+        if (update.CategoryId is not null) Add("category_id", "x", update.CategoryId.Value);
+        if (update.ImageUrl is not null) Add("image_url", update.ImageUrl.Trim(), update.ImageUrl);
+        if (update.IsAvailable is not null) Add("is_available", "x", update.IsAvailable.Value);
+        if (update.IsPopular is not null) Add("is_popular", "x", update.IsPopular.Value);
+        if (update.IsGlutenFree is not null) Add("is_gluten_free", "x", update.IsGlutenFree.Value);
+        if (update.IsVegetarian is not null) Add("is_vegetarian", "x", update.IsVegetarian.Value);
+        if (update.IsVegan is not null) Add("is_vegan", "x", update.IsVegan.Value);
+        if (update.SpicyLevel is not null) Add("spicy_level", "x", update.SpicyLevel.Value);
+
+        if (sets.Count == 0)
+        {
+            // Nothing to change. Return the dish as it stands rather than reporting a
+            // write that did not happen — the console shows the result, so it must be
+            // the current row.
+            return await GetItemByIdAsync(id, cancellationToken);
+        }
+
+        sets.Add("updated_at = CURRENT_TIMESTAMP");
+
+        var sql = $"UPDATE menu_items SET {string.Join(", ", sets)} WHERE id = @Id";
+
+        var affected = await connection.ExecuteAsync(
+            new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
+
+        if (affected == 0) return null;
+
+        // Read back rather than echo the request: the caller sees what is stored, which
+        // is the only thing that proves the write landed.
+        return await GetItemByIdAsync(id, cancellationToken);
+    }
+
     public async Task<MenuItemDetailDto?> GetItemByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();

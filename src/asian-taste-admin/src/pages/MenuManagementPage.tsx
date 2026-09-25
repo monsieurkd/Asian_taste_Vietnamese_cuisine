@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { menuAdminApi } from "@/api/menuApi"
+import { menuAdminApi, type MenuItemDetail } from "@/api/menuApi"
 import { AdminTop } from "@/components/AdminLayout"
 import { Button, Panel, PanelBody, PanelHead, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { showAdminToast } from "@/components/ui/AdminToast"
+import { DishEditor } from "@/components/menu/DishEditor"
 import { formatCurrency } from "@/lib/utils"
 
 function SearchIcon() {
@@ -28,15 +29,24 @@ function initials(name: string) {
 /**
  * Menu management.
  *
- * Availability is the one thing this screen must get right: it is how the pass
- * takes a dish off the menu the moment the kitchen runs out. The API has the
- * endpoint (`POST /admin/menu/items/{id}/toggle-availability`), so the toggle
- * writes through rather than only moving local state.
+ * Two jobs, both of them the owner's rather than the kitchen's:
+ *
+ *  1. **Availability**, which is how the pass takes a dish off the menu the moment
+ *     the kitchen runs out. One press, reversible, no confirmation — a sold-out dish
+ *     is a normal event, not a destructive one.
+ *  2. **Editing**, which is the owner's own ask: change a price without waiting for a
+ *     deploy. The printed menu stays the source of truth; the app just stops being
+ *     the thing that makes a price change take a day.
+ *
+ * Both write through to the API. Both used to report success without writing anything
+ * — see AdminMenuWriteTests for what that cost and how it is pinned now.
  */
 export function MenuManagementPage() {
   const queryClient = useQueryClient()
   const [categoryId, setCategoryId] = useState<number | "all">("all")
   const [query, setQuery] = useState("")
+  /** The dish open in the editor, or null when the editor is closed. */
+  const [editing, setEditing] = useState<MenuItemDetail | null>(null)
 
   const { data: categories = [] } = useQuery({
     queryKey: ["admin-categories"],
@@ -193,9 +203,7 @@ export function MenuManagementPage() {
                   type="button"
                   className="icon-btn"
                   aria-label={`Edit ${item.name}`}
-                  onClick={() =>
-                    showAdminToast("Dish editing is not built yet — the menu lives in the seed for now")
-                  }
+                  onClick={() => setEditing(item)}
                 >
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M4 20h4L19 9l-4-4L4 16z" />
@@ -206,6 +214,14 @@ export function MenuManagementPage() {
           )}
         </Panel>
       </div>
+
+      {editing && (
+        <DishEditor
+          dish={editing}
+          categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </>
   )
 }

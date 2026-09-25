@@ -27,10 +27,12 @@ public class OrdersController : ControllerBase
     /// <returns>The created order details.</returns>
     /// <response code="200">Returns the created order details.</response>
     /// <response code="400">If the request is invalid.</response>
+    /// <response code="409">If the kitchen is closed and cannot take this order.</response>
     /// <response code="500">If there's an internal server error.</response>
     [HttpPost]
     [ProducesResponseType(typeof(CheckoutOrderResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(object), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CheckoutOrderResponseDto>> CreateOrder([FromBody] CreateCheckoutOrderDto request)
     {
@@ -76,6 +78,18 @@ public class OrdersController : ControllerBase
         {
             var response = await _orderService.CreateOrderAsync(request);
             return Ok(response);
+        }
+        catch (ShopClosedException ex)
+        {
+            // 409, not 500. The request was well-formed and the site is working: the
+            // kitchen simply is not taking orders at that time. A 500 would read as a
+            // broken shop, send the customer away, and hide a rule that is deliberate.
+            // The reason is passed through because the customer needs to know when to
+            // come back, and the storefront shows it directly.
+            _logger.LogInformation(
+                "Order for {Email} refused, kitchen closed: {Reason}", request.CustomerEmail, ex.Message);
+
+            return Conflict(new { error = "kitchen_closed", message = ex.Message });
         }
         catch (Exception ex)
         {

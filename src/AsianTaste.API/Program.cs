@@ -35,6 +35,11 @@ builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IRestaurantSettingsRepository, RestaurantSettingsRepository>();
 builder.Services.AddScoped<OrderService>();
+
+// The trading clock. Registered against TimeProvider so a test can move "now" to a
+// closed evening without touching the machine's clock.
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<TradingHours>();
 builder.Services.AddScoped<CustomerService>();
 builder.Services.AddSingleton<JwtService>();
 

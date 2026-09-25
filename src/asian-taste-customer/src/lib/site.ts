@@ -1,3 +1,5 @@
+import type { OpeningHours } from './openingHours';
+
 /**
  * Store facts and service meta.
  *
@@ -69,10 +71,6 @@ export const HOURS_SUMMARY: Array<{ days: string; hours: string }> = [
   { days: 'Tuesday – Sunday', hours: '10:00am – 4:00pm, 4:30pm – 9:00pm' },
 ];
 
-function toMinutes(value: string): number {
-  const [h, m] = value.split(':').map(Number);
-  return h * 60 + m;
-}
 
 export interface OpenState {
   open: boolean;
@@ -81,38 +79,32 @@ export interface OpenState {
   opensAt?: string;
 }
 
-/**
- * Whether the shop is open right now, in *its* timezone rather than the
- * visitor's — a customer browsing from interstate, or a laptop set to UTC,
- * must not be told the wrong thing about an Adelaide kitchen.
- */
-export function openState(now: Date = new Date()): OpenState {
-  const parts = new Intl.DateTimeFormat('en-AU', {
-    timeZone: SITE.timezone,
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(now);
+/* ─── opening hours ─────────────────────────────────────────────────────────
+   The judgement itself lives in `./openingHours`, which is the version covered by
+   tests. Two implementations used to exist: one here (simpler, and what the screens
+   called) and one there (correct, with the boundary cases pinned, and used only by
+   its own tests). The screens were therefore reading the weaker one — which is how a
+   tested rule ends up proving nothing about the running app.
 
-  const weekday = parts.find((p) => p.type === 'weekday')?.value ?? 'Mon';
-  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
-  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+   `HOURS` below stays, because it is the *data* the shop publishes; the *rule* is
+   imported from the tested module. */
 
-  const map: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
-  const today = HOURS.find((d) => d.day === map[weekday]);
-  if (!today) return { open: false };
-
-  const minutes = hour * 60 + minute;
-
-  for (const window of today.windows) {
-    if (minutes >= toMinutes(window.from) && minutes < toMinutes(window.to)) {
-      return { open: true, closesAt: window.to };
-    }
-  }
-
-  const next = today.windows.find((w) => toMinutes(w.from) > minutes);
-  return next ? { open: false, opensAt: next.from } : { open: false };
+/** The restaurant's published hours, in the shape the tested engine expects. */
+export function publishedHours(): OpeningHours {
+  return {
+    days: HOURS.map((d) => {
+      const first = d.windows[0];
+      const last = d.windows[d.windows.length - 1];
+      return {
+        // ISO day number -> the engine's 0 = Sunday.
+        day: d.day === 7 ? 0 : d.day,
+        opens: first?.from ?? '00:00',
+        closes: last?.to ?? '00:00',
+        closed: d.windows.length === 0,
+      };
+    }),
+    timezone: SITE.timezone,
+  };
 }
 
 /** `16:00` → `4:00pm`, for display. */

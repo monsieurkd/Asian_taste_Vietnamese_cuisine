@@ -173,7 +173,24 @@ public class OrderServicePaymentTests
         public Task<string?> GetAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
         public Task SetAsync(string key, string value, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetManyAsync(IReadOnlyDictionary<string, string> settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<List<OperatingHoursRecord>> GetHoursAsync(CancellationToken cancellationToken = default) => Task.FromResult(new List<OperatingHoursRecord>());
+        /// <summary>
+        /// Always open, for 24 hours a day.
+        ///
+        /// The trading guard refuses an order when it cannot prove the kitchen is open,
+        /// so a stub with no hours would make every payment test fail — correctly, but
+        /// for the wrong reason. These tests are about payment, so they state the one
+        /// fact the guard needs.
+        /// </summary>
+        public Task<List<OperatingHoursRecord>> GetHoursAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Enumerable.Range(1, 7)
+                .Select(day => new OperatingHoursRecord
+                {
+                    DayOfWeek = day,
+                    OpenTime = TimeSpan.Zero,
+                    CloseTime = new TimeSpan(23, 59, 0),
+                    IsClosed = false,
+                })
+                .ToList());
         public Task SetHoursAsync(int dayOfWeek, TimeSpan? openTime, TimeSpan? closeTime, bool isClosed, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
@@ -240,6 +257,7 @@ public class OrderServicePaymentTests
             // Records pushes instead of opening WebSockets, so these tests stay
             // focused on what order creation actually does.
             notifier,
+            new TradingHours(TimeProvider.System),
             NullLogger<OrderService>.Instance);
 
         return new Harness(service, payment, orders, notifier, notifier as RecordingOrderNotifier);

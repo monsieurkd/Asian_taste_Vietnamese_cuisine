@@ -14,6 +14,14 @@ public class OperatingHoursRecord
 
     public TimeSpan? OpenTime { get; set; }
     public TimeSpan? CloseTime { get; set; }
+
+    /// <summary>
+    /// The break between services, for a kitchen that closes and reopens in the day.
+    /// Null means one continuous service.
+    /// </summary>
+    public TimeSpan? BreakStart { get; set; }
+    public TimeSpan? BreakEnd { get; set; }
+
     public bool IsClosed { get; set; }
 }
 
@@ -107,10 +115,12 @@ public class RestaurantSettingsRepository : IRestaurantSettingsRepository
         using var connection = _connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<OperatingHoursRecord>(
             new CommandDefinition(
-                @"SELECT day_of_week     AS DayOfWeek,
-                         open_time       AS OpenTime,
-                         close_time      AS CloseTime,
-                         is_closed       AS IsClosed
+                @"SELECT day_of_week AS DayOfWeek,
+                         open_time   AS OpenTime,
+                         close_time  AS CloseTime,
+                         break_start AS BreakStart,
+                         break_end   AS BreakEnd,
+                         is_closed   AS IsClosed
                   FROM operating_hours
                   ORDER BY day_of_week",
                 cancellationToken: cancellationToken));

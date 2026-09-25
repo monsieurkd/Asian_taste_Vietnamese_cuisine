@@ -1238,6 +1238,43 @@
     line-height: 1.45;
   }
 
+  /* ─── dialogs ───────────────────────────────────────────────────────────────
+     A scrim that actually blocks, and a panel that scrolls rather than pushing the
+     page. `is-locked` on the body stops the table behind from scrolling while the
+     dialog is open, which is the classic "the background moves and you lose your
+     place" bug. */
+  .modal-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background-color: color-mix(in oklch, var(--color-fg) 45%, transparent);
+    border: 0;
+    cursor: default;
+  }
+  .modal-shell {
+    position: fixed;
+    inset: 0;
+    z-index: 61;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+    overflow-y: auto;
+    pointer-events: none;
+  }
+  .modal-panel {
+    pointer-events: auto;
+    width: 100%;
+    max-width: 520px;
+    margin: auto;
+  }
+  .modal-panel:focus {
+    outline: none;
+  }
+  body.is-locked {
+    overflow: hidden;
+  }
+
   .state-block {
     text-align: center;
     padding: 48px 24px;

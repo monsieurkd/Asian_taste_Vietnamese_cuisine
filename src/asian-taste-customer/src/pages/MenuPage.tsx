@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useMenuIndex } from '@/hooks/useMenuIndex';
 import { useCartStore } from '@/stores/cartStore';
 import { useServiceStore } from '@/stores/serviceStore';
-import { money, openState, prettyTime, SITE } from '@/lib/site';
+import { money, publishedHours, SITE } from '@/lib/site';
+import { nextOpening, openState } from '@/lib/openingHours';
 import { SUPER_DEAL } from '@/lib/menuModel';
 import { DishRow } from '@/components/menu/DishRow';
 import { ServiceBar } from '@/components/layout/ServiceBar';
@@ -23,7 +24,8 @@ function Star() {
 
 /** The store header: who this is, where, when it is open. */
 function StoreHead() {
-  const now = openState();
+  const now = openState(publishedHours());
+  const nextOpen = now.open ? '' : nextOpening(publishedHours());
   return (
     <section className="store-head" data-od-id="store-head">
       <div className="container-shell store-head-inner">
@@ -59,13 +61,10 @@ function StoreHead() {
                 <circle cx="12" cy="12" r="8.5" />
                 <path d="M12 7.5V12l3 1.8" />
               </svg>
-              {now.open
-                ? now.closesAt
-                  ? `Open now · until ${prettyTime(now.closesAt)}`
-                  : 'Open now'
-                : now.opensAt
-                  ? `Closed · opens ${prettyTime(now.opensAt)}`
-                  : 'Closed today'}
+              {/* The tested engine's own words. It already says "Open until 21:00"
+                  or "Opens at 10:00", so the screen no longer re-phrases a verdict it
+                  used to get from a second, weaker implementation. */}
+              {now.open ? now.reason : `${now.reason} · ${nextOpen}`}
             </span>
             <span>
               <a href={SITE.phoneHref}>{SITE.phone}</a>

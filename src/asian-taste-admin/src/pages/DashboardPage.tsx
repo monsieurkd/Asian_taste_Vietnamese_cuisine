@@ -1,12 +1,15 @@
+import { useState } from "react"
 import { Link } from "react-router-dom"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ordersApi } from "@/api/orders"
 import type { Order, OrderStatus } from "@/types"
 import { AdminTop } from "@/components/AdminLayout"
 import { Avatar, Panel, PanelBody, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
-import { apiStatusValue, isClosed, nextStatus, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
+import { apiStatusValue, isClosed, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
 import { readPayment } from "@/lib/payment"
+import { boardAction } from "@/lib/boardAction"
+import { showAdminToast } from "@/components/ui/AdminToast"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 
@@ -34,12 +37,6 @@ const COLUMNS: Array<{ key: StatusKey; title: string; hint: string }> = OPEN_STA
   hint: COLUMN_HINTS[key] ?? "",
 }))
 
-/** What pressing the advance button does, in the kitchen's own words. */
-const ADVANCE_LABEL: Partial<Record<StatusKey, string>> = {
-  placed: "Accept",
-  confirmed: "Mark ready",
-  ready: "Mark collected",
-}
 
 /** Matches the customer-side accent budget: one loud thing per screen. */
 const URGENT_MINUTES = 20
@@ -64,12 +61,26 @@ function isScheduled(order: Order): boolean {
   return wantedFor(order) !== "ASAP"
 }
 
-function Ticket({ order }: { order: Order }) {
-  const key = statusKey(order.status)
-  const next = nextStatus(order.status)
+/**
+ * The kitchen's ticket, with its next action on it.
+ *
+ * The advance button is the point of this screen. It used to read "Next: accept" and
+ * nothing else: moving an order meant opening the ticket on another page, finding the
+ * status control, and pressing a stage button — a navigation and a second decision for
+ * something the cook already knows. During service that is where a board goes stale.
+ *
+ * One press now, and the press is guarded by `canTransition` rather than by whatever
+ * the button happens to say: the same rule that protects the detail page decides here,
+ * so a WebSocket frame carrying an older status cannot talk the board into an illegal
+ * move (skipping a stage, or advancing a cancelled order).
+ */
+function Ticket({ order, onAdvance, busy }: { order: Order; onAdvance: (next: StatusKey) => void; busy: boolean }) {
   const mins = minutesAgo(order.createdAt)
   const payment = readPayment(order.paymentStatus, order.paymentMethod)
   const scheduled = isScheduled(order)
+
+  // The rule that decides, not the button's own wording. See lib/boardAction.
+  const action = boardAction(order.status)
 
   return (
     <article className={`ticket ${mins > URGENT_MINUTES ? "urgent" : ""}`}>
@@ -106,10 +117,20 @@ function Ticket({ order }: { order: Order }) {
       )}
 
       <div className="ticket-actions">
-        <OpenLink href={`/orders/${order.id}`} />
-        {next && ADVANCE_LABEL[key] && (
-          <span className="meta">Next: {ADVANCE_LABEL[key].toLowerCase()}</span>
+        {action ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ minHeight: 38, padding: "8px 14px", fontSize: 13 }}
+            disabled={busy}
+            onClick={() => onAdvance(action.to)}
+          >
+            {busy ? "Saving…" : action.label}
+          </button>
+        ) : (
+          <span className="meta">No further step.</span>
         )}
+        <OpenLink href={`/orders/${order.id}`} />
       </div>
     </article>
   )
@@ -133,6 +154,8 @@ function OpenLink({ href }: { href: string }) {
  */
 export function DashboardPage() {
   const { isConnected } = useOrderWebSocket()
+  const queryClient = useQueryClient()
+  const [savingId, setSavingId] = useState<number | null>(null)
 
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["orders", "board"],
@@ -144,6 +167,29 @@ export function DashboardPage() {
     queryKey: ["dashboard-summary"],
     queryFn: () => ordersApi.getDashboardSummary(),
     refetchInterval: 30_000,
+  })
+
+  /**
+   * Advance one ticket, from the board.
+   *
+   * The refresh is deliberately broad: advancing an order changes the day's numbers
+   * as well as the columns, and the board is the screen a mistake is noticed on. A
+   * failed press says so and changes nothing — the ticket stays where it is, so the
+   * cook can try again rather than wondering whether it worked.
+   *
+   * The transition is re-checked by `canTransition` inside `Ticket`, and the API is
+   * the last word: it rejects a status it considers invalid, which surfaces here.
+   */
+  const advance = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: StatusKey }) =>
+      ordersApi.updateOrderStatus(id, { status: apiStatusValue(status) as OrderStatus }),
+    onMutate: ({ id }) => setSavingId(id),
+    onSettled: () => setSavingId(null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
+    },
+    onError: () => showAdminToast("Couldn't update that order — try again"),
   })
 
   // The board carries only the open stages. Collected orders are finished, so
@@ -240,7 +286,14 @@ export function DashboardPage() {
                       {column.hint}
                     </p>
                     {list.length ? (
-                      list.map((order) => <Ticket key={order.id} order={order} />)
+                      list.map((order) => (
+                        <Ticket
+                          key={order.id}
+                          order={order}
+                          busy={savingId === order.id}
+                          onAdvance={(status) => advance.mutate({ id: order.id, status })}
+                        />
+                      ))
                     ) : (
                       <p className="board-empty">Nothing here.</p>
                     )}

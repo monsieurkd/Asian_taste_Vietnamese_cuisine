@@ -169,7 +169,18 @@ public class DatabaseInitializationService : IDatabaseInitializationService
         var optionGroupsSql = await GetMigrationScriptAsync("13_seed_modifier_groups.sql");
         await ExecuteScriptAsync(optionGroupsSql, cancellationToken);
 
-        // 8. Seed the admin user, once every script that touches admin_users has
+        // 8. Align the trading hours with the hours the shop publishes. Runs after the
+        //    settings migration that first seeded them, and before the admin user, so
+        //    a fresh database and an existing one end up with the same roster.
+        //
+        //    This one CORRECTS DATA rather than adding structure: the seeded hours had
+        //    one window per day (so the lunch/dinner break could not be expressed) and
+        //    made Monday a full day when it is lunch-only. The API judges whether to
+        //    accept an order from these rows, so wrong rows mean wrong refusals.
+        var tradingHoursSql = await GetMigrationScriptAsync("14_align_operating_hours_with_the_published_hours.sql");
+        await ExecuteScriptAsync(tradingHoursSql, cancellationToken);
+
+        // 9. Seed the admin user, once every script that touches admin_users has
         //    run. Only when no admin row exists: this creates the documented default
         //    account, and recreating it unconditionally would undo an operator
         //    deleting it. (A database with NO admin at all is unusable, so that case

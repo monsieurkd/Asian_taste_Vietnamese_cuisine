@@ -4,7 +4,8 @@ import { useCartStore } from '@/stores/cartStore';
 import { useCheckoutStore } from '@/stores/checkoutStore';
 import { useServiceStore } from '@/stores/serviceStore';
 import { SERVICES } from '@/lib/services';
-import { money } from '@/lib/site';
+import { SITE, money, publishedHours } from '@/lib/site';
+import { openState } from '@/lib/openingHours';
 import type { PendingOrderData } from '@/stores/checkoutStore';
 import { Panel, PanelBody, PanelFoot, PanelHead, RowLine, SumRow } from '@/components/ui/Panel';
 import { StateBlock } from '@/components/ui/State';
@@ -64,6 +65,15 @@ export function CheckoutPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof DetailsForm, string>>>({});
 
   const meta = SERVICES[service];
+
+  // Whether the kitchen is taking orders right now.
+  //
+  // The API is the authority — it refuses a closed order regardless of what this
+  // screen thinks — but telling the customer BEFORE they fill in a card is the
+  // difference between a shop that is politely shut and one that wastes their time.
+  // The check runs at render, so a tab left open past closing gets the answer on its
+  // next interaction rather than at the moment of payment.
+  const trading = openState(publishedHours());
   const subtotal = useMemo(
     () => items.reduce((sum, i) => sum + i.basePrice * i.quantity, 0),
     [items]
@@ -104,6 +114,11 @@ export function CheckoutPage() {
   }
 
   function goToPayment() {
+    // Refused here as well as at the API. This is the courtesy; the API is the rule.
+    if (!trading.open) {
+      document.getElementById('checkout-closed')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     if (!validate()) {
       document.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus();
       return;
@@ -188,6 +203,25 @@ export function CheckoutPage() {
 
       <div className="split">
         <div className="flex flex-col gap-5">
+          {!trading.open && (
+            <Panel data-od-id="checkout-closed">
+              <PanelBody>
+                <p id="checkout-closed" className="helpline" style={{ margin: 0, fontWeight: 600 }} role="status">
+                  {trading.reason}
+                </p>
+                <p className="meta" style={{ margin: '8px 0 0' }}>
+                  We&rsquo;re not taking orders at the moment, and nothing has been charged. Your
+                  basket is saved — come back when the kitchen reopens and it will still be here.
+                </p>
+                <div className="flex flex-wrap gap-2" style={{ marginTop: 14 }}>
+                  <a className="btn btn-secondary" href={SITE.phoneHref}>
+                    Call the shop
+                  </a>
+                </div>
+              </PanelBody>
+            </Panel>
+          )}
+
           {/* Details stay entered but disabled once you move on, so the values
               are still visible while you pay rather than vanishing. */}
           <Panel data-od-id="checkout-details">
@@ -333,8 +367,14 @@ export function CheckoutPage() {
           </PanelBody>
           <PanelFoot>
             {step === 'details' ? (
-              <button type="button" className="btn btn-primary btn-block" onClick={goToPayment}>
-                Continue to payment
+              <button
+                type="button"
+                className="btn btn-primary btn-block"
+                onClick={goToPayment}
+                aria-disabled={!trading.open}
+                style={!trading.open ? { opacity: 0.6 } : undefined}
+              >
+                {trading.open ? 'Continue to payment' : 'Closed — not taking orders'}
               </button>
             ) : (
               <button

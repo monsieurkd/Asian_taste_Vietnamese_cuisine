@@ -110,9 +110,16 @@ apiClient.interceptors.response.use(
   (error) => {
     // Handle common errors
     if (error.response) {
-      // Server responded with error status
-      const message = error.response.data?.error || error.message || 'An error occurred';
-      console.error('API Error:', error.response.data);
+      // Server responded with error status.
+      //
+      // `message` is preferred over `error`, because the API distinguishes an error
+      // CODE from the sentence a customer should read: a closed kitchen answers
+      // `{ error: "kitchen_closed", message: "The kitchen opens at 10:00." }`, and
+      // showing the code would tell the customer "kitchen_closed" instead of when to
+      // come back. `error` remains the fallback for the endpoints that only send it.
+      const body = error.response.data;
+      const message = body?.message || body?.error || error.message || 'An error occurred';
+      console.error('API Error:', body);
       return Promise.reject(new Error(message));
     } else if (error.request) {
       // Request made but no response
