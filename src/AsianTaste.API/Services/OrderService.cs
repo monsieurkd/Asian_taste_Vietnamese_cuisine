@@ -375,9 +375,16 @@ public class OrderService
         }
 
         // An ASAP order is wanted now; a scheduled one is judged at the time chosen.
-        DateTime? wantedAt = request.PickupTime.Type == "SCHEDULED"
-            && request.PickupTime.ScheduledTime.HasValue
-            ? request.PickupTime.ScheduledTime.Value
+        //
+        // The comparison is case-insensitive and the lookup is a helper, because BOTH
+        // the comparison HERE and the one that stores `requested_time` have to agree.
+        // They did not: this one compared exactly while the repository's treated
+        // anything that was not "ASAP" as scheduled, so a client sending "scheduled"
+        // was stored as a scheduled order and JUDGED as an immediate one — accepted at
+        // a time the kitchen is shut. Same request, two readings, and the wrong one
+        // decided whether to take the order.
+        DateTime? wantedAt = PickupTime.IsScheduled(request.PickupTime)
+            ? request.PickupTime.ScheduledTime
             : null;
 
         return _tradingHours.Evaluate(settings.Windows, settings.Timezone, wantedAt);

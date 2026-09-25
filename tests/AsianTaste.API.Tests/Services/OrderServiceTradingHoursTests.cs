@@ -195,6 +195,45 @@ public class OrderServiceTradingHoursTests
         Assert.NotNull(h.Orders.CreatedWithOrderNumber);
     }
 
+    [Fact]
+    public async Task A_scheduled_order_wanted_while_shut_is_refused()
+    {
+        // Ordered mid-service for a pickup at 3am. Judged at "now" this is open, and the
+        // kitchen gets a ticket nobody will cook — the failure the live probe was looking
+        // for. Judged at the time chosen, it is refused.
+        var threeAm = TimeZoneInfo.ConvertTimeToUtc(
+            new DateTime(2026, 3, 18, 3, 0, 0, DateTimeKind.Unspecified),
+            TimeZoneInfo.FindSystemTimeZoneById("Australia/Adelaide"));
+
+        var h = CreateHarness(LunchOnly, Lunchtime);
+
+        await Assert.ThrowsAsync<ShopClosedException>(() => h.Service.CreateOrderAsync(
+            Request("SCHEDULED", DateTime.SpecifyKind(threeAm, DateTimeKind.Utc))));
+
+        Assert.Equal(0, h.Payment.AuthorizeCallCount);
+        Assert.Null(h.Orders.CreatedWithOrderNumber);
+    }
+
+    [Theory]
+    [InlineData("scheduled")]
+    [InlineData("Scheduled")]
+    [InlineData("  SCHEDULED  ")]
+    public async Task The_pickup_type_is_read_case_insensitively(string type)
+    {
+        // The bug this pins: the trading rule compared the type exactly while the
+        // repository treated anything not-ASAP as scheduled, so a lowercase value was
+        // STORED as scheduled and JUDGED as immediate. The order is accepted for a time
+        // the kitchen is shut. Same request, two readings.
+        var threeAm = TimeZoneInfo.ConvertTimeToUtc(
+            new DateTime(2026, 3, 18, 3, 0, 0, DateTimeKind.Unspecified),
+            TimeZoneInfo.FindSystemTimeZoneById("Australia/Adelaide"));
+
+        var h = CreateHarness(LunchOnly, Lunchtime);
+
+        await Assert.ThrowsAsync<ShopClosedException>(() => h.Service.CreateOrderAsync(
+            Request(type, DateTime.SpecifyKind(threeAm, DateTimeKind.Utc))));
+    }
+
     // ── Collaborators ────────────────────────────────────────────────────────
 
     private sealed class StubSettingsRepository : IRestaurantSettingsRepository

@@ -1039,7 +1039,22 @@ Four things now guard it, each pinned by a test that fails without the fix
 4. The intent's amount must equal the order's own server-computed total, so a client
    cannot confirm a cheaper amount and have the order recorded at the full price.
 
-**The probe left three orders behind**, all synthetic and untouched, all in
+**Verified in production, 2026-09-25.** A scheduled pickup at 3am Adelaide (sent with
+its UTC offset) is refused:
+
+```
+POST /api/orders  {"pickupTime":{"type":"SCHEDULED","scheduledTime":"2026-09-26T03:00:00+09:30"}}
+HTTP 409  {"error":"kitchen_closed","message":"The kitchen opens at 10:00."}
+```
+
+That probe also found a real bug, which is why it was worth running: the pickup type was
+read TWO ways. The trading rule compared it exactly (`== "SCHEDULED"`) while the order
+write treated anything that was not ASAP as scheduled — so a client sending `scheduled`
+in lowercase had its order STORED as scheduled and JUDGED as immediate, and an
+out-of-hours pickup was accepted. Both call sites now use one helper, `PickupTime`, with
+13 tests.
+
+**The probes left several orders behind**, all synthetic and untouched, all in
 production, all `Pending` on the kitchen board. Cancel them from the admin dashboard:
 
 | Order number | orderId | Why it exists | What it returned |
@@ -1047,6 +1062,13 @@ production, all `Pending` on the kitchen board. Cancel them from the admin dashb
 | `AT-251703-5CFF` | 17 | the probe, before the fix | `"Paid online"` with nothing charged |
 | `AT-251709-74F7` | 18 | the same probe, after the fix | `"Payment failed — please try again"` (correct) |
 | one earlier probe | 16 | the probe, before the fix | same defect as order 17 |
+| `AT-251841-05E7` | 19 | verifying the closed-kitchen rule | "Payment failed" (correct) |
+| `AT-251841-B8AB` | 20 | a scheduled pickup sent without a UTC offset | accepted as lunchtime, correctly — see below |
+
+Order 20 is a lesson rather than a defect: the probe sent `03:00` with **no timezone**,
+which the API reads as UTC = 12:30pm Adelaide — inside opening hours, so it was accepted.
+Sending the offset (`+09:30`) is what made it a 3am order and correctly refused. The
+`ScheduledTime` field now documents that it must carry an offset.
 
 Order 18 is worth keeping a moment as the after-the-fact evidence that the fix works
 in production. None of these is a real customer order: the customer names are

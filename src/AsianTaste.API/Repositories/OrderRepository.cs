@@ -4,6 +4,7 @@ using AsianTaste.API.Data;
 using AsianTaste.API.Models.Entities;
 using AsianTaste.API.Models.DTOs;
 using AsianTaste.API.Models.Enums;
+using AsianTaste.API.Models.DTOs;
 
 namespace AsianTaste.API.Repositories;
 
@@ -209,7 +210,7 @@ public class OrderRepository : IOrderRepository
                         CustomerPhone = request.CustomerPhone,
                         CustomerEmail = request.CustomerEmail,
                         OrderType = request.OrderType.ToString(),
-                        RequestedTime = request.PickupTime.Type == "ASAP" ? DateTime.UtcNow : (request.PickupTime.ScheduledTime ?? DateTime.UtcNow),
+                        RequestedTime = PickupTime.ResolveRequestedTime(request.PickupTime),
                         Notes = request.SpecialInstructions,
                         PaymentMethod = request.PaymentMethod.ToString(),
                         Subtotal = subtotal,

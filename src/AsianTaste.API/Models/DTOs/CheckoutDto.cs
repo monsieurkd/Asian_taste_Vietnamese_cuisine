@@ -61,8 +61,53 @@ public class PickupTimeDto
     /// <summary>"ASAP" for immediate pickup, "SCHEDULED" for later.</summary>
     public string Type { get; set; } = "ASAP";
 
-    /// <summary>Scheduled time (required if Type is "SCHEDULED").</summary>
+    /// <summary>
+    /// Scheduled time (required if Type is "SCHEDULED"), in UTC.
+    /// </summary>
+    /// <remarks>
+    /// Callers must send an offset ("2026-09-26T03:00:00+09:30") or a Z-suffixed
+    /// instant. A bare local string is read as UTC, which silently shifts the request
+    /// by the restaurant's offset — a "3am" pickup sent without an offset arrives as
+    /// 12:30pm and is correctly but confusingly accepted.
+    /// </remarks>
     public DateTime? ScheduledTime { get; set; }
+}
+
+/// <summary>
+/// The single interpretation of a <see cref="PickupTimeDto"/>.
+/// </summary>
+/// <remarks>
+/// Extracted because there WERE two interpretations, and they disagreed. The trading
+/// rule compared the type exactly (<c>== "SCHEDULED"</c>) while the repository treated
+/// anything that was not ASAP as scheduled. A client sending "scheduled" therefore had
+/// its order stored as scheduled and judged as immediate — so an order for a time the
+/// kitchen is shut could be accepted, at a time a later query would read back as the
+/// customer's choice.
+///
+/// One helper, used by both, is what stops that drifting again. It is case-insensitive
+/// because the type is a free-text string in JSON and no client contract guarantees its
+/// casing.
+/// </remarks>
+public static class PickupTime
+{
+    /// <summary>True when the customer chose a time rather than "as soon as possible".</summary>
+    public static bool IsAsap(PickupTimeDto? pickupTime) =>
+        pickupTime is null || string.Equals(pickupTime.Type?.Trim(), "ASAP", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsScheduled(PickupTimeDto? pickupTime) => !IsAsap(pickupTime);
+
+    /// <summary>
+    /// The instant the order is wanted, in UTC.
+    /// </summary>
+    /// <remarks>
+    /// A scheduled order with no time falls back to now rather than throwing: the
+    /// request is malformed, and the safe reading is that the customer wants it
+    /// immediately — which the trading rule then applies to.
+    /// </remarks>
+    public static DateTime ResolveRequestedTime(PickupTimeDto? pickupTime) =>
+        IsScheduled(pickupTime) && pickupTime!.ScheduledTime.HasValue
+            ? pickupTime.ScheduledTime.Value
+            : DateTime.UtcNow;
 }
 
 /// <summary>

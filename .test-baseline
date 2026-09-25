@@ -30,7 +30,7 @@
 # The same change ADDED tests for the order flow itself (admin column mapping, the
 # real payment state, the pickup estimate, modifier mapping, the local day boundary)
 # and those more than replaced the deleted coverage in the areas that matter.
-214
+231
 
 # Raised 170 -> 174 on 2026-09-25, in the same commit as four tests for a defect
 # found in production by the deployment probe: StripePaymentVerificationTests pins
@@ -41,3 +41,10 @@
 # tests plus 6 proving the rule is wired in and a refusal has no side effects), the
 # menu writes that ten endpoints only pretended to make (13 tests asserting on the
 # write rather than the status), and the board's legal-move rule (9 tests).
+
+# Raised 214 -> 231 while verifying the closed-kitchen rule in PRODUCTION: the guard
+# worked (a scheduled 3am pickup is refused with 409), but the probe exposed that the
+# pickup type was read two different ways — the trading rule compared it exactly, the
+# repository treated anything not-ASAP as scheduled. 13 tests now pin one shared
+# interpretation, including the case that let a lowercase value store a scheduled order
+# while judging it as immediate.
