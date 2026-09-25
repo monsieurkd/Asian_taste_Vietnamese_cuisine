@@ -57,18 +57,25 @@ public class StripeWalletPaymentTests
     }
 
     [Fact]
-    public void Both_flows_enable_automatic_payment_methods()
+    public void Every_payment_intent_create_call_enables_automatic_payment_methods()
     {
-        // Two create calls exist and they are different flows, not duplicates:
-        // automatic capture for pickup/delivery, manual capture for dine-in. Both
-        // need wallets, so both must opt in.
+        // There is now ONE PaymentIntent create call in the gateway: the one the
+        // browser confirms before checkout. (A second used to exist in
+        // AuthorizePaymentAsync, which created a fresh uncaptured intent and reported
+        // success — see StripePaymentVerificationTests.) Whichever calls exist, each
+        // must opt in to wallets: a card-only intent silently prevents Apple Pay and
+        // Google Pay from ever appearing, with no error and no log.
         var source = GatewaySource();
-        var matches = Regex.Matches(source, @"AutomaticPaymentMethods\s*=\s*new\s+PaymentIntentAutomaticPaymentMethodsOptions");
 
+        var createCalls = Regex.Matches(source, @"new\s+PaymentIntentCreateOptions").Count;
+        var walletOptIns = Regex.Matches(source, @"AutomaticPaymentMethods\s*=\s*new\s+PaymentIntentAutomaticPaymentMethodsOptions").Count;
+
+        Assert.True(createCalls >= 1, "Expected at least one PaymentIntent create flow in the gateway.");
         Assert.True(
-            matches.Count >= 2,
-            $"Expected both PaymentIntent create calls to enable AutomaticPaymentMethods, found {matches.Count}. " +
-            "A card-only intent silently prevents Apple Pay and Google Pay from ever appearing.");
+            walletOptIns >= createCalls,
+            $"Found {createCalls} PaymentIntent create call(s) but only {walletOptIns} enabling " +
+            "AutomaticPaymentMethods. A card-only intent silently prevents Apple Pay and Google Pay " +
+            "from ever appearing.");
     }
 
     [Fact]

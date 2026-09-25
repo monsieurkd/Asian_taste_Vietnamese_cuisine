@@ -1015,6 +1015,34 @@ estimate on the customer's screens comes from the restaurant setting rather than
 literal `+20` minutes that disagreed with the checkout's `+15`, and the confirmation
 screen reports "Paid" only when a charge was actually captured.
 
+### 13.2b A card order could read as paid having taken no money — found in production
+
+Found on 2026-09-25 by the deployment probe that runs after a deploy, not by a test
+and not by review. A card order posted to the live API with **no payment token at
+all** came back `"paymentDisplay": "Paid online"`, and the order row was written as
+paid. Nothing had been charged.
+
+`StripePaymentGateway.AuthorizePaymentAsync` was the cause. Its comment said the
+server "verifies it with Stripe rather than trusting the client's word", but the
+code never used the client's PaymentIntent id — it **created a new one** and returned
+`Success = true` unconditionally. The new intent was uncaptured, so no money moved,
+and because Stripe returned it happily the app saw nothing wrong. `PaymentMethodId`
+was assigned by `OrderService` and then never read by anything.
+
+Four things now guard it, each pinned by a test that fails without the fix
+(`StripePaymentVerificationTests`):
+
+1. A card authorization with no PaymentIntent id is refused outright.
+2. The intent is **retrieved**, not created — no new intent can be minted here.
+3. Only `succeeded` or `requires_capture` counts as paid; anything else is reported
+   with the reason the customer needs (`requires_action`, a decline, still processing).
+4. The intent's amount must equal the order's own server-computed total, so a client
+   cannot confirm a cheaper amount and have the order recorded at the full price.
+
+**The probe left one order behind:** `AT-251703-5CFF` (orderId 17) is a synthetic
+untouched probe in production, created before the fix. Cancel it from the admin
+dashboard so it does not sit on the kitchen board.
+
 ### 13.3 The storefront offers only what the shop can serve
 
 Delivery was shown with a "subject to availability" caveat and could never complete a

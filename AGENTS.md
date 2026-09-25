@@ -135,6 +135,12 @@ explained commit.
 - **Never infer payment from the payment METHOD.** `payment_status` is the fact; a
   declined card is the common case the console must show. `readPayment` (admin
   `src/lib/payment.ts`) is the one place that decides how money is described.
+- **A card order is paid only when a charge was VERIFIED with Stripe.** This was a
+  live defect (2026-09-25): `AuthorizePaymentAsync` silently CREATED a fresh
+  uncaptured PaymentIntent instead of retrieving the one the browser confirmed, and
+  returned success, so `"Paid online"` was reported for orders that took no money.
+  `StripePaymentVerificationTests` pins the four rules now; do not reintroduce a
+  create-a-new-intent path in an authorization flow.
 - **Lightspeed is retired** (2026-09-25): the code is gone, the database tables and
   their migrations are NOT. Do not add new code against `lightspeed_*` columns
   without reading `docs/TODO.md` §7 first.

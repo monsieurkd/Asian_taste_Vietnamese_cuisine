@@ -205,7 +205,6 @@ public class StripePaymentGateway : IPaymentGatewayService
         PaymentRequest request,
         CancellationToken cancellationToken = default)
     {
-        // For dine-in orders, we can authorize now and capture later
         try
         {
             // For cash payments
@@ -219,45 +218,70 @@ public class StripePaymentGateway : IPaymentGatewayService
                 };
             }
 
-            // Create PaymentIntent with captureMethod=manual for later capture.
+            // A card order must arrive with the PaymentIntent the BROWSER confirmed.
             //
-            // Wallets enabled here too (see the note on the other create call):
-            // dine-in is where Apple Pay matters most, since the customer is
-            // standing at the counter and a wallet tap is the whole point of
-            // offering it.
-            //
-            // Caveat for testing: manual capture AUTHORISES without charging, so a
-            // dine-in Apple Pay payment will not show as money moved until it is
-            // captured. Do not read that as a failure.
-            var options = new PaymentIntentCreateOptions
+            // Without this the code fell through to the create-a-new-intent path below.
+            // Stripe happily returned a fresh, unpaid intent, `Success = true` came back,
+            // and the order was recorded as "Paid online" having taken no money. A probe
+            // order in production proved it: a card order with no token at all reported
+            // "Paid online". Failing here is what makes the response honest.
+            if (string.IsNullOrWhiteSpace(request.PaymentMethodId))
             {
-                Amount = request.Amount,
-                Currency = request.Currency.ToLowerInvariant(),
-                Metadata = new Dictionary<string, string>
+                return new PaymentAuthorizationResult
                 {
-                    { "order_id", request.OrderId },
-                    { "order_number", request.OrderNumber ?? "" }
-                },
-                Description = $"Order {request.OrderNumber}",
-                AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
-                {
-                    Enabled = true,
-                },
-                CaptureMethod = "manual", // Don't capture immediately, for dine-in
-                SetupFutureUsage = "off_session" // Allow future captures
-            };
+                    Success = false,
+                    AuthorizationId = string.Empty,
+                    ErrorMessage = "No confirmed card payment was supplied with this order, so nothing was charged."
+                };
+            }
 
+            // VERIFY the client's intent rather than creating one. The browser confirms
+            // the PaymentIntent (3-D Secure needs a browser), then sends its id; trusting
+            // the id without asking Stripe would let any caller claim payment, and
+            // creating a new intent would charge a card the customer never confirmed.
             var service = new PaymentIntentService();
-            var paymentIntent = await service.CreateAsync(options);
+            var confirmed = await service.GetAsync(request.PaymentMethodId);
 
-            _logger.LogInformation("Payment authorized: {PaymentId} for order {OrderId}",
-                paymentIntent.Id, request.OrderId);
+            if (confirmed.Status != "succeeded" && confirmed.Status != "requires_capture")
+            {
+                return new PaymentAuthorizationResult
+                {
+                    Success = false,
+                    AuthorizationId = confirmed.Id,
+                    ErrorMessage = confirmed.Status switch
+                    {
+                        "processing" => "The bank is still processing this payment. Try again in a moment.",
+                        "requires_action" => "The card was not finished confirming. Please try again.",
+                        "requires_payment_method" => "That card was declined. Please try another.",
+                        _ => $"The payment is not complete (status: {confirmed.Status}).",
+                    }
+                };
+            }
+
+            // The amount is the server's own figure, so a mismatch means the client
+            // confirmed a different amount from the order it is attached to — refuse it
+            // rather than record a total nobody paid.
+            if (confirmed.Amount != request.Amount)
+            {
+                _logger.LogWarning(
+                    "Payment {PaymentId} is for {PaidAmount} but order {OrderId} expects {ExpectedAmount}",
+                    confirmed.Id, confirmed.Amount, request.OrderId, request.Amount);
+
+                return new PaymentAuthorizationResult
+                {
+                    Success = false,
+                    AuthorizationId = confirmed.Id,
+                    ErrorMessage = "The amount paid does not match this order, so it was not accepted."
+                };
+            }
+
+            _logger.LogInformation("Payment {PaymentId} verified for order {OrderId}", confirmed.Id, request.OrderId);
 
             return new PaymentAuthorizationResult
             {
                 Success = true,
-                AuthorizationId = paymentIntent.Id,
-                Amount = paymentIntent.Amount / 100m
+                AuthorizationId = confirmed.Id,
+                Amount = confirmed.Amount / 100m
             };
         }
         catch (System.Exception e)
