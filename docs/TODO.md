@@ -1131,3 +1131,69 @@ recoverable from git history via another file. **Rotate that password in the Neo
 console.** Nothing in this change can do that for you, and until it is rotated the
 production database password should be treated as public.
 
+---
+
+## 14. What the second session built, and what it did not — 2026-09-25
+
+The manager's brief was four workstreams, all chosen by the owner. Three are done and
+deployed; the fourth is half done and is recorded that way rather than rounded up.
+
+### Built and live
+
+| # | What | Why it mattered |
+|---|---|---|
+| 1 | **One-press kitchen board** | Moving an order meant opening it on another page and finding the status control — a navigation and a second decision for something the cook already knows. Each ticket now carries its own press, guarded by the same rule as the detail page. |
+| 2 | **A closed kitchen refuses the order** | The storefront had shown "Closed" for a while and the API took the order anyway, because that notice was a courtesy rather than a control. Refused now at the API, before the order row, the charge and the email. |
+| 3 | **Menu writes made real** | Every menu write endpoint was a stub: it logged, returned 204 and changed nothing. The console's "sold out" switch flipped in the UI while the dish stayed on sale. |
+| 4 | **Menu editing** | The owner's own ask — change a price without a deploy. Sends only the fields he touched, so an unrelated edit cannot blank a description. |
+| 5 | **Refunds from the ticket** | The endpoint worked and nothing called it, so a refund meant the Stripe dashboard and a copied payment id. |
+
+### Not built, deliberately
+
+- **Editing an order** (add or remove a dish, change the pickup time, re-price it).
+  Staff taking a phone change still cannot do this from the console. It is a multi-step
+  write through `OrderRepository` with its own failure modes — a partial write leaves a
+  total that disagrees with its line items — and the owner chose to have it built on its
+  own rather than bolted on here.
+- **Adding a dish**, as opposed to hiding one. Creating a dish needs an image, a
+  section and the printed-menu decision that it belongs there; that is a screen, not a
+  field in an edit dialog. "Sold out" (hide/restore) covers the service-time need and is
+  what the switch does.
+- **Deleting a dish.** Removing something from the printed menu is a decision about the
+  shop. Unavailable is reversible in one press; deleted is not.
+- **Partial refunds.** The API supports them; the console offers full refunds only,
+  because a partial is a negotiation about what went wrong and typing an amount into a
+  kitchen screen invites a misplaced decimal point.
+
+### Two bugs the production probes found
+
+Both were found by probing the deployed API rather than by tests, which is the pattern
+worth keeping:
+
+1. **A card order with no payment token reported "Paid online"** having taken no money
+   (§13.2b). Already fixed; the probe that confirmed the fix is the one in §13.2b.
+2. **The pickup type was read two ways.** The trading rule compared it exactly
+   (`== "SCHEDULED"`) while the order write treated anything not-ASAP as scheduled — so a
+   client sending `scheduled` in lowercase had its order STORED as scheduled and JUDGED
+   as immediate, and an out-of-hours pickup was accepted. Both call sites now use one
+   helper, with 13 tests and an invariant: the instant that gets stored and the instant
+   that gets judged are the same one.
+
+The second is the same shape as everything else this session: one rule, encoded twice,
+with the wrong encoding deciding. The fix is always to leave one.
+
+### Verified in production
+
+```
+POST /api/orders  {"pickupTime":{"type":"SCHEDULED","scheduledTime":"2026-09-26T03:00:00+09:30"}}
+HTTP 409  {"error":"kitchen_closed","message":"The kitchen opens at 10:00."}
+
+POST /api/orders  {"pickupTime":{"type":"scheduled", ...same time...}}
+HTTP 409  (the lowercase case that used to be accepted)
+
+POST /api/orders  {"pickupTime":{"type":"ASAP"}}
+HTTP 200  (in-hours orders are unaffected)
+```
+
+`scripts/check-deployment-health.sh` passes, and the six endpoints the cleanup removed
+still return 404.
