@@ -1064,6 +1064,7 @@ production, all `Pending` on the kitchen board. Cancel them from the admin dashb
 | one earlier probe | 16 | the probe, before the fix | same defect as order 17 |
 | `AT-251841-05E7` | 19 | verifying the closed-kitchen rule | "Payment failed" (correct) |
 | `AT-251841-B8AB` | 20 | a scheduled pickup sent without a UTC offset | accepted as lunchtime, correctly — see below |
+| `AT-251846-DC69` | 21 | confirming an in-hours order still succeeds | accepted (correct) |
 
 Order 20 is a lesson rather than a defect: the probe sent `03:00` with **no timezone**,
 which the API reads as UTC = 12:30pm Adelaide — inside opening hours, so it was accepted.
