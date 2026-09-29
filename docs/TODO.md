@@ -1147,14 +1147,12 @@ deployed; the fourth is half done and is recorded that way rather than rounded u
 | 3 | **Menu writes made real** | Every menu write endpoint was a stub: it logged, returned 204 and changed nothing. The console's "sold out" switch flipped in the UI while the dish stayed on sale. |
 | 4 | **Menu editing** | The owner's own ask — change a price without a deploy. Sends only the fields he touched, so an unrelated edit cannot blank a description. |
 | 5 | **Refunds from the ticket** | The endpoint worked and nothing called it, so a refund meant the Stripe dashboard and a copied payment id. |
+| 6 | **Editing an order** | A phone change meant cancel-and-rebuild: refund, re-charge, and a second kitchen ticket for the same food. Now edited in place, in one transaction, re-priced from the menu. |
+
+| 6 | **Edit an order** | A phone change meant cancel-and-rebuild: refund, re-charge, and a second kitchen ticket for the same food. Now edited in place, one transaction, re-priced from the menu. |
 
 ### Not built, deliberately
 
-- **Editing an order** (add or remove a dish, change the pickup time, re-price it).
-  Staff taking a phone change still cannot do this from the console. It is a multi-step
-  write through `OrderRepository` with its own failure modes — a partial write leaves a
-  total that disagrees with its line items — and the owner chose to have it built on its
-  own rather than bolted on here.
 - **Adding a dish**, as opposed to hiding one. Creating a dish needs an image, a
   section and the printed-menu decision that it belongs there; that is a screen, not a
   field in an edit dialog. "Sold out" (hide/restore) covers the service-time need and is
