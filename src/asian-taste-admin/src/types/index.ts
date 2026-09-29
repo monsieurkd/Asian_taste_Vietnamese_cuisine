@@ -144,6 +144,37 @@ export interface RecentOrder {
 }
 
 /**
+ * One line of a replacement order. Deliberately has no price: the server computes the
+ * money from the current menu, so a request cannot set its own total.
+ */
+export interface UpdateOrderItemInput {
+  menuItemId: number
+  quantity: number
+  specialInstructions?: string
+  modifierIds?: number[]
+}
+
+/**
+ * Replace an order's contents. The whole order is sent, because that is what the screen
+ * shows — a sequence of deltas would apply differently depending on arrival order.
+ */
+export interface UpdateOrderItemsRequest {
+  items: UpdateOrderItemInput[]
+  pickupTime?: { type: "ASAP" | "SCHEDULED"; scheduledTime?: string }
+  reason?: string
+}
+
+/** What an edit did, including what it did to the money. */
+export interface UpdateOrderItemsResult {
+  orderId: number
+  orderNumber: string
+  subtotal: number
+  total: number
+  paymentNote: string
+  amountDueAtCounter: boolean
+}
+
+/**
  * Update order status request.
  */
 export interface UpdateOrderStatusRequest {

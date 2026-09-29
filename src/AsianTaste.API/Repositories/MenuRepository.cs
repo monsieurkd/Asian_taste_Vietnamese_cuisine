@@ -210,6 +210,41 @@ public class MenuRepository : IMenuRepository
         return await GetItemByIdAsync(id, cancellationToken);
     }
 
+
+    /// <summary>
+    /// Current name and price for a set of dishes.
+    /// </summary>
+    /// <remarks>
+    /// Prices come from the database, never from the caller: order editing prices the
+    /// replacement lines from the menu as it stands, so a client cannot choose its own
+    /// total. Dishes that no longer exist are simply absent from the result, and the
+    /// caller treats that as "cannot be added" rather than guessing a price.
+    /// </remarks>
+    public async Task<Dictionary<int, (string Name, decimal Price)>> GetPricesForItemsAsync(
+        IReadOnlyCollection<int> menuItemIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (menuItemIds.Count == 0) return new Dictionary<int, (string, decimal)>();
+
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        // The IN list is built from generated placeholders while the VALUES stay
+        // parameters, which is the same shape CreateOrderAsync uses to re-price a cart.
+        var placeholders = string.Join(",", menuItemIds.Select((_, i) => $"@id{i}"));
+        var parameters = new DynamicParameters();
+        var index = 0;
+        foreach (var id in menuItemIds) parameters.Add($"id{index++}", id);
+
+        var rows = await connection.QueryAsync<(int Id, string Name, decimal BasePrice)>(
+            new CommandDefinition(
+                $"SELECT id, name, base_price FROM menu_items WHERE id IN ({placeholders})",
+                parameters,
+                cancellationToken: cancellationToken));
+
+        return rows.ToDictionary(r => r.Id, r => (r.Name, r.BasePrice));
+    }
+
     public async Task<MenuItemDetailDto?> GetItemByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();

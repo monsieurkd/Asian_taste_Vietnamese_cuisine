@@ -251,6 +251,9 @@ public class AdminMenuWriteTests
             return Task.FromResult(StoredItem);
         }
 
+        public Task<Dictionary<int, (string Name, decimal Price)>> GetPricesForItemsAsync(IReadOnlyCollection<int> menuItemIds, CancellationToken cancellationToken = default) => Task.FromResult(new Dictionary<int, (string, decimal)>());
+
+
         // Reads: only GetItemByIdAsync is reached by the endpoints under test.
         public Task<MenuItemDetailDto?> GetItemByIdAsync(int id, CancellationToken cancellationToken = default) =>
             Task.FromResult(ItemExists ? StoredItem : null);

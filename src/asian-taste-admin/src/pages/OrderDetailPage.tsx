@@ -11,6 +11,7 @@ import { readPayment } from "@/lib/payment"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { AdminModal } from "@/components/ui/AdminModal"
+import { OrderEditor } from "@/components/orders/OrderEditor"
 import { refundEligibility } from "@/lib/refund"
 
 function CheckMark() {
@@ -34,6 +35,8 @@ export function OrderDetailPage() {
   const queryClient = useQueryClient()
   /** Whether the refund confirmation is open. See the dialog for why it is a step. */
   const [refunding, setRefunding] = useState(false)
+  /** Whether the order editor is open. */
+  const [editing, setEditing] = useState(false)
 
   const { data: order, isLoading } = useQuery({
     queryKey: ["order-detail", id],
@@ -232,9 +235,19 @@ export function OrderDetailPage() {
             <Panel>
               <PanelHead>
                 <h3>Items</h3>
-                <Pill>
-                  {order.items.reduce((sum, i) => sum + i.quantity, 0)} items
-                </Pill>
+                <div className="flex items-center gap-2">
+                  <Pill>
+                    {order.items.reduce((sum, i) => sum + i.quantity, 0)} items
+                  </Pill>
+                  {/* Editing lives beside the lines it changes, because that is the
+                      thing a phone call is about. Refunds and status are separate
+                      decisions and stay separate controls. */}
+                  {!isClosed && (
+                    <Button variant="ghost" onClick={() => setEditing(true)}>
+                      Edit
+                    </Button>
+                  )}
+                </div>
               </PanelHead>
               <PanelBody>
                 {order.items.map((item) => (
@@ -392,6 +405,8 @@ export function OrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {editing && <OrderEditor order={order} onClose={() => setEditing(false)} />}
 
       {refunding && (
         <AdminModal

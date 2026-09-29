@@ -22,6 +22,7 @@ public class OrderService
     private readonly IPaymentGatewayService _paymentGateway;
     private readonly IOrderNotifier _orderNotifier;
     private readonly TradingHours _tradingHours;
+    private readonly IMenuRepository _menuRepository;
     private readonly ILogger<OrderService> _logger;
 
     public OrderService(
@@ -33,6 +34,7 @@ public class OrderService
         IPaymentGatewayService paymentGateway,
         IOrderNotifier orderNotifier,
         TradingHours tradingHours,
+        IMenuRepository menuRepository,
         ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository;
@@ -43,6 +45,7 @@ public class OrderService
         _paymentGateway = paymentGateway;
         _orderNotifier = orderNotifier;
         _tradingHours = tradingHours;
+        _menuRepository = menuRepository;
         _logger = logger;
     }
 
@@ -272,6 +275,158 @@ public class OrderService
                 }).ToList()
             }).ToList()
         };
+    }
+
+    /// <summary>
+    /// Replaces an order's contents, re-pricing it from the current menu.
+    /// </summary>
+    /// <remarks>
+    /// This is the phone-change path: staff take a call, the customer wants one dish
+    /// swapped, and nobody wants to cancel-and-rebuild (which would refund, re-charge
+    /// and give the kitchen a second ticket for the same food).
+    ///
+    /// Two rules do the work here rather than in the repository:
+    ///
+    ///  1. **Prices come from the menu, not the request.** The caller says which dish
+    ///     and how many; the money is computed here from `menu_items`. A request that
+    ///     could name its own prices could set any total.
+    ///  2. **The new pickup time is judged by the same trading rule as checkout.** An
+    ///     edit that moves an order to 3am is the same mistake as placing one at 3am,
+    ///     and it would otherwise be the way around the closed-kitchen guard.
+    ///
+    /// It does NOT touch what was paid. The order's `paid_amount` records money that
+    /// actually moved; an edit changes what is owed. Reconciling the difference is a
+    /// refund or a counter payment, and both are explicit acts.
+    /// </remarks>
+    /// <returns>The recomputed figures, or null when the order does not exist.</returns>
+    /// <exception cref="ShopClosedException">The new pickup time is outside trading hours.</exception>
+    /// <exception cref="InvalidOperationException">A dish in the request is not on the menu.</exception>
+    public async Task<UpdateOrderItemsResponseDto?> UpdateOrderItemsAsync(
+        int orderId,
+        UpdateOrderItemsDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var order = await _orderRepository.GetOrderByIdAsync(orderId, cancellationToken);
+        if (order is null) return null;
+
+        var settings = await LoadRestaurantSettingsAsync(cancellationToken);
+
+        // A new pickup time is judged exactly as a new order's would be. Null means the
+        // time is unchanged, so the existing one is left alone rather than re-validated
+        // — an order already in progress must not be invalidated by a rule that changed
+        // after it was placed.
+        if (request.PickupTime is not null)
+        {
+            var trading = _tradingHours.Evaluate(
+                settings.Windows,
+                settings.Timezone,
+                PickupTime.ResolveRequestedTime(request.PickupTime));
+
+            if (!trading.Open)
+            {
+                throw new ShopClosedException(trading.Open ? "" : trading.Reason);
+            }
+        }
+
+        // Price every line from the CURRENT menu.
+        var menuIds = request.Items.Select(i => i.MenuItemId).Distinct().ToList();
+        var prices = await _menuRepository.GetPricesForItemsAsync(menuIds, cancellationToken);
+
+        var missing = menuIds.Where(id => !prices.ContainsKey(id)).ToList();
+        if (missing.Count > 0)
+        {
+            // Refused rather than skipped: silently dropping a dish the customer asked
+            // for would send out food that does not match the ticket.
+            throw new InvalidOperationException(
+                $"Not on the menu any more: {string.Join(", ", missing)}. Remove it from the order and try again.");
+        }
+
+        var lines = new List<OrderLineWrite>();
+        foreach (var item in request.Items)
+        {
+            // Duplicate lines for the same dish with different options are legitimate,
+            // and so is the same dish twice; they are carried through positionally
+            // rather than merged, because merging would lose one set of instructions.
+            var dish = prices[item.MenuItemId];
+
+            lines.Add(new OrderLineWrite
+            {
+                MenuItemId = item.MenuItemId,
+                MenuItemName = dish.Name,
+                Quantity = item.Quantity,
+                UnitPrice = dish.Price,
+                SpecialInstructions = item.SpecialInstructions,
+                ModifierIds = item.ModifierIds,
+            });
+        }
+
+        var written = await _orderRepository.ReplaceOrderItemsAsync(orderId, lines, cancellationToken);
+        if (written is null) return null;
+
+        // Move the pickup time as part of the same change, if one was given.
+        if (request.PickupTime is not null)
+        {
+            order.RequestedTime = PickupTime.ResolveRequestedTime(request.PickupTime);
+            order.Notes = request.Reason ?? order.Notes;
+            await _orderRepository.UpdateOrderAsync(order, cancellationToken);
+        }
+
+        var (subtotal, total) = written.Value;
+        var paid = order.PaidAmount ?? 0m;
+
+        var response = new UpdateOrderItemsResponseDto
+        {
+            OrderId = orderId,
+            OrderNumber = order.OrderNumber,
+            Subtotal = subtotal,
+            Total = total,
+            // Anything not settled online owes money at the counter, and so does a
+            // settled order whose total has since gone up. The declined-card case is
+            // the one that matters: the kitchen will still cook it (that is the shop's
+            // choice), so the counter has to be told to collect — otherwise the food
+            // goes out unpaid because the screen implied it was handled.
+            AmountDueAtCounter = order.PaymentStatus != Models.Enums.PaymentStatus.Succeeded || total > paid,
+            PaymentNote = BuildPaymentNote(order, paid, total),
+        };
+
+        _logger.LogInformation(
+            "Order {OrderNumber} edited: {LineCount} line(s), new total {Total} (was {Previous})",
+            order.OrderNumber, lines.Count, total, order.Total);
+
+        return response;
+    }
+
+    /// <summary>
+    /// Says what an edit did to the money, in the operator's terms.
+    /// </summary>
+    /// <remarks>
+    /// The case worth spelling out is a paid order whose total went UP: the customer
+    /// now owes the difference and nothing here will collect it. Saying so turns a
+    /// silent shortfall into a line the operator reads out on the phone.
+    /// </remarks>
+    private static string BuildPaymentNote(Order order, decimal paid, decimal total)
+    {
+        if (order.PaymentStatus != Models.Enums.PaymentStatus.Succeeded)
+        {
+            return total > 0
+                ? "This order was never paid online — collect the new total at the counter."
+                : string.Empty;
+        }
+
+        if (total > paid)
+        {
+            var due = total - paid;
+            return $"The card was charged {paid:0.00}. Collect the remaining {due:0.00} at the counter.";
+        }
+
+        if (total < paid)
+        {
+            var back = paid - total;
+            return $"The card was charged {paid:0.00}, which is {back:0.00} more than the order now costs. "
+                 + "Refund the difference from this ticket.";
+        }
+
+        return "The total is unchanged.";
     }
 
     /// <summary>

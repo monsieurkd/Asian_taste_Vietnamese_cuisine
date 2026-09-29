@@ -96,7 +96,10 @@ public class OrderServicePaymentTests
             return Task.FromResult(OrderToReturn);
         }
 
+        public Task<(decimal Subtotal, decimal Total)?> ReplaceOrderItemsAsync(int orderId, IReadOnlyList<OrderLineWrite> lines, CancellationToken cancellationToken = default) => Task.FromResult<(decimal, decimal)?>(null);
+
         public Task UpdateOrderAsync(Order order, CancellationToken cancellationToken = default)
+
         {
             // Snapshot: the caller mutates this same instance, so storing the
             // reference would let later changes rewrite history.
@@ -128,6 +131,24 @@ public class OrderServicePaymentTests
         public Task<List<Order>> GetOrdersByCustomerEmailAsync(string email, CancellationToken cancellationToken = default) => Task.FromResult(new List<Order>());
         public Task<List<OrderItem>> GetOrderItemsAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult(new List<OrderItem>());
         public Task<List<AdminOrderListDto>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default) => Task.FromResult(new List<AdminOrderListDto>());
+    }
+
+    private sealed class StubMenuRepository : IMenuRepository
+    {
+        public Task<Dictionary<int, (string Name, decimal Price)>> GetPricesForItemsAsync(
+            IReadOnlyCollection<int> menuItemIds, CancellationToken cancellationToken = default) =>
+            Task.FromResult(menuItemIds.ToDictionary(id => id, id => ("Test Dish", 17.00m)));
+
+        public Task<bool> SetItemAvailabilityAsync(int id, bool isAvailable, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<MenuItemDetailDto?> UpdateItemAsync(int id, MenuItemUpdate update, CancellationToken cancellationToken = default) => Task.FromResult<MenuItemDetailDto?>(null);
+        public Task<MenuItemDetailDto?> GetItemByIdAsync(int id, CancellationToken cancellationToken = default) => Task.FromResult<MenuItemDetailDto?>(null);
+        public Task<MenuResponseDto> GetFullMenuAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<CategoryDto>> GetCategoriesAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<MenuItemSummaryDto>> GetItemsByCategoryAsync(int categoryId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<MenuItemSummaryDto>> SearchItemsAsync(string query, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<MenuItemSummaryDto>> SearchItemsAdvancedAsync(SearchParametersDto parameters, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<MenuItemSummaryDto>> GetPopularItemsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<MenuItemSummaryDto>> GetAvailableItemsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 
     private sealed class StubCustomerRepository : ICustomerRepository
@@ -258,6 +279,7 @@ public class OrderServicePaymentTests
             // focused on what order creation actually does.
             notifier,
             new TradingHours(TimeProvider.System),
+            new StubMenuRepository(),
             NullLogger<OrderService>.Instance);
 
         return new Harness(service, payment, orders, notifier, notifier as RecordingOrderNotifier);

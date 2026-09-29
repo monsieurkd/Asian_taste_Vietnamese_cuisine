@@ -882,6 +882,177 @@ public class OrderRepository : IOrderRepository
             new CommandDefinition(sql, new { PaymentIntentId = paymentIntentId }, cancellationToken: cancellationToken));
     }
 
+
+    /// <summary>
+    /// Replaces an order's lines and recomputes its total, atomically.
+    /// </summary>
+    /// <remarks>
+    /// One transaction, for the reason in the interface: a half-written edit leaves a
+    /// total that disagrees with its own lines, and nothing later can tell that it
+    /// happened. Inside the transaction the old lines are deleted, the new ones
+    /// inserted, and the order's subtotal and total recomputed from what was inserted.
+    ///
+    /// The total is recomputed from the LINE VALUES rather than summed by the caller, so
+    /// the arithmetic happens in one place and cannot drift from the rows it describes.
+    /// `tax` stays zero because prices are GST-inclusive (docs/TODO.md §8).
+    ///
+    /// Deliberately does not touch `paid_amount`: an edit changes what is owed, not what
+    /// was taken. A refund is the only thing that moves money, and conflating the two
+    /// would let an edit silently rewrite a payment record.
+    /// </remarks>
+    public async Task<(decimal Subtotal, decimal Total)?> ReplaceOrderItemsAsync(
+        int orderId,
+        IReadOnlyList<OrderLineWrite> lines,
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            // The order must exist, and be locked for the duration: two concurrent edits
+            // otherwise interleave their delete/insert pairs and produce a total that
+            // matches neither.
+            var exists = await connection.ExecuteScalarAsync<int?>(
+                new CommandDefinition(
+                    "SELECT id FROM orders WHERE id = @OrderId FOR UPDATE",
+                    new { OrderId = orderId },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            if (exists is null)
+            {
+                transaction.Rollback();
+                return null;
+            }
+
+            // Old lines go first. `order_item_modifiers` is removed explicitly rather
+            // than relying on a cascade, so the deletion is visible in this file and does
+            // not depend on a constraint someone might later drop.
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    @"DELETE FROM order_item_modifiers
+                      WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = @OrderId)",
+                    new { OrderId = orderId },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "DELETE FROM order_items WHERE order_id = @OrderId",
+                    new { OrderId = orderId },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            // Re-attach modifiers by id, priced from the menu — the same source of truth
+            // the checkout uses.
+            var allModifierIds = lines.SelectMany(l => l.ModifierIds).Distinct().ToList();
+            var modifierDetails = new Dictionary<int, (string name, decimal price)>();
+            if (allModifierIds.Count > 0)
+            {
+                var modifierPlaceholders = string.Join(",", allModifierIds.Select((_, i) => $"@mod{i}"));
+                var modifierParams = new DynamicParameters();
+                for (var i = 0; i < allModifierIds.Count; i++) modifierParams.Add($"mod{i}", allModifierIds[i]);
+
+                var modifiers = await connection.QueryAsync<ModifierDetails>(
+                    new CommandDefinition(
+                        $"SELECT id, name, price_adjustment FROM modifiers WHERE id IN ({modifierPlaceholders})",
+                        modifierParams,
+                        transaction,
+                        cancellationToken: cancellationToken));
+
+                modifierDetails = modifiers.ToDictionary(m => m.id, m => (m.name, m.price_adjustment));
+            }
+
+            const string itemSql = @"
+                INSERT INTO order_items (
+                    order_id, menu_item_id, menu_item_name, quantity,
+                    unit_price, total_price, special_instructions
+                ) VALUES (
+                    @OrderId, @MenuItemId, @MenuItemName, @Quantity,
+                    @UnitPrice, @TotalPrice, @SpecialInstructions
+                ) RETURNING id";
+
+            const string modifierSql = @"
+                INSERT INTO order_item_modifiers (
+                    order_item_id, modifier_id, modifier_name, price_adjustment
+                ) VALUES (
+                    @OrderItemId, @ModifierId, @ModifierName, @PriceAdjustment
+                )";
+
+            decimal subtotal = 0;
+
+            foreach (var line in lines)
+            {
+                var modifierPrice = line.ModifierIds
+                    .Where(id => modifierDetails.ContainsKey(id))
+                    .Sum(id => modifierDetails[id].price);
+
+                var unitPrice = line.UnitPrice + modifierPrice;
+                var totalPrice = unitPrice * line.Quantity;
+                subtotal += totalPrice;
+
+                var orderItemId = await connection.QuerySingleAsync<int>(
+                    new CommandDefinition(
+                        itemSql,
+                        new
+                        {
+                            OrderId = orderId,
+                            MenuItemId = line.MenuItemId,
+                            MenuItemName = line.MenuItemName,
+                            Quantity = line.Quantity,
+                            UnitPrice = unitPrice,
+                            TotalPrice = totalPrice,
+                            SpecialInstructions = line.SpecialInstructions,
+                        },
+                        transaction,
+                        cancellationToken: cancellationToken));
+
+                foreach (var modifierId in line.ModifierIds)
+                {
+                    if (!modifierDetails.TryGetValue(modifierId, out var modifier)) continue;
+
+                    await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            modifierSql,
+                            new
+                            {
+                                OrderItemId = orderItemId,
+                                ModifierId = modifierId,
+                                ModifierName = modifier.name,
+                                PriceAdjustment = modifier.price,
+                            },
+                            transaction,
+                            cancellationToken: cancellationToken));
+                }
+            }
+
+            var total = subtotal; // GST-inclusive: see docs/TODO.md §8. Tax is a label, not an addition.
+
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    @"UPDATE orders
+                      SET subtotal = @Subtotal,
+                          tax = 0,
+                          total = @Total,
+                          updated_at = CURRENT_TIMESTAMP
+                      WHERE id = @OrderId",
+                    new { OrderId = orderId, Subtotal = subtotal, Total = total },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            transaction.Commit();
+
+            return (subtotal, total);
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
+
     public async Task UpdateOrderAsync(Order order, CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();

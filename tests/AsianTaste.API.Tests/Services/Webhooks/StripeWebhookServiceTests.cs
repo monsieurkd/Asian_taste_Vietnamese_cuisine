@@ -441,6 +441,7 @@ public class StripeWebhookServiceTests
 
         public Task<Order?> GetOrderByIdAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task UpdateOrderAsync(Order order, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<(decimal Subtotal, decimal Total)?> ReplaceOrderItemsAsync(int orderId, IReadOnlyList<OrderLineWrite> lines, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task UpdateOrderStatusAsync(int orderId, OrderStatus status, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<List<OrderItem>> GetOrderItemsAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task MarkEmailConfirmationSentAsync(int orderId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
@@ -459,6 +460,8 @@ public class StripeWebhookServiceTests
         public Order? Order { get; set; }
         public int? LastStatusOrderId { get; private set; }
         public OrderStatus? LastStatus { get; private set; }
+
+        public Task<(decimal Subtotal, decimal Total)?> ReplaceOrderItemsAsync(int orderId, IReadOnlyList<OrderLineWrite> lines, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         /// <summary>The order returned by a PaymentIntent lookup — set to exercise refunds.</summary>
         public Order? OrderByPaymentIntent { get; set; }

@@ -1,4 +1,11 @@
-import { type Order, type OrderDetail, type DashboardSummary, type UpdateOrderStatusRequest } from "@/types"
+import {
+  type Order,
+  type OrderDetail,
+  type DashboardSummary,
+  type UpdateOrderItemsRequest,
+  type UpdateOrderItemsResult,
+  type UpdateOrderStatusRequest,
+} from "@/types"
 import apiClient from "./client"
 
 /**
@@ -43,6 +50,21 @@ export const ordersApi = {
    */
   async updateOrderStatus(id: number, request: UpdateOrderStatusRequest): Promise<void> {
     await apiClient.put(`/admin/orders/${id}/status`, request)
+  },
+
+  /**
+   * Replace an order's contents.
+   *
+   * Sends dishes and quantities only — the server re-prices from the current menu, so
+   * this cannot set its own total. Returns the recomputed figures plus a note about the
+   * money when it differs from what was charged.
+   */
+  async updateOrderItems(
+    id: number,
+    request: UpdateOrderItemsRequest,
+  ): Promise<UpdateOrderItemsResult> {
+    const response = await apiClient.put<UpdateOrderItemsResult>(`/admin/orders/${id}/items`, request)
+    return response.data
   },
 
   /**

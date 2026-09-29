@@ -80,4 +80,16 @@ public interface IMenuRepository
     /// </summary>
     /// <returns>The updated dish, or null when it does not exist.</returns>
     Task<MenuItemDetailDto?> UpdateItemAsync(int id, MenuItemUpdate update, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Current name and price for a set of dishes, for re-pricing an existing order.
+    /// </summary>
+    /// <remarks>
+    /// Needed by order editing, which must price the replacement lines from the CURRENT
+    /// menu rather than from whatever the client claims. A caller that could name its own
+    /// prices could edit an order to any total it liked.
+    /// </remarks>
+    Task<Dictionary<int, (string Name, decimal Price)>> GetPricesForItemsAsync(
+        IReadOnlyCollection<int> menuItemIds,
+        CancellationToken cancellationToken = default);
 }

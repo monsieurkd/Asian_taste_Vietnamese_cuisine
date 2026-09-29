@@ -30,7 +30,7 @@
 # The same change ADDED tests for the order flow itself (admin column mapping, the
 # real payment state, the pickup estimate, modifier mapping, the local day boundary)
 # and those more than replaced the deleted coverage in the areas that matter.
-231
+242
 
 # Raised 170 -> 174 on 2026-09-25, in the same commit as four tests for a defect
 # found in production by the deployment probe: StripePaymentVerificationTests pins
@@ -48,3 +48,7 @@
 # repository treated anything not-ASAP as scheduled. 13 tests now pin one shared
 # interpretation, including the case that let a lowercase value store a scheduled order
 # while judging it as immediate.
+
+# Raised 231 -> 242 for order editing: 11 tests on the service rules (prices come from
+# the menu, a dish that left the menu refuses the whole edit, the trading rule applies to
+# the new pickup time, and what an edit does to the money of an order already charged).

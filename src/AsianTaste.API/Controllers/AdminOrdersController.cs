@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using AsianTaste.API.Models.DTOs;
 using AsianTaste.API.Models.Enums;
 using AsianTaste.API.Repositories;
+using AsianTaste.API.Services;
 using System.ComponentModel.DataAnnotations;
 
 namespace AsianTaste.API.Controllers;
@@ -18,13 +19,16 @@ namespace AsianTaste.API.Controllers;
 public class AdminOrdersController : ControllerBase
 {
     private readonly IOrderRepository _orderRepository;
+    private readonly OrderService _orderService;
     private readonly ILogger<AdminOrdersController> _logger;
 
     public AdminOrdersController(
         IOrderRepository orderRepository,
+        OrderService orderService,
         ILogger<AdminOrdersController> logger)
     {
         _orderRepository = orderRepository;
+        _orderService = orderService;
         _logger = logger;
     }
 
@@ -120,6 +124,62 @@ public class AdminOrdersController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving dashboard summary");
             return StatusCode(500, new { error = "An error occurred while retrieving dashboard summary" });
+        }
+    }
+
+    /// <summary>
+    /// Replaces an order's contents — the phone-change path.
+    /// </summary>
+    /// <remarks>
+    /// The caller sends dishes and quantities, never prices: the server re-prices from
+    /// the current menu, so an edit cannot set its own total. The new total is returned
+    /// with a note about the money when it differs from what was charged.
+    /// </remarks>
+    /// <param name="id">Order ID.</param>
+    /// <param name="request">The replacement contents.</param>
+    /// <response code="200">The order was edited, with its recomputed totals.</response>
+    /// <response code="400">The request is invalid, or a dish is no longer on the menu.</response>
+    /// <response code="404">Order not found.</response>
+    /// <response code="409">The new pickup time is outside trading hours.</response>
+    [HttpPut("{id}/items")]
+    [ProducesResponseType(typeof(UpdateOrderItemsResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<UpdateOrderItemsResponseDto>> UpdateOrderItems(
+        int id,
+        [FromBody] UpdateOrderItemsDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _orderService.UpdateOrderItemsAsync(id, request, cancellationToken);
+            if (result is null)
+            {
+                return NotFound(new { error = $"Order with ID {id} not found" });
+            }
+
+            _logger.LogInformation(
+                "Order {OrderId} items replaced by admin: new total {Total}", id, result.Total);
+
+            return Ok(result);
+        }
+        catch (ShopClosedException ex)
+        {
+            // The same 409 the customer-facing checkout gives, for the same reason: a
+            // pickup time the kitchen cannot serve is a business refusal, not a fault.
+            return Conflict(new { error = "kitchen_closed", message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // A dish that has been removed from the menu, or another business rule.
+            // 400 because the request is what is wrong, and the message names the dish.
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error editing items for order {OrderId}", id);
+            return StatusCode(500, new { error = "An error occurred while editing the order" });
         }
     }
 
