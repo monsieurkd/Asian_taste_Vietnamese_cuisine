@@ -65,26 +65,29 @@ WORKFLOW=".github/workflows/ci.yml"
 # Thresholds. Deliberately generous: this is a tripwire for "this cannot be
 # reviewed", not a style rule.
 #
-# RAISED on 2026-09-25, and the reason is the point of this comment. The original
-# figures (sixty files / two-and-a-half thousand lines / six hundred lines in one
-# file) assumed a change is a feature. They cannot describe a DELETION.
+# HISTORY OF THIS NUMBER, because it has moved twice and the reason matters:
 #
-# The cleanup that triggered this removed a retired POS integration: four files of
-# two and a half thousand lines between them, plus the queries and service methods
-# they were wired into. Removing them necessarily rewrites `OrderRepository` and
-# `OrderService`, and the order-flow fixes land in those same two files — so the
-# change cannot be split into smaller commits that each compile, which is exactly
-# what the old failure message ("Split the PR") told the author to do.
+#   - originally sixty files / two-and-a-half thousand lines / six hundred in one file.
+#   - RAISED to ninety / nine thousand / eight hundred to land a single deliberate
+#     DELETION: retiring a POS integration whose four files are 2139 lines between
+#     them, plus the order-flow fixes that land in the same two files it rewrites.
+#     That change could not be split into commits that each compile, which is what the
+#     old failure message told the author to do.
+#   - TIGHTENED BACK to the values below once that deletion was behind us. Measured
+#     against every commit since: the largest ordinary change is 28 files and 2408
+#     lines, and the one-off was 79 files and 8026 lines. So these leave headroom for a
+#     genuinely large feature while still failing the shape of change that cannot be
+#     reviewed — which is the point of having the guard at all.
 #
-# A size tripwire that a mandatory refactor cannot satisfy does not make work more
-# reviewable; it makes the guardrail the thing people route around. So the numbers
-# move to fit the largest deliberate single session, and the guard keeps the job it
-# is actually good at: catching a change nobody reviewed the shape of.
+# The lesson from the raise is worth keeping: a tripwire that a mandatory refactor
+# cannot satisfy does not improve review, it just teaches people to move the number.
+# If a future change cannot fit here, prefer splitting it; move the number only when
+# the change genuinely cannot be split, and say so in its own commit, as the raise did.
 #
-# These remain environment-overridable, so CI or a one-off run can tighten them.
-MAX_FILES_CHANGED="${MAX_FILES_CHANGED:-90}"
-MAX_LINES_CHANGED="${MAX_LINES_CHANGED:-9000}"
-MAX_SINGLE_FILE_LINES="${MAX_SINGLE_FILE_LINES:-800}"
+# These remain environment-overridable, so CI or a one-off run can adjust them.
+MAX_FILES_CHANGED="${MAX_FILES_CHANGED:-40}"
+MAX_LINES_CHANGED="${MAX_LINES_CHANGED:-3000}"
+MAX_SINGLE_FILE_LINES="${MAX_SINGLE_FILE_LINES:-600}"
 
 # ---------------------------------------------------------------------------
 # 0. Preconditions.
