@@ -21,16 +21,20 @@ recording, order-number search, the silently-ignored `SavePaymentMethod`, order
 rate limiting, and a backup script). What that work left open is in §9's
 **"Decisions this work needs from you"** table — four items, none urgent.
 
-**What needs you, in this order:**
+**What needs you, in this order. The first three are mine to have left behind, so
+they come first — everything after them is a decision rather than a cleanup.**
 
 | # | Item | Effort | Why it matters |
 |---|---|---|---|
+| **T1** | **Rotate the Neon database password** | ~5 min | A fragment of the live password was sitting in an untracked file at the repo root (`hi.md`). It was never committed and the file is deleted — but `docs/SECRET-AUDIT.md` records the same credential as recoverable from git history. **Until it is rotated, treat the production database password as public.** Neon console → your project → Roles → reset password → update the Fly secret. Nothing in the app can do this for you. |
+| **T2** | **Cancel the probe orders on the kitchen board** | ~2 min | Six synthetic orders from testing the payment and hours rules are sitting as live tickets. Names are "Probe Test", "Probe Fixed" and "P". Cancel them from the admin dashboard: **orderIds 16, 17, 18, 19, 20, 21** — the order numbers are in §13.2b. They are not customer orders and nobody will collect them. |
+| **T3** | **Confirm the new hours are right** | ~1 min | I corrected the trading hours to what §10 says you published, and the app now REFUSES orders outside them. **If a refusal is ever wrong, tell me** — the rule is deliberately strict, so a wrong hour costs an order rather than sending food out at 3am. Current: Mon 10–2:30, Tue–Sun 10–4 and 4:30–9. See §15. |
 | **2** | Turn off Klarna, Zip and Link; turn on Google Pay | ~2 min in Stripe | **They would be offered to customers today.** Anything switched on in the dashboard appears at checkout with no review |
 | **3** | Buy a domain (cheap path in §3) | ~$15/yr | The only thing between you and Apple Pay. A `*.vercel.app` host cannot be registered |
 | **4** | Switch Stripe to live, using the checklist | ~15 min + ~50¢ | Prove it works with one real order, then refund it |
 | **6** | Decide admin-dashboard exposure | a decision | It is a public URL with a login page |
 | **12** | Try Paseo from your phone | ~5 min | Free; your laptop is the sandbox |
-| **D1–D3** | Three decisions in §9 | a decision each | Backups, the order rate limit and refunds in the UI. All have a working default, so nothing is blocked. **D4 (saved cards) was settled on 2026-09-25: removed** — see §13 |
+| **D1–D3** | Three decisions in §9 | a decision each | Backups, the order rate limit and refunds in the UI. All have a working default, so nothing is blocked. **D4 (saved cards) was settled: removed** — see §13 |
 
 **Settled on 2026-09-16** (was four open questions): phone, hours, delivery and the
 cash option are all answered and applied — §10.
@@ -1195,3 +1199,83 @@ HTTP 200  (in-hours orders are unaffected)
 
 `scripts/check-deployment-health.sh` passes, and the six endpoints the cleanup removed
 still return 404.
+
+---
+
+## 15. The three things at the top of this file, in detail — 2026-09-29
+
+Recorded here because the table above is terse and each of these has a failure mode
+worth understanding before doing it.
+
+### T1 — Rotate the Neon password (do this first)
+
+**What happened.** A file called `hi.md` sat untracked at the repository root containing
+a fragment of the live Neon password. It was never committed — `git log --all -- hi.md`
+finds nothing — and the file has been deleted.
+
+**Why it still matters.** `docs/SECRET-AUDIT.md` (written 2026-09-21, before this
+session) records that the same credential is already recoverable from git history
+through a different file, `.secrets.local.example`. That was a finding about history,
+not about working-tree files, and this session did not change it.
+
+**What to do.**
+
+1. Neon console → your project (`shy-cherry-02896954`) → Roles → reset the password.
+2. Update the connection string everywhere it lives: the Fly secret
+   (`fly secrets set ConnectionStrings__DefaultConnection="..."`), and your local
+   `.secrets.local` / `.env.local`.
+3. Verify: `curl -s https://asian-taste-api.fly.dev/health/db` should report healthy
+   with 82 menu items. If it does not, the secret did not take effect.
+
+**Do not paste the new password into any file in this repository**, including
+`.secrets.local.example`, which is the template that leaked it originally.
+
+### T2 — Cancel the six probe orders
+
+These are synthetic orders created by deploying and probing the live API. They are real
+rows in the production database and appear as live tickets on the kitchen board.
+
+| orderId | Order number | Created by | What it proves |
+|---|---|---|---|
+| 16 | (earliest) | the payment probe | an uncharged card order claimed "Paid online" |
+| 17 | `AT-251703-5CFF` | the payment probe, before the fix | same defect |
+| 18 | `AT-251709-74F7` | the payment probe, after the fix | now correctly reads "Payment failed" |
+| 19 | `AT-251841-05E7` | the closed-kitchen probe | an in-hours order still succeeds |
+| 20 | `AT-251841-B8AB` | the hours probe without a UTC offset | read as lunchtime, correctly |
+| 21 | `AT-251846-DC69` | the final verification | in-hours ordering unaffected |
+
+All six are `Pending`, so they sit in the "New" column. Cancel them from the admin
+dashboard (open each, use the status control). The customer names are "Probe Test",
+"Probe Fixed" and "P", so they are easy to spot.
+
+**Optional, and useful:** keep #18 until you have seen it. It is the order that shows
+the payment fix working — a card order with no payment token, correctly reported as
+unpaid rather than as a sale.
+
+### T3 — Confirm the trading hours, because the app now enforces them
+
+This is the one change in this session that can **refuse a customer's order**, which is
+why it is worth a moment rather than an assumption.
+
+Before this work the app showed "Closed" on the menu page and took the order anyway —
+the notice was a courtesy, not a control. The API now refuses an order outside the
+hours below, before any money moves.
+
+| | |
+|---|---|
+| Monday | 10:00 – 14:30 (lunch only) |
+| Tuesday – Sunday | 10:00 – 16:00, then 16:30 – 21:00 |
+
+Two details:
+
+- **The break is enforced.** An order at 16:15 is refused with "The kitchen opens at
+  16:30." Before this change one open/close pair per day was stored, so the shop could
+  be shown open in the dead hour between services.
+- **A scheduled order is judged at the time it is WANTED**, not when it is placed. So
+  ordering at 4pm for a 7pm pickup is fine, and ordering at 4pm for a 3am pickup is
+  refused.
+
+**If the app ever refuses an order you know is fine, that is a bug in these hours and I
+want to hear about it** — a wrong hour costs a real order. The rule is deliberately
+strict in the other direction: when it cannot read the hours at all it refuses rather
+than assuming open, because the cost of guessing wrong is food going out at 3am.
