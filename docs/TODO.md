@@ -275,6 +275,16 @@ real order — test mode exercises the same code path.
 
 ## 5. ✅ Fixed: production was accepting card orders unpaid
 
+> **Re-verified 2026-09-30, after two sessions of changes to the payment path.** A card
+> order sent to production with a deliberately bogus Stripe token comes back
+> `"Payment failed — please try again"` rather than `"Paid online"`. That proves the
+> real gateway is running and that a fake token cannot buy food. Order `AT-301829-D396`.
+>
+> Both guards are still in place: `appsettings.json` defaults `UseMockGateway` to
+> **false**, and `Program.cs` refuses to start a non-Development environment with it
+> on. See §13.2b for the *other* payment defect found later (a real gateway that
+> reported success without charging) — same symptom, different cause.
+
 **What was wrong.** While verifying your Stripe setup I placed a card order in
 production with a token real Stripe would reject. It came back `"Paid online"`.
 
@@ -441,16 +451,15 @@ say the word and I'll change any of them.
 | **Who deploys the frontend** | Vercel's Git integration | It already deployed every push; a CLI deploy would race it | Add a personal-scope `VERCEL_TOKEN` and turn off Vercel's auto-deploy |
 | **Admin app** | Deployed at `asian-taste-vietnamese-cuisine-wq44.vercel.app` | Your Vercel project; it was correctly set up, only CORS was missing | Decide exposure — see item 6 |
 | **Payment display** | `paid_amount`/`paid_at` set only on real capture | So "Paid online" can't lie | — |
-| **POS failure handling** | Queue and retry, never fail the order | The customer has paid; the kitchen can work from the dashboard | Make it blocking if you'd rather refuse orders when the POS is down |
+| ~~POS failure handling~~ | **Retired 2026-09-25** — the Lightspeed code is gone, tables kept | It was deferred and did nothing; the order flow no longer has a POS hook | Item 7 says how to bring it back |
 | **Cash orders** | No gateway call, `Pay on pickup` | Nothing to charge at order time | — |
 | **GST** | Prices include it; total = subtotal | Australian convention, matches the printed menu | — |
-| **Pickup estimate** | From restaurant settings (15 min default) | Was hardcoded to 20 min | Change in the admin settings |
+| **Pickup estimate** | From restaurant settings (15 min default) | Was hardcoded to 20 min in one place and 15 in another, so two screens promised different times | The setting is in `restaurant_settings`; both paths now read it |
 | **Kitchen's order view** | A tablet running the admin dashboard, alongside Uber Eats | Your call — it is deployed and working | Point the tablet's browser at the admin URL |
-| **Cash / pay-in-store** | Handled in Lightspeed, not this app | Your call — POS is configured later | Wire it when Lightspeed credentials exist |
-| **POS sync** | Deferred, not removed | Needs the owner conversation | Item 7 |
+| **Cash / pay-in-store** | Recorded in this app as `Pay at counter`; reconciled at the till | No POS integration, so nothing else can record it | — |
 | **Custom domain** | Not now | Your call — customers here don't mind | Point DNS at Vercel when wanted |
 | **Hosting the frontend** | Staying on Vercel for now | Your call — keeping it simple | Cloudflare Pages is the alternative (free, commercial use allowed) |
-| **Editing the menu** | Future work | Your call | Not built; the menu lives in the seed today |
+| ~~Editing the menu~~ | **Built 2026-09-25** — name, price, section, heat, description | Was the owner's own next ask | §14 item 4; the seed is still the source for a fresh database |
 | **Payment integration style** | Staying on Payment Intents | Your decision. Stripe's own guidance recommends Checkout Sessions, but that advice targets new integrations — you already have a working, tested Payment Intent flow, and a rewrite buys nothing except Stripe-calculated tax and easier wallet buttons | Revisit only for a specific feature, not for its own sake |
 
 ### Decisions made while building the agent swarm (2026-09-19)
@@ -481,9 +490,10 @@ where a different answer is genuinely reasonable.
 You've said most of this is for later, so it's recorded rather than recommended.
 The order below is by how much it would bite, not by effort.
 
-**Items 2, 3, 5, 6 and 9 were completed on 2026-09-20 without needing you** —
-they were all resolvable from the code. Details below each. Four things from that
-work do need a decision, marked **needs you**.
+**Most of this list is now DONE.** It was written on 2026-09-20 and two later sessions
+built through it — so read the items rather than the heading. What is genuinely still
+open is marked **OPEN**; everything else says when it was closed and where. Four things
+still need a decision from you, in the table at the end of this section.
 
 1. ~~Deploy the admin app.~~ Done — it is live and verified. What remains is the
    exposure decision, in item 6.
@@ -493,13 +503,15 @@ work do need a decision, marked **needs you**.
    logged the refund and changed nothing, so a refunded order kept reading as paid
    and the day's takings stayed overstated. Both now set `Refunded` or
    `PartiallyRefunded`.
-   - **Found while fixing it:** `external_payment_id` is never written by any code
-     path, so the pre-existing `GetOrderByExternalPaymentIdAsync` **and the refund
-     endpoint's use of it** could never match an order. Added a lookup by
-     `payment_intent_id`, which is what the checkout actually stores.
-   - **Still missing: refunds via the UI.** The endpoint exists but nothing calls
-     it, so a refund still means the Stripe dashboard. That is now safe (the order
-     updates either way), but a "Refund" button is unbuilt.
+   - **Found while fixing it:** `external_payment_id` is now written (from the captured
+     charge) and the refund endpoint resolves the order by `payment_intent_id` first,
+     then falls back — because `payment_intent_id` is what the checkout writes and what
+     every webhook resolves against. Getting this wrong is quiet: the refund succeeds at
+     Stripe while the order keeps reading as paid.
+   - ~~Still missing: refunds via the UI.~~ **Built 2026-09-25** — a Refund button on
+     the ticket, with a confirmation naming the amount, the customer and the order
+     number. Full refunds only; a partial is a negotiation and the Stripe dashboard is
+     the right place for it. D3 below is therefore settled.
 3. ~~Automated database backups.~~ **Partly done.** `scripts/backup-db.sh` takes a
    verified, restorable dump — it writes through a `.partial` name, checks the
    archive reads back with `pg_restore --list`, and confirms the four tables that
@@ -507,9 +519,14 @@ work do need a decision, marked **needs you**.
    not installed, and prefers the unpooled Neon URL because `pg_dump` fails against
    PgBouncer.
    - **needs you:** nothing runs it on a schedule. See the decision below.
-4. **Menu editing in the admin app.** You've deferred this. Today the menu lives
-   in `02_seed_data.sql` and changes need a deploy. The admin API exists; the UI
-   doesn't.
+4. ~~Menu editing in the admin app.~~ **Done 2026-09-25.** You can change a dish's
+   name, price, section, heat level and description from the menu screen, and mark a
+   dish unavailable in one press. It was worse than "deferred": **every write endpoint
+   was a stub** — it logged, returned `204` and changed nothing, so the "sold out"
+   switch flipped in the UI while the dish stayed on sale. See §14 item 4.
+   - **Still OPEN: adding and deleting a dish.** Hiding one covers the service-time
+     need and is reversible; creating or removing one is a separate screen (an image,
+     a section, and the printed-menu decision that it belongs there).
 5. ~~Search orders by number.~~ **Done.** This was worse than described: the old
    search filtered only the ~100 orders already fetched, so it silently failed at
    the one lookup staff actually perform — a customer reading out a number on the
@@ -540,25 +557,28 @@ work do need a decision, marked **needs you**.
    else.
    - **Worth watching:** 10/minute is a judgement call, not a measured figure. It
      should be reviewed against real traffic once there is any.
-10. **Reports and analysis** — the owner wants this later, for looking at trends
-    rather than day-to-day. The old admin Reports page was removed with the UI
-    rebuild because it showed mock numbers; a real one needs a reporting endpoint
-    behind it. Far down the line, deliberately.
-11. **Menu editing in the admin app** — the owner's next real ask after v1: the
-    printed menu stays the source of truth, but he wants to change a price without
-    waiting for a deploy. The admin API exists; the UI does not.
-12. **The delivery pipeline** — the UI offers restaurant delivery marked "subject
-    to availability". How it is actually fulfilled (own driver, or Uber Eats only)
-    is undecided, so nothing completes a delivery order yet.
+10. **OPEN — Reports and analysis.** The owner wants this later, for looking at trends
+    rather than day-to-day. The old admin Reports page was removed with the UI rebuild
+    because it showed mock numbers; a real one needs a reporting endpoint behind it.
+    The `AdminReportsController` was deleted as dead code on 2026-09-25 (nothing called
+    it), so this is a fresh build rather than a re-wire. Far down the line, deliberately.
+11. ~~Menu editing~~ — duplicate of item 4, and done. (It was listed twice; the
+    second entry is removed rather than left to look like unfinished work.)
+12. **OPEN — The delivery pipeline.** Resolved in the other direction on 2026-09-25:
+    the storefront now offers **pickup only**, because a delivery option that cannot
+    complete a checkout is a promise the shop cannot keep. Uber Eats stays a link in
+    the footer. To bring delivery back: add an entry to `SERVICES` in
+    `src/asian-taste-customer/src/lib/services.ts`, give the order a delivery-fee field
+    (the API has none), and decide who fulfils it. See §13.3.
 
 ### Decisions this work needs from you
 
-| # | Decision | Why it needs you | The default I have taken |
+| # | Decision | Why it needs you | Where it stands |
 |---|---|---|---|
-| D1 | **Where database backups live, and whether to schedule them** | A backup on the same machine as the thing it protects is not a backup. Options: a Neon paid tier (real point-in-time restore), a scheduled job writing to object storage, or an external drive you run weekly | **None — `scripts/backup-db.sh` is manual only.** Run it by hand until you decide |
-| D2 | **Order-creation rate limit: is 10/minute right?** | It is a business trade-off, not a technical one. Too low blocks a busy service; too high does not deter a script | 10/minute per IP, global 100/minute unchanged |
-| D3 | **Refunds: build the admin button?** | The endpoint now works correctly, so this is purely about whether you want to refund without opening Stripe | Not built. Refunds happen in the Stripe dashboard, and the order now updates either way |
-| D4 | **Saved cards: finish it or leave it removed?** | Needs a Stripe SetupIntent flow and a rule for off-session charges | Removed. The read side is kept so finishing it is additive |
+| **D1** | **Where database backups live, and whether to schedule them** — **STILL OPEN** | A backup on the same machine as the thing it protects is not a backup. Options: a Neon paid tier (real point-in-time restore), a scheduled job writing to object storage, or an external drive you run weekly | **Nothing runs on a schedule.** `scripts/backup-db.sh` is manual and verified; run it by hand until you decide. This is the most consequential one still open — right now a lost database is a lost database. |
+| **D2** | **Order-creation rate limit: is 10/minute right?** — **STILL OPEN** | A business trade-off, not a technical one. Too low blocks a busy service; too high does not deter a script | 10/minute per IP, global 100/minute unchanged. Review once there is real traffic. |
+| ~~D3~~ | ~~Refunds: build the admin button?~~ | — | **Settled 2026-09-25: built.** Full refunds from the ticket. Partial refunds stay in the Stripe dashboard on purpose. |
+| ~~D4~~ | ~~Saved cards: finish it or leave it removed?~~ | — | **Settled 2026-09-25: removed.** The read side went too — nothing ever wrote a row to `customer_payment_methods`, so the Account page could only ever say "none". Finishing it means adding a SetupIntent write path, and the table is still there to build on. |
 
 ---
 
@@ -1245,6 +1265,7 @@ rows in the production database and appear as live tickets on the kitchen board.
 | 20 | `AT-251841-B8AB` | the hours probe without a UTC offset | read as lunchtime, correctly |
 | 21 | `AT-251846-DC69` | the final verification | in-hours ordering unaffected |
 | 23 | `AT-301801-934F` | the allergy path, end to end | the declaration reaches the order row |
+| 24 | `AT-301829-D396` | re-verifying the payment gateway after all this work | a fake Stripe token is REJECTED — so the real gateway is running, not the mock |
 
 All six are `Pending`, so they sit in the "New" column. Cancel them from the admin
 dashboard (open each, use the status control). The customer names are "Probe Test",
