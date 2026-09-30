@@ -180,7 +180,14 @@ public class DatabaseInitializationService : IDatabaseInitializationService
         var tradingHoursSql = await GetMigrationScriptAsync("14_align_operating_hours_with_the_published_hours.sql");
         await ExecuteScriptAsync(tradingHoursSql, cancellationToken);
 
-        // 9. Seed the admin user, once every script that touches admin_users has
+        // 9. Give allergy declarations their own column, so the checkout can ask for one
+        //    and the kitchen can see it as a block rather than as a sentence buried in
+        //    the order notes. See the migration's header for why the seeded option group
+        //    was never enough.
+        var allergySql = await GetMigrationScriptAsync("15_add_allergy_declaration.sql");
+        await ExecuteScriptAsync(allergySql, cancellationToken);
+
+        // 10. Seed the admin user, once every script that touches admin_users has
         //    run. Only when no admin row exists: this creates the documented default
         //    account, and recreating it unconditionally would undo an operator
         //    deleting it. (A database with NO admin at all is unusable, so that case

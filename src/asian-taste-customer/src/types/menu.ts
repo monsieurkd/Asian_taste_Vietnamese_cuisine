@@ -248,6 +248,8 @@ export interface CreateCheckoutOrderRequest {
   paymentIntentId?: string;
   createAccount: boolean;
   password?: string;
+  /** Allergies declared at checkout; the kitchen shows these on their own line. */
+  allergyDeclaration?: string;
 }
 
 export interface OrderItemResponse {

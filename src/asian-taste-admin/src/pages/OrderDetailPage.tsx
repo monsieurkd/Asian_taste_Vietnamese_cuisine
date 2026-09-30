@@ -269,6 +269,29 @@ export function OrderDetailPage() {
               </PanelBody>
             </Panel>
 
+            {/* Allergies get their OWN panel, above the notes and visually louder.
+                This is the change that makes the field worth collecting: an allergy
+                rendered as one grey line among many is a line a cook skips, and the
+                consequence of skipping it is not a wrong order. */}
+            {order.allergyDeclaration && (
+              <Panel data-od-id="detail-allergy" className="panel-alert">
+                <PanelHead>
+                  <h3 style={{ margin: 0 }}>⚠ Allergies</h3>
+                  <Pill className="pill-warn">Check before cooking</Pill>
+                </PanelHead>
+                <PanelBody>
+                  <p className="allergy-statement" role="alert">
+                    {order.allergyDeclaration}
+                  </p>
+                  <p className="meta" style={{ margin: "10px 0 0" }}>
+                    Declared by the customer at checkout. If anything here is unclear, call{" "}
+                    <a href={`tel:${order.customerPhone.replace(/\s/g, "")}`}>{order.customerPhone}</a>{" "}
+                    before starting.
+                  </p>
+                </PanelBody>
+              </Panel>
+            )}
+
             <Panel>
               <PanelHead>
                 <h3>Kitchen note</h3>

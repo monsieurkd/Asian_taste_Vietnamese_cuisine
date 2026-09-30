@@ -81,6 +81,7 @@ export function ConfirmationPage() {
           scheduledTime: pendingOrder.pickupTime.scheduledTime?.toISOString(),
         },
         specialInstructions: pendingOrder.specialInstructions,
+        allergyDeclaration: pendingOrder.allergyDeclaration,
         items: pendingOrder.items.map((item) => ({
           menuItemId: item.menuItemId,
           quantity: item.quantity,

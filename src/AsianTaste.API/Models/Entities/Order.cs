@@ -102,6 +102,16 @@ public class Order
     /// <summary>Customer notes or special instructions.</summary>
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// Allergies or dietary requirements the customer declared, verbatim.
+    /// </summary>
+    /// <remarks>
+    /// Kept apart from <see cref="Notes"/> because the kitchen must see it before
+    /// cooking, and a preference buried in a free-text field is not something a cook
+    /// reliably finds. Null when the customer declared none.
+    /// </remarks>
+    public string? AllergyDeclaration { get; set; }
+
     /// <summary>When the order was created.</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

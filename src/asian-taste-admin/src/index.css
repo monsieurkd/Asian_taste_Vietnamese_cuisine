@@ -818,6 +818,18 @@
     padding: 3px 8px;
     border-radius: 999px;
   }
+  /* An allergy on the board. Same red as the "money not taken" flag, and bold, because
+     this is the one line a cook must not skim past. */
+  .ticket-allergy {
+    margin: 0;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm, 6px);
+    background-color: color-mix(in oklch, var(--color-deal) 13%, transparent);
+    border-left: 3px solid var(--color-deal);
+    color: color-mix(in oklch, var(--color-deal) 85%, var(--color-fg));
+    font-size: 13px;
+    line-height: 1.4;
+  }
   .ticket-flag.flag-warn {
     background-color: color-mix(in oklch, var(--color-deal) 16%, transparent);
     color: var(--color-deal);
@@ -1215,6 +1227,23 @@
   .status-cancelled {
     background-color: color-mix(in oklch, var(--color-deal) 14%, transparent);
     color: var(--color-deal);
+  }
+
+  /* An allergy declaration. Deliberately the loudest thing on the ticket: a red rule
+     down the side, a border, and large text, because the failure mode of missing it is
+     not a wrong order. `--color-deal` is the same red the console uses for money that
+     has not been taken, which reads as "do not proceed" everywhere else in this app. */
+  .panel-alert {
+    border-color: color-mix(in oklch, var(--color-deal) 45%, transparent);
+    border-left-width: 4px;
+    box-shadow: 0 2px 8px color-mix(in oklch, var(--color-deal) 12%, transparent);
+  }
+  .allergy-statement {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.4;
+    color: color-mix(in oklch, var(--color-deal) 82%, var(--color-fg));
   }
 
   /* Money that has not been taken. Deliberately the one loud pill on the screen:

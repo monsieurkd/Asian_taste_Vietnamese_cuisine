@@ -30,7 +30,7 @@
 # The same change ADDED tests for the order flow itself (admin column mapping, the
 # real payment state, the pickup estimate, modifier mapping, the local day boundary)
 # and those more than replaced the deleted coverage in the areas that matter.
-242
+251
 
 # Raised 170 -> 174 on 2026-09-25, in the same commit as four tests for a defect
 # found in production by the deployment probe: StripePaymentVerificationTests pins
@@ -52,3 +52,8 @@
 # Raised 231 -> 242 for order editing: 11 tests on the service rules (prices come from
 # the menu, a dish that left the menu refuses the whole edit, the trading rule applies to
 # the new pickup time, and what an edit does to the money of an order already charged).
+
+# Raised 242 -> 251 for the allergy declaration: 9 tests pinning the whole ROUTE (request
+# DTO -> order INSERT -> the edit's SET list -> the admin list query -> the admin detail
+# query), because a break anywhere in it is invisible from both ends — the customer sees
+# their checkout succeed and the kitchen sees a ticket with no allergy block.

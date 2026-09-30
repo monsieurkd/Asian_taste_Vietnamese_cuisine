@@ -192,11 +192,11 @@ public class OrderRepository : IOrderRepository
             const string orderSql = @"
                 INSERT INTO orders (
                     order_number, customer_name, customer_phone, customer_email,
-                    order_type, requested_time, notes, payment_method,
+                    order_type, requested_time, notes, allergy_declaration, payment_method,
                     subtotal, tax, total, status, created_at
                 ) VALUES (
                     @OrderNumber, @CustomerName, @CustomerPhone, @CustomerEmail,
-                    @OrderType::order_type, @RequestedTime, @Notes, @PaymentMethod::payment_method,
+                    @OrderType::order_type, @RequestedTime, @Notes, @AllergyDeclaration, @PaymentMethod::payment_method,
                     @Subtotal, @Tax, @Total, @Status::order_status, @CreatedAt
                 ) RETURNING id";
 
@@ -212,6 +212,7 @@ public class OrderRepository : IOrderRepository
                         OrderType = request.OrderType.ToString(),
                         RequestedTime = PickupTime.ResolveRequestedTime(request.PickupTime),
                         Notes = request.SpecialInstructions,
+                        AllergyDeclaration = request.AllergyDeclaration,
                         PaymentMethod = request.PaymentMethod.ToString(),
                         Subtotal = subtotal,
                         Tax = tax,
@@ -534,6 +535,7 @@ public class OrderRepository : IOrderRepository
                    subtotal as Subtotal,
                    total as Total,
                    notes as Notes,
+                   allergy_declaration as AllergyDeclaration,
                    created_at as CreatedAt
             FROM orders
             {whereClause}
@@ -587,6 +589,7 @@ public class OrderRepository : IOrderRepository
                    tax as Tax,
                    total as Total,
                    notes as Notes,
+                   allergy_declaration as AllergyDeclaration,
                    created_at as CreatedAt,
                    updated_at as UpdatedAt
             FROM orders
@@ -1068,6 +1071,7 @@ public class OrderRepository : IOrderRepository
                 paid_at = @PaidAt,
                 payment_failure_reason = @PaymentFailureReason,
                 notes = @Notes,
+                allergy_declaration = @AllergyDeclaration,
                 updated_at = @UpdatedAt
             WHERE id = @Id";
 
@@ -1085,6 +1089,7 @@ public class OrderRepository : IOrderRepository
                     PaidAt = order.PaidAt,
                     PaymentFailureReason = order.PaymentFailureReason,
                     Notes = order.Notes,
+                    AllergyDeclaration = order.AllergyDeclaration,
                     UpdatedAt = DateTime.UtcNow
                 },
                 cancellationToken: cancellationToken));

@@ -10,6 +10,14 @@ export interface PendingOrderItem {
   unitPrice: number;
   totalPrice: number;
   specialInstructions?: string;
+  /**
+   * Allergies the customer declared.
+   *
+   * Held separately from the notes even though both end up on the order: the API treats
+   * an allergy as its own field, and the kitchen renders it as its own block. Merging
+   * them here would undo that at the last step.
+   */
+  allergyDeclaration?: string;
   selectedModifierIds: number[];
 }
 
@@ -20,6 +28,8 @@ export interface PendingOrderData {
   orderType: OrderType;
   pickupTime: PickupTime;
   specialInstructions?: string;
+  /** Allergies declared at checkout, kept separate from the notes all the way out. */
+  allergyDeclaration?: string;
   items: PendingOrderItem[];
   orderTotal: number;
   paymentMethod: PaymentMethod;
@@ -37,6 +47,7 @@ interface CheckoutState {
   orderType: OrderType;
   pickupTime: PickupTime;
   specialInstructions: string | null;
+  allergyDeclaration: string | null;
 
   // Payment
   paymentMethod: PaymentMethod;
@@ -58,6 +69,8 @@ interface CheckoutState {
   // Actions
   setCustomerInfo: (name: string, phone: string, email: string) => void;
   setOrderPreferences: (orderType: OrderType, pickupTime: PickupTime, instructions?: string) => void;
+  /** Allergies the customer declared. Empty or null clears it. */
+  setAllergyDeclaration: (allergy?: string) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
   setAccountCreation: (create: boolean, password?: string) => void;
   setPendingOrder: (order: PendingOrderData) => void;
@@ -80,6 +93,7 @@ export const useCheckoutStore = create<CheckoutState>()(
       orderType: 'Pickup',
       pickupTime: { type: 'ASAP' },
       specialInstructions: null,
+      allergyDeclaration: null,
       paymentMethod: 'Card',
       createAccount: false,
       password: undefined,
@@ -96,6 +110,7 @@ export const useCheckoutStore = create<CheckoutState>()(
 
       setOrderPreferences: (orderType, pickupTime, instructions) =>
         set({ orderType, pickupTime, specialInstructions: instructions || null }),
+      setAllergyDeclaration: (allergy) => set({ allergyDeclaration: allergy || null }),
 
       setPaymentMethod: (method) => set({ paymentMethod: method }),
 

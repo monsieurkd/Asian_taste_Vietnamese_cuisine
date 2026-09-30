@@ -110,6 +110,16 @@ function Ticket({ order, onAdvance, busy }: { order: Order; onAdvance: (next: St
         placed {formatDate(order.createdAt, "time")} · <strong>{mins} min ago</strong>
       </p>
 
+      {/* The allergy, on the BOARD. A cook picks what to start from this screen, so an
+          allergy visible only after opening the ticket is one they have already begun
+          cooking without. Rendered in the alert red used everywhere else in this app
+          for "do not proceed". */}
+      {order.allergyDeclaration && (
+        <p className="ticket-allergy" role="alert">
+          <strong>Allergy:</strong> {order.allergyDeclaration}
+        </p>
+      )}
+
       {order.notes && (
         <p className="ticket-meta" style={{ color: "var(--color-accent)" }}>
           {order.notes}

@@ -75,6 +75,8 @@ export interface Order {
   subtotal: number
   total: number
   notes?: string
+  /** Allergies declared for the order — flagged on the board, not only in the detail. */
+  allergyDeclaration?: string | null
   createdAt: string
 }
 
@@ -106,6 +108,8 @@ export interface OrderItemModifier {
  * Detailed order with items.
  */
 export interface OrderDetail extends Order {
+  /** Allergies the customer declared, verbatim. Null when they declared none. */
+  allergyDeclaration?: string | null
   paymentFailureReason?: string | null
   /** The Stripe PaymentIntent id — what a refund is issued against. */
   paymentIntentId?: string | null

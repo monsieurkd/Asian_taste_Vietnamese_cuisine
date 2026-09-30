@@ -29,6 +29,19 @@ public class CreateCheckoutOrderDto
     [StringLength(1000)]
     public string? SpecialInstructions { get; set; }
 
+    /// <summary>
+    /// Allergies or dietary requirements the customer declared, in their own words.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="SpecialInstructions"/> on purpose. An allergy is a
+    /// medical constraint that the kitchen must see before it starts cooking; a
+    /// special instruction is a preference. Mixing them into one free-text field means
+    /// the important one competes for attention with "extra napkins", and the kitchen
+    /// has to read every note to find it.
+    /// </remarks>
+    [StringLength(500)]
+    public string? AllergyDeclaration { get; set; }
+
     [Required]
     [MinLength(1)]
     public List<CheckoutOrderItemDto> Items { get; set; } = new();

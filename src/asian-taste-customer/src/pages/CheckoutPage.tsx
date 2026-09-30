@@ -28,10 +28,11 @@ interface DetailsForm {
   phone: string;
   email: string;
   notes: string;
+  allergy: string;
   time: string;
 }
 
-const EMPTY: DetailsForm = { name: '', phone: '', email: '', notes: '', time: 'asap' };
+const EMPTY: DetailsForm = { name: '', phone: '', email: '', notes: '', allergy: '', time: 'asap' };
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -61,6 +62,7 @@ export function CheckoutPage() {
     phone: checkout.customerPhone ?? '',
     email: checkout.customerEmail ?? '',
     notes: checkout.specialInstructions ?? '',
+    allergy: checkout.allergyDeclaration ?? '',
   }));
   const [errors, setErrors] = useState<Partial<Record<keyof DetailsForm, string>>>({});
 
@@ -124,6 +126,7 @@ export function CheckoutPage() {
       return;
     }
     checkout.setCustomerInfo(details.name.trim(), details.phone.trim(), details.email.trim());
+    checkout.setAllergyDeclaration(details.allergy.trim());
     checkout.setOrderPreferences(
       orderType,
       details.time === 'asap'
@@ -147,6 +150,7 @@ export function CheckoutPage() {
       orderType,
       pickupTime: checkout.pickupTime,
       specialInstructions: details.notes.trim() || undefined,
+      allergyDeclaration: details.allergy.trim() || undefined,
       items: items.map((item) => ({
         menuItemId: item.menuItemId,
         name: item.name,
@@ -295,14 +299,40 @@ export function CheckoutPage() {
                   </p>
                 </div>
 
+                {/* Asked BEFORE the free-text box, and as its own question.
+                    An allergy is a constraint the kitchen must see before it starts
+                    cooking; a preference is not. Leaving the only channel as a
+                    free-text field means the important one competes for attention
+                    with "extra napkins", and most people do not fill in a box that
+                    does not ask. */}
+                <div className="field">
+                  <label htmlFor="co-allergy">
+                    Any allergies? <span className="muted font-medium">(optional)</span>
+                  </label>
+                  <input
+                    id="co-allergy"
+                    className="input"
+                    placeholder="Peanuts, shellfish, no coriander…"
+                    value={details.allergy}
+                    maxLength={500}
+                    onChange={(e) => setDetails({ ...details, allergy: e.target.value })}
+                  />
+                  <p className="hint">
+                    This goes straight to the kitchen, on its own line. If you have a
+                    severe allergy, please also{' '}
+                    <a href={SITE.phoneHref}>call the shop</a> so we can talk it through.
+                  </p>
+                </div>
+
                 <div className="field">
                   <label htmlFor="co-notes">
-                    Anything we should know? <span className="muted font-medium">(optional)</span>
+                    Anything else we should know?{' '}
+                    <span className="muted font-medium">(optional)</span>
                   </label>
                   <input
                     id="co-notes"
                     className="input"
-                    placeholder="Allergies, buzzer, leave at the front door…"
+                    placeholder="Buzzer, running late, extra napkins…"
                     value={details.notes}
                     onChange={(e) => setDetails({ ...details, notes: e.target.value })}
                   />

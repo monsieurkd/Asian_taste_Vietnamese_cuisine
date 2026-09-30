@@ -47,6 +47,16 @@ public class AdminOrderDetailDto
     public decimal Tax { get; set; }
     public decimal Total { get; set; }
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Allergies the customer declared. Null when they declared none.
+    /// </summary>
+    /// <remarks>
+    /// On the ticket's own DTO so the kitchen screen can render it as its own block.
+    /// It was previously reachable only as part of a free-text note, which is the wrong
+    /// place for something that has to be read before cooking starts.
+    /// </remarks>
+    public string? AllergyDeclaration { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public List<AdminOrderItemDto> Items { get; set; } = new();

@@ -46,5 +46,15 @@ public class AdminOrderListDto
     public decimal Subtotal { get; set; }
     public decimal Total { get; set; }
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Allergies declared for this order, so the KITCHEN BOARD can flag them.
+    /// </summary>
+    /// <remarks>
+    /// On the list rather than only the detail, because the board is where a cook
+    /// decides what to start next — an allergy they only see after opening the ticket
+    /// is one they have already begun cooking without.
+    /// </remarks>
+    public string? AllergyDeclaration { get; set; }
     public DateTime CreatedAt { get; set; }
 }
