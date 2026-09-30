@@ -1154,6 +1154,7 @@ deployed; the fourth is half done and is recorded that way rather than rounded u
 | 6 | **Editing an order** | A phone change meant cancel-and-rebuild: refund, re-charge, and a second kitchen ticket for the same food. Now edited in place, in one transaction, re-priced from the menu. |
 
 | 6 | **Edit an order** | A phone change meant cancel-and-rebuild: refund, re-charge, and a second kitchen ticket for the same food. Now edited in place, one transaction, re-priced from the menu. |
+| 7 | **Allergies asked for and shown** | An allergy could only reach the kitchen if a customer typed it into a free-text note, because nothing asked and the seeded Allergy option group was unreachable. Now a field of its own, shown on the ticket and flagged on the board (§16). |
 
 ### Not built, deliberately
 
@@ -1243,6 +1244,7 @@ rows in the production database and appear as live tickets on the kitchen board.
 | 19 | `AT-251841-05E7` | the closed-kitchen probe | an in-hours order still succeeds |
 | 20 | `AT-251841-B8AB` | the hours probe without a UTC offset | read as lunchtime, correctly |
 | 21 | `AT-251846-DC69` | the final verification | in-hours ordering unaffected |
+| 23 | `AT-301801-934F` | the allergy path, end to end | the declaration reaches the order row |
 
 All six are `Pending`, so they sit in the "New" column. Cancel them from the admin
 dashboard (open each, use the status control). The customer names are "Probe Test",
@@ -1279,3 +1281,53 @@ Two details:
 want to hear about it** — a wrong hour costs a real order. The rule is deliberately
 strict in the other direction: when it cannot read the hours at all it refuses rather
 than assuming open, because the cost of guessing wrong is food going out at 3am.
+
+---
+
+## 16. Allergies — what changed, and the one thing it did not fix
+
+### The dead end it started from
+
+An `Allergy` option group was seeded into `modifier_groups` in migration 13, for the
+dishes where it matters (Pho, Laksa, Pad Thai, the noodle dishes), with sensible choices
+— "No peanuts", "No coriander". **It has never once been reachable.**
+
+The customer app builds a dish's options from the printed-menu table in
+`src/asian-taste-customer/src/lib/menuModel.ts`, and that table contains no allergy
+group. The code that *would* read the database's groups exists (it is the first branch
+of `optionsFor`) and is therefore dead. Confirmed against production: 82 dishes, and the
+menu list endpoint returns **zero** modifier groups.
+
+So an allergy could only reach the kitchen if a customer typed it into the free-text
+order note — which most people do not, because nothing asks.
+
+### What now happens
+
+1. **Checkout asks directly**, above the free-text box, and says where the answer goes.
+   Asking is the whole point: a box nobody is prompted to fill is a box that stays empty.
+2. **It is stored in its own column** (`orders.allergy_declaration`, migration 15) as
+   free text. Not a fixed list — an allergy list that cannot express the customer's
+   actual allergy is worse than no list, and "sesame", "MSG" and "the fish sauce" are all
+   real answers.
+3. **The ticket shows it as its own block**, above the notes, in the red the console
+   already uses for money not taken.
+4. **The kitchen board flags it too.** This is the one that matters most: the board is
+   where a cook decides what to start next, and an allergy they only see after opening
+   the ticket is one they have already begun cooking without.
+
+### The thing it did NOT fix
+
+**The seeded option groups are still unreachable.** Wiring the API's `modifier_groups`
+into the customer UI is a separate change with its own questions — pricing (the groups
+carry surcharges the printed options also carry, and double-counting is a real risk),
+and whether per-dish options should replace the printed ones or sit beside them.
+
+Until that is done, a dish's options on the customer site remain the printed menu's,
+which is deliberate and correct for v1. The allergy field above does not depend on it.
+
+### If you want more here
+
+The honest next step would be **per-dish allergy notes** rather than one order-level
+field — "no peanuts on the Pad Thai" is more useful to a kitchen than "no peanuts". That
+needs the option groups wired up, and a decision about whether the customer picks
+allergies per dish or once per order. Worth asking the owner before building it.
