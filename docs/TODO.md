@@ -16,10 +16,20 @@ and the codebase was cleaned around it. **§13 is the record of what changed and
 which decisions it implements.** Two long-standing promises were kept on the way:
 the kitchen ticket now shows the real payment state and the time an order is wanted.
 
+On 2026-10-01 the kitchen gained its own unit of work. **§17 is the record.** A
+ticket now carries its dishes and a cook ticks each one off as it leaves the pass;
+when the LAST dish on an order is ticked the order finishes itself and the customer
+is emailed "ready to collect" — once, and verified live. There is also a counter
+screen for face-to-face orders, with a compact tap-to-add dish grid. Four defects
+in that work shipped green and were found by running it against a real database;
+§17 lists all four, because they are the same kind of bug this repo keeps hitting.
+
 Five items from §9 were closed on 2026-09-20 without needing you (refund
 recording, order-number search, the silently-ignored `SavePaymentMethod`, order
 rate limiting, and a backup script). What that work left open is in §9's
-**"Decisions this work needs from you"** table — four items, none urgent.
+**"Decisions this work needs from you"** table — six items now, none urgent. D5
+(SMS for the ready message) and D6 (taking card payment on the counter tablet) are
+new in §17.
 
 **What needs you, in this order. The first three are mine to have left behind, so
 they come first — everything after them is a decision rather than a cleanup.**
@@ -34,7 +44,7 @@ they come first — everything after them is a decision rather than a cleanup.**
 | **4** | Switch Stripe to live, using the checklist | ~15 min + ~50¢ | Prove it works with one real order, then refund it |
 | **6** | Decide admin-dashboard exposure | a decision | It is a public URL with a login page |
 | **12** | Try Paseo from your phone | ~5 min | Free; your laptop is the sandbox |
-| **D1–D3** | Three decisions in §9 | a decision each | Backups, the order rate limit and refunds in the UI. All have a working default, so nothing is blocked. **D4 (saved cards) was settled: removed** — see §13 |
+| **D1–D3, D5–D6** | Five decisions in §9 | a decision each | Backups, the order rate limit, refunds in the UI, SMS for the ready message, and card payment on the counter tablet. All have a working default, so nothing is blocked. **D4 (saved cards) was settled: removed** — see §13 |
 
 **Settled on 2026-09-16** (was four open questions): phone, hours, delivery and the
 cash option are all answered and applied — §10.
@@ -490,10 +500,11 @@ where a different answer is genuinely reasonable.
 You've said most of this is for later, so it's recorded rather than recommended.
 The order below is by how much it would bite, not by effort.
 
-**Most of this list is now DONE.** It was written on 2026-09-20 and two later sessions
+**Most of this list is now DONE.** It was written on 2026-09-20 and three later sessions
 built through it — so read the items rather than the heading. What is genuinely still
-open is marked **OPEN**; everything else says when it was closed and where. Four things
-still need a decision from you, in the table at the end of this section.
+open is marked **OPEN**; everything else says when it was closed and where. Six things
+still need a decision from you, in the table at the end of this section (D5 and D6 are
+new in §17).
 
 1. ~~Deploy the admin app.~~ Done — it is live and verified. What remains is the
    exposure decision, in item 6.
@@ -579,6 +590,8 @@ still need a decision from you, in the table at the end of this section.
 | **D2** | **Order-creation rate limit: is 10/minute right?** — **STILL OPEN** | A business trade-off, not a technical one. Too low blocks a busy service; too high does not deter a script | 10/minute per IP, global 100/minute unchanged. Review once there is real traffic. |
 | ~~D3~~ | ~~Refunds: build the admin button?~~ | — | **Settled 2026-09-25: built.** Full refunds from the ticket. Partial refunds stay in the Stripe dashboard on purpose. |
 | ~~D4~~ | ~~Saved cards: finish it or leave it removed?~~ | — | **Settled 2026-09-25: removed.** The read side went too — nothing ever wrote a row to `customer_payment_methods`, so the Account page could only ever say "none". Finishing it means adding a SetupIntent write path, and the table is still there to build on. |
+| **D5** | **SMS for "your order is ready" — add it?** — **STILL OPEN** | A customer who closed the tab is only reachable by email, and the ready message is the one they act on. Needs a provider (Twilio or similar), per-message credits, and one more secret to rotate | **Email only, built and verified in §17.** Deliberate: no new provider and no recurring cost for v1. The plumbing is one more `IEmailService`-shaped dependency if you want it. |
+| **D6** | **Should a counter order take a card on the tablet?** — **STILL OPEN** | Right now staff use their own terminal and tick "Money taken", so the app records the sale but does not process it. Taking the payment in-app means a Stripe charge from the tablet, and the failure modes that come with it (a declined card with a customer watching, a refund path, a receipt) | **Not built, on purpose.** §17 decision 3: nothing on the counter screen can fail because Stripe is unreachable. |
 
 ---
 
@@ -1352,3 +1365,120 @@ The honest next step would be **per-dish allergy notes** rather than one order-l
 field — "no peanuts on the Pad Thai" is more useful to a kitchen than "no peanuts". That
 needs the option groups wired up, and a decision about whether the customer picks
 allergies per dish or once per order. Worth asking the owner before building it.
+
+## 17. The kitchen's dish-by-dish flow, and the counter screen — 2026-10-01
+
+Built in one session, in six commits. This section records what exists, the four
+decisions that were yours, and — more usefully — the four defects that a real database
+found after every unit test passed.
+
+### What now exists
+
+| Piece | Where | What it does |
+|---|---|---|
+| Per-dish done marks | `order_items.is_completed` / `completed_at` (migration 16) | A cook ticks each dish off. Reversible, and unticking never moves an order backwards. |
+| Finish-on-last-dish | `OrderService.SetItemCompletedAsync` | The last dish moves the order to Ready. Decided in one place, so no caller can bypass it. |
+| "Your order is ready" email | `OrderEmailQueue` + `SendGridEmailService` | Sent AT MOST ONCE, claimed against `orders.ready_notified_at`. |
+| Ticket dish list | `DashboardPage.tsx`, `lib/itemProgress.ts` | Each board ticket ends with its dishes; each dish is a one-tap control. |
+| Counter order API | `POST /api/admin/orders` | A staff-created walk-in order, priced from the current menu, no payment provider involved. |
+| Counter screen | `CounterOrderPage.tsx`, `lib/counterTicket.ts` | Compact tap-to-add dish grid and a running ticket. |
+
+Two things that had been dead code since the beginning are now live and were the whole
+reason the "notify the customer" feature was cheap to build: `IEmailService.
+SendOrderStatusUpdateAsync` existed with no caller, and `BroadcastStatusUpdateAsync`
+existed with no caller either. The second one matters for a different reason — a status
+set on one tablet now reaches the others immediately instead of waiting up to thirty
+seconds for their poll.
+
+### The four decisions the owner made
+
+1. **The last dish finishes the order**, rather than prompting or waiting for a status
+   press. One tap per dish, and the status follows from the ticks.
+2. **Email only.** No SMS — that needs a new provider and a per-message cost. Recorded
+   below as outstanding.
+3. **The counter screen records money as taken, and takes no payment.** No Stripe charge
+   from the tablet, so a counter order cannot fail because Stripe is unreachable.
+4. **A walk-in gives a name, and nothing else.** Phone and email are optional and stored
+   blank. No customer record is created, because `customers.email_normalized` is UNIQUE
+   and the second anonymous walk-in of the day would collide with the first.
+
+Two more the owner set directly: **staff-created orders bypass the trading-hours gate** (a
+person with a tablet is proof the shop is open, and the gate would refuse a walk-in at
+9:55pm — verified live: the public checkout returned 409 at the same hour the counter path
+accepted), and **ticks live on the kitchen board's ticket only**, not on the Orders table.
+
+### The four defects a real database found
+
+Every one of these shipped green — 266 unit tests passing, build clean, lint clean. All
+four were found by starting the API against a real Postgres and calling the endpoints.
+They are recorded because they are all the same KIND of bug: SQL that reads correctly and
+behaves silently wrong, which is what this repo has been bitten by before.
+
+1. **`COUNT(*)::int FILTER (WHERE ...)` is a syntax error** (SQLSTATE 42601). `FILTER`
+   attaches to the aggregate call, so the cast has to come after it. The entire admin
+   order list returned HTTP 500 — the kitchen board was an error page.
+2. **`includeItems` added as a bare C# bool was sent as TEXT.** The `CASE WHEN @IncludeItems`
+   took the false branch every time, so every ticket came back with no lines *while still
+   answering 200*. The board would have rendered tickets with nothing to cook, which reads
+   as "this order has no items" rather than as a broken flag. Fixed with `DbType.Boolean`.
+3. **An unqualified `id` inside the correlated subquery resolved to the inner table's id.**
+   `WHERE tally.order_id = id` compared a line's order to the line's own id — always false,
+   so every ticket read "0 of 0" with real orders that had lines. Fixed by aliasing
+   `orders o` and qualifying every reference, including the filter conditions built in C#.
+4. **`string_agg(col, '' ...)` inside a C# verbatim string is not a delimiter.** Postgres
+   saw a stray quote and rejected the query (42883).
+
+A fifth, caught while writing the tests rather than by running them: an intermediate
+version claimed `ready_notified_at` twice per finish, which would have marked an order
+announced and then skipped the send — ready food, and a customer never told.
+
+Guards for all of these now live in `tests/AsianTaste.API.Tests/Data/
+OrderQueryColumnMappingTests.cs`, which is where this repo already keeps its "the SQL
+reads fine and does the wrong thing" checks. The suite is at **271** (floor moved with it
+in the same commit).
+
+### What was verified, and how
+
+Not just tests — the whole flow was exercised against a live Postgres and a running API:
+
+- a counter order was created and came back `Confirmed`, priced 23.00, `paid: true`
+- its board ticket returned both dishes with `itemsDone: {done: 0, total: 2}`
+- ticking the first dish returned `doneLines: 1, orderMarkedReady: false`
+- ticking the LAST returned `orderMarkedReady: true` and the order was `Ready` in the
+  database
+- with an email address on the order, `customerNotified: true`, and the queued email read
+  *"Order AT-020818-DF9C is ready to collect"* with the collection address
+- unticking left the Ready order Ready (`orderMarkedReady: false`, no backward move)
+- finishing a second time reported `customerNotified: false` — the once-only claim held
+- an unpaid counter order was recorded `payment_status: Pending` with no `paid_amount`
+- the public checkout returned 409 "The kitchen opens at 10:00" while a counter order at
+  the same hour succeeded
+
+Probe orders 30 and 31 were deleted afterwards.
+
+### Deliberately NOT built
+
+- **SMS.** Decision 2 above. A customer who closed the tab is only reachable by email.
+- **Counter payment through Stripe.** Decision 3. Staff use their own terminal and tick
+  "Money taken".
+- **Table numbers as data.** `CreateCounterOrderDto.TableNumber` is free text folded into
+  the kitchen note. There is no table layout and no foreign key, because an unused key is
+  a promise the app does not keep.
+- **Partial refunds from the console.** Unchanged — still Stripe-dashboard only.
+- **Kitchen display units / printed dockets per station.** The board is one screen.
+
+### Worth knowing before you change this
+
+- **`orders.status` is still the source of truth for "how far along is this order".** The
+  dish marks are progress *within* an order, not a second status. Nothing outside the
+  board reads them, and unticking a dish on a Ready order changes nothing about the order.
+- **`ready_notified_at` is claimed, never cleared.** A failed send leaves the order marked
+  announced, because the column records "the kitchen finished this and someone was told" —
+  a failed email is a log entry, not a reason to re-announce on the next tick of an
+  unrelated dish. If a send fails, the order is in the log and the customer needs a phone
+  call. Making that retryable is a real change, not a tweak.
+- **A counter order has no `customers` row.** Anything that assumes every order has a
+  customer id will miss counter orders — the name lives on the order itself.
+- **The counter screen prices locally and sends no price.** If you ever add a field to
+  `toRequest`, check it is not money: the whole guarantee is that the server re-prices from
+  the current menu.

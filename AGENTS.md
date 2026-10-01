@@ -68,17 +68,47 @@ explained commit.
   → conflict index → seed → 04-10 → indexes → admin user). A DB failure logs and
   **starts anyway** — it must not become a restart loop.
 - **`Data/DatabaseInitializationService.cs`** + `Data/Migrations/*.sql` — numbered
-  `.sql` files shipped as embedded resources, applied in that fixed order.
+  `.sql` files shipped as embedded resources, applied in that fixed order (latest: 16).
 - **`Repositories/*.cs`** — Dapper, raw SQL, interfaces in the same folder
   (`IOrderRepository`, …). `OrderRepository` is ~1k lines and does its own
   snake_case → PascalCase mapping; that mapping breaking is a repeat offender.
+  Two Dapper limits that have already cost a green-but-broken release: it does **not**
+  turn a dotted alias (`"ItemsDone.Total"`) into a nested object, and it will **not**
+  map `json_agg` onto a `List<T>` (read it as text and deserialise). See §17.
 - **`Services/`** — business logic. `Payment/` (Stripe + a mock gateway),
   `Webhooks/`, `Email/`, `JwtService`, `PasswordHasher`, `EncryptionService`.
 - **`Controllers/`** — thin, `[ApiController]` + `[Route("api/[controller]")]`, XML-doc'd
   for Swagger, delegating to a service. `Admin*` controllers are JWT-protected.
 - **`WebSockets/`** — pushes live orders to the admin dashboard (the kitchen's view).
+  `BroadcastStatusUpdateAsync` had no caller until §17; a status set on one tablet now
+  reaches the others without waiting for their 30s poll.
+- **`Services/Email/OrderEmailQueue.cs`** — one channel carrying two job kinds
+  (confirmation, status update). The ready-to-collect email travels this path.
 - **`HealthChecks`** — `/healthz` is liveness and is the only one wired to Fly;
   `/health/db` reports without killing the process.
+
+## The kitchen's dish-by-dish flow (docs/TODO.md §17)
+
+The unit of work is **one dish**, not one order. Each board ticket renders its lines and
+each line is a one-tap control (`DashboardPage.tsx` + `lib/itemProgress.ts`).
+
+Three rules live in **one** place, `OrderService.SetItemCompletedAsync`:
+
+1. **The last outstanding dish finishes the order** — it moves to Ready. Only live orders
+   advance, so a cancelled order cannot revive and a Ready one is left alone.
+2. **The customer is told at most once**, claimed against `orders.ready_notified_at` (a
+   guarded `UPDATE ... WHERE ready_notified_at IS NULL`). Do not re-derive this from the
+   counts anywhere else — the claim IS the guarantee. A failed send leaves it claimed.
+3. **A tick never moves an order backwards.** Unticking a dish on a Ready order leaves it
+   Ready. `orders.status` stays the source of truth for where an order is.
+
+**Counter (face-to-face) orders** are `POST /api/admin/orders` →
+`CreateCounterOrderAsync`, and deliberately differ from the public checkout: **no
+trading-hours gate**, no payment provider call (staff tick "money taken"), status starts
+`Confirmed` (taking it IS the acceptance), and **no `customers` row** —
+`customers.email_normalized` is UNIQUE and a second anonymous walk-in would collide, so a
+walk-in's name lives on the order. Screen: `CounterOrderPage.tsx` + `lib/counterTicket.ts`,
+which prices locally but **sends no price** — the server always re-prices from the menu.
 
 ## Conventions
 
@@ -130,6 +160,20 @@ explained commit.
   data". Every query in `OrderRepository.cs` aliases for this reason, and
   `OrderQueryColumnMappingTests` pins the important ones. Check the alias before
   believing the data.
+- **Two things Dapper will not do, both of which shipped green as "0 of 0" or a 500**
+  (§17): it does **not** turn a dotted alias (`"ItemsDone.Total"`) into a nested object —
+  select flat columns and assemble; and it will **not** map `json_agg` onto a `List<T>` —
+  read it as text and `JsonSerializer.Deserialize` it.
+- **In a correlated subquery, qualify the outer column.** An unqualified `id` resolves to
+  the INNER table's column, so `WHERE tally.order_id = id` compares a line's order to the
+  line's own id and is silently always false. The admin list aliases `orders o` and writes
+  `o.id` everywhere, including in the filter conditions built in C#.
+- **A counter order exists to be quick, not to collect data.** No trading-hours gate, no
+  payment provider, no `customers` row, and a name is optional. Anything assuming every
+  order has a customer id or an email will miss them (see §17).
+- **The ready email is claimed once and the claim is never cleared.** A failed send leaves
+  the order marked announced and the customer needs a phone call; making that retryable is
+  a design change, not a tweak.
 - **"Today" is the restaurant's today.** `Australia/Adelaide`, so a UTC day boundary
   files the whole evening service under tomorrow. Use `GetLocalDayStartUtcAsync`.
 - **Never infer payment from the payment METHOD.** `payment_status` is the fact; a
