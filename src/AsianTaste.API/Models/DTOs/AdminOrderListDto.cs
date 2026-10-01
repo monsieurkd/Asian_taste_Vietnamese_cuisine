@@ -56,5 +56,73 @@ public class AdminOrderListDto
     /// is one they have already begun cooking without.
     /// </remarks>
     public string? AllergyDeclaration { get; set; }
+    /// <summary>
+    /// What each line's progress adds up to.
+    /// </summary>
+    /// <remarks>
+    /// On the LIST, not only the detail, because the board renders every ticket from
+    /// this endpoint and the board is where the ticks happen. "2 of 4 done" is also the
+    /// one thing that tells a cook which ticket is furthest along without opening it.
+    /// </remarks>
+    public OrderItemProgressDto ItemsDone { get; set; } = new();
+
+    /// <summary>
+    /// The order's lines. Null unless the caller asked for them (<c>includeItems</c>),
+    /// which the board does and the Orders table does not.
+    /// </summary>
+    /// <remarks>
+    /// Null rather than an empty list, so "not fetched" and "this order has no lines"
+    /// cannot be confused — an empty list renders as a ticket with nothing to cook.
+    /// </remarks>
+    public List<AdminOrderListLineDto>? Items { get; set; }
+
     public DateTime CreatedAt { get; set; }
+}
+
+    /// <summary>
+    /// How many of an order's lines a cook has ticked off.
+    /// </summary>
+    /// <remarks>
+    /// Its properties are set by the ROW, not by Dapper's nested mapping. Dapper 2.1.35
+    /// maps columns to properties of the type being queried — it does NOT turn a dotted
+    /// alias like <c>"ItemsDone.Total"</c> into a nested object (that is a different
+    /// library's feature, and assuming it here is how the counts silently arrived as 0 of
+    /// 0 on every ticket). The repository reads two flat columns and builds this.
+    /// </remarks>
+    public class OrderItemProgressDto
+    {
+        /// <summary>Lines ticked.</summary>
+        public int Done { get; set; }
+
+        /// <summary>Lines on the order. Dishes, not units — one line of qty 3 is one thing to cook.</summary>
+        public int Total { get; set; }
+    }
+
+/// <summary>
+/// One line of an order as the kitchen board needs it: what to cook, and whether it is
+/// already on the pass.
+/// </summary>
+/// <remarks>
+/// Deliberately narrower than <see cref="AdminOrderItemDto"/> — no money. The board
+/// decides what to cook; the total is a counter question and lives on the ticket page.
+/// A price on a kitchen ticket is a number that costs attention and answers nothing.
+/// </remarks>
+public class AdminOrderListLineDto
+{
+    /// <summary>The line's id, which is what a tick is sent against.</summary>
+    public int Id { get; set; }
+
+    /// <summary>Denormalized dish name, as ordered.</summary>
+    public string MenuItemName { get; set; } = string.Empty;
+
+    public int Quantity { get; set; }
+
+    /// <summary>Selected options, already joined for display (e.g. "Extra spicy, No onion").</summary>
+    public string? Modifiers { get; set; }
+
+    /// <summary>Per-dish note — "no coriander" applies to one dish, not the whole order.</summary>
+    public string? SpecialInstructions { get; set; }
+
+    /// <summary>True once this dish is done and off the cook's list.</summary>
+    public bool IsCompleted { get; set; }
 }

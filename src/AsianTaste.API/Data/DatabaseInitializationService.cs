@@ -187,7 +187,14 @@ public class DatabaseInitializationService : IDatabaseInitializationService
         var allergySql = await GetMigrationScriptAsync("15_add_allergy_declaration.sql");
         await ExecuteScriptAsync(allergySql, cancellationToken);
 
-        // 10. Seed the admin user, once every script that touches admin_users has
+        // 10. Per-line completion, and the once-only record that the customer was told
+        //     the order is ready. Runs last of the structure migrations because it only
+        //     ADDS columns to tables the earlier scripts create — placing it before them
+        //     would make a fresh database fail on a table that does not exist yet.
+        var itemCompletionSql = await GetMigrationScriptAsync("16_add_item_completion.sql");
+        await ExecuteScriptAsync(itemCompletionSql, cancellationToken);
+
+        // 11. Seed the admin user, once every script that touches admin_users has
         //    run. Only when no admin row exists: this creates the documented default
         //    account, and recreating it unconditionally would undo an operator
         //    deleting it. (A database with NO admin at all is unusable, so that case

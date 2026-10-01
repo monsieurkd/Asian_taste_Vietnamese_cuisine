@@ -26,6 +26,34 @@ public record OrderLineWrite
 }
 
 /// <summary>
+/// What a line's tick left the order looking like.
+/// </summary>
+/// <remarks>
+/// One record rather than four out-parameters, because every field here is needed
+/// together by the same decision — "is the order finished, and does anyone need
+/// telling?" — and a caller that could read the counts without the status could
+/// announce a ready order twice.
+/// </remarks>
+public record OrderItemCompletionResult
+{
+    public int OrderId { get; init; }
+    public int OrderItemId { get; init; }
+    public bool IsCompleted { get; init; }
+
+    /// <summary>Every line on the order, including ones already ticked.</summary>
+    public int TotalLines { get; init; }
+
+    /// <summary>Lines ticked, after this change.</summary>
+    public int DoneLines { get; init; }
+
+    /// <summary>True when every line on the order is now ticked.</summary>
+    public bool AllDone => TotalLines > 0 && DoneLines == TotalLines;
+
+    /// <summary>The order's own status as text, read in the same transaction.</summary>
+    public string OrderStatus { get; init; } = string.Empty;
+}
+
+/// <summary>
 /// Repository interface for order data access.
 /// </summary>
 public interface IOrderRepository
@@ -70,7 +98,27 @@ public interface IOrderRepository
     /// <summary>
     /// Gets all orders with optional filtering.
     /// </summary>
-    Task<List<AdminOrderListDto>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default);
+    /// <param name="includeItems">
+    /// Whether to include each order's lines. The board needs them (the ticket renders
+    /// what to cook, and what is already done); the Orders table does not, and asking
+    /// for them there would ship a hundred orders' worth of lines nobody reads.
+    /// </param>
+    Task<List<AdminOrderListDto>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, bool includeItems = false, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Ticks or unticks one line on an order, reporting the resulting state of the order.
+    /// </summary>
+    /// <returns>Null when the line does not exist on that order.</returns>
+    Task<OrderItemCompletionResult?> SetOrderItemCompletedAsync(int orderId, int orderItemId, bool isCompleted, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records that the customer has been told the order is ready, at most once.
+    /// </summary>
+    /// <returns>
+    /// True when this call set it (so it should send the message), false when it was
+    /// already set (so it must not).
+    /// </returns>
+    Task<bool> TryMarkReadyNotifiedAsync(int orderId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets order details with items for admin view.

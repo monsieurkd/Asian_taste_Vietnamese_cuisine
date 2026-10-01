@@ -29,6 +29,21 @@ public class OrderItem
     /// <summary>Customer's special instructions for this item.</summary>
     public string? SpecialInstructions { get; set; }
 
+    /// <summary>
+    /// True once a cook has marked this dish done on the kitchen board.
+    /// </summary>
+    /// <remarks>
+    /// A pass mark, not a fulfilment status. It is deliberately reversible: the board
+    /// lets a mistap be taken back, and unticking a line does not move the order
+    /// backwards. The rule for what the tick MEANS (an order whose every line is
+    /// ticked is ready, and the customer is told once) lives in OrderService — this
+    /// column only records the fact.
+    /// </remarks>
+    public bool IsCompleted { get; set; }
+
+    /// <summary>When the line was ticked, or null while it is still to be cooked.</summary>
+    public DateTime? CompletedAt { get; set; }
+
     // ==================== LIGHTSPEED SYNC FIELDS (Phase 3) ====================
 
     /// <summary>Lightspeed product ID for this order line item.</summary>

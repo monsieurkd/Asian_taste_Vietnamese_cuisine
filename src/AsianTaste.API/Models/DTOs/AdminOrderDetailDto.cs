@@ -74,6 +74,20 @@ public class AdminOrderItemDto
     public decimal UnitPrice { get; set; }
     public decimal TotalPrice { get; set; }
     public string? SpecialInstructions { get; set; }
+
+    /// <summary>
+    /// Whether this dish has been ticked off on the kitchen board.
+    /// </summary>
+    /// <remarks>
+    /// On the detail too, so the ticket page and the board agree about what is done.
+    /// The ticket is where staff look after the fact ("did that dish go out?"), and a
+    /// ticket showing every line as outstanding while the board shows one left is the
+    /// kind of disagreement that gets food re-cooked.
+    /// </remarks>
+    public bool IsCompleted { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
+
     public List<AdminOrderItemModifierDto> Modifiers { get; set; } = new();
 }
 

@@ -334,6 +334,129 @@ public class OrderRepository : IOrderRepository
                 cancellationToken: cancellationToken));
     }
 
+    /// <summary>
+    /// Ticks or unticks one line, and reports what that leaves the order looking like.
+    /// </summary>
+    /// <remarks>
+    /// Everything happens in one transaction, and the order row is locked, because the
+    /// answer to "is this the last line?" decides whether an order moves and whether a
+    /// customer is emailed. Two cooks ticking the last two lines of the same ticket at the
+    /// same moment is a real event on a busy pass: without the lock both read "one line
+    /// still open", both conclude they are not the last, and the order never becomes ready
+    /// — food sits on the counter and nobody is told.
+    ///
+    /// The counts are read AFTER the write, in the same transaction, so they describe the
+    /// state the tick produced rather than the state before it.
+    ///
+    /// The order's own status comes back too, and it is deliberately the status as of the
+    /// tick — before any move the caller is about to make. That is what lets the caller
+    /// tell "already Ready" (nothing to announce) from "still being cooked" (announce it).
+    /// </remarks>
+    /// <returns>
+    /// The line's order id and new state, plus the order's line counts and status — or
+    /// null when the line does not exist or does not belong to that order.
+    /// </returns>
+    public async Task<OrderItemCompletionResult?> SetOrderItemCompletedAsync(
+        int orderId,
+        int orderItemId,
+        bool isCompleted,
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            // The `AND order_id = @OrderId` is not decoration: it is what stops a tick for
+            // one order landing on a line of another. Without it the line id alone would
+            // be enough, and the two ids arrive from different places on the client.
+            var updated = await connection.ExecuteAsync(
+                new CommandDefinition(
+                    @"UPDATE order_items
+                         SET is_completed = @IsCompleted,
+                             completed_at = CASE WHEN @IsCompleted THEN @Now ELSE NULL END
+                       WHERE id = @OrderItemId AND order_id = @OrderId",
+                    new { OrderId = orderId, OrderItemId = orderItemId, IsCompleted = isCompleted, Now = DateTime.UtcNow },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            if (updated == 0)
+            {
+                transaction.Rollback();
+                return null;
+            }
+
+            // Lock the order for the rest of the transaction, so no other tick can land
+            // between the counts below and the caller's decision to finish the order.
+            var statusText = await connection.ExecuteScalarAsync<string?>(
+                new CommandDefinition(
+                    "SELECT status::text FROM orders WHERE id = @OrderId FOR UPDATE",
+                    new { OrderId = orderId },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            if (statusText is null)
+            {
+                transaction.Rollback();
+                return null;
+            }
+
+            var counts = await connection.QuerySingleAsync<(int Total, int Done)>(
+                new CommandDefinition(
+                    @"SELECT COUNT(*)::int as Total,
+                             COUNT(*) FILTER (WHERE is_completed)::int as Done
+                        FROM order_items
+                       WHERE order_id = @OrderId",
+                    new { OrderId = orderId },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            transaction.Commit();
+
+            return new OrderItemCompletionResult
+            {
+                OrderId = orderId,
+                OrderItemId = orderItemId,
+                IsCompleted = isCompleted,
+                TotalLines = counts.Total,
+                DoneLines = counts.Done,
+                OrderStatus = statusText,
+            };
+        }
+        catch
+        {
+            if (transaction.Connection != null) transaction.Rollback();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Records that the customer has been told this order is ready.
+    /// </summary>
+    /// <remarks>
+    /// Returns whether THIS call is the one that set it. The UPDATE is guarded on the
+    /// column still being null, so two requests that both believe they are the last tick
+    /// cannot both send an email — the second updates zero rows and is told so. That
+    /// guard, rather than the caller's own reasoning, is what makes the message
+    /// exactly-once.
+    /// </remarks>
+    public async Task<bool> TryMarkReadyNotifiedAsync(int orderId, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        var rows = await connection.ExecuteAsync(
+            new CommandDefinition(
+                @"UPDATE orders
+                     SET ready_notified_at = @Now
+                   WHERE id = @OrderId AND ready_notified_at IS NULL",
+                new { OrderId = orderId, Now = DateTime.UtcNow },
+                cancellationToken: cancellationToken));
+
+        return rows > 0;
+    }
+
     public async Task<List<Order>> GetOrdersByCustomerEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();
@@ -457,7 +580,7 @@ public class OrderRepository : IOrderRepository
     internal static string EscapeLikePattern(string term) =>
         term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
-    public async Task<List<AdminOrderListDto>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, CancellationToken cancellationToken = default)
+    public async Task<List<AdminOrderListDto>> GetAllOrdersAsync(OrderStatus? status, DateTime? fromDate, DateTime? toDate, int limit, int offset, string? orderNumber = null, bool includeItems = false, CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();
         connection.Open();
@@ -467,19 +590,19 @@ public class OrderRepository : IOrderRepository
 
         if (status.HasValue)
         {
-            conditions.Add("status = @Status::order_status");
+            conditions.Add("o.status = @Status::order_status");
             parameters.Add("Status", status.Value.ToString());
         }
 
         if (fromDate.HasValue)
         {
-            conditions.Add("created_at >= @FromDate");
+            conditions.Add("o.created_at >= @FromDate");
             parameters.Add("FromDate", fromDate.Value);
         }
 
         if (toDate.HasValue)
         {
-            conditions.Add("created_at <= @ToDate");
+            conditions.Add("o.created_at <= @ToDate");
             parameters.Add("ToDate", toDate.Value.AddDays(1).AddTicks(-1));
         }
 
@@ -498,7 +621,7 @@ public class OrderRepository : IOrderRepository
         // `%` and `_` are escaped so a search for "50%" cannot become a wildcard.
         if (!string.IsNullOrWhiteSpace(orderNumber))
         {
-            conditions.Add(@"order_number ILIKE @OrderNumberPattern ESCAPE '\'");
+            conditions.Add(@"o.order_number ILIKE @OrderNumberPattern ESCAPE '\'");
             parameters.Add("OrderNumberPattern", $"%{EscapeLikePattern(orderNumber.Trim())}%");
         }
 
@@ -521,34 +644,164 @@ public class OrderRepository : IOrderRepository
         // `payment_status` is selected because the console has to be able to tell a
         // declined card from a paid one. Inferring it from payment_method reads a
         // failed charge as a sale.
+        //
+        // The per-ticket line progress comes from correlated subqueries rather than a
+        // second round trip: the board asks for up to a hundred orders at a time, and one
+        // query per order is a hundred queries per refresh. "Not yet ticked" is counted
+        // first so the partial index from 16_add_item_completion.sql serves it, and the
+        // arithmetic happens in SQL so an order with no lines reports 0 of 0 rather than
+        // dividing by nothing.
+        //
+        // `@IncludeItems` gates whether the lines themselves come back. Dapper maps a NULL
+        // column to a null list (NOT to an empty one), which is exactly the distinction the
+        // DTO documents: the Orders table renders no lines and does not pay for them, the
+        // board renders them and does.
+        // NOTE ON `o.` — every reference to the order is qualified, and the orders table is
+        // aliased `o`. This is not style. The progress counters below are correlated
+        // subqueries, and an unqualified `id` inside one resolves to the INNER table's id
+        // (order_items.id), not to the order's. That made `tally.order_id = id` compare a
+        // line's order to the line's own id — so the counters read 0 on every order while
+        // the query ran happily and the endpoint answered 200. A board where every ticket
+        // says "0 of 0" and nothing to cook is the result.
         var sql = $@"
-            SELECT id,
-                   order_number as OrderNumber,
-                   customer_name as CustomerName,
-                   customer_phone as CustomerPhone,
-                   customer_email as CustomerEmail,
-                   order_type::text as OrderType,
-                   requested_time as RequestedTime,
-                   status::text as Status,
-                   payment_method::text as PaymentMethod,
-                   payment_status::text as PaymentStatus,
-                   subtotal as Subtotal,
-                   total as Total,
-                   notes as Notes,
-                   allergy_declaration as AllergyDeclaration,
-                   created_at as CreatedAt
-            FROM orders
+            SELECT o.id,
+                   o.order_number as OrderNumber,
+                   o.customer_name as CustomerName,
+                   o.customer_phone as CustomerPhone,
+                   o.customer_email as CustomerEmail,
+                   o.order_type::text as OrderType,
+                   o.requested_time as RequestedTime,
+                   o.status::text as Status,
+                   o.payment_method::text as PaymentMethod,
+                   o.payment_status::text as PaymentStatus,
+                   o.subtotal as Subtotal,
+                   o.total as Total,
+                   o.notes as Notes,
+                   o.allergy_declaration as AllergyDeclaration,
+                   (SELECT COUNT(*)::int FROM order_items tally
+                     WHERE tally.order_id = o.id) as ItemsDoneTotal,
+                   (SELECT COUNT(*) FILTER (WHERE tally.is_completed)::int
+                      FROM order_items tally
+                     WHERE tally.order_id = o.id) as ItemsDoneDone,
+                   CASE WHEN @IncludeItems THEN (
+                       SELECT json_agg(built ORDER BY built.""Id"")
+                       FROM (
+                           SELECT li.id as ""Id"",
+                                  li.menu_item_name as ""MenuItemName"",
+                                  li.quantity as ""Quantity"",
+                                  li.special_instructions as ""SpecialInstructions"",
+                                  li.is_completed as ""IsCompleted"",
+                                  (SELECT string_agg(md.modifier_name, ', ' ORDER BY md.id)
+                                     FROM order_item_modifiers md
+                                    WHERE md.order_item_id = li.id) as ""Modifiers""
+                           FROM order_items li
+                           WHERE li.order_id = o.id
+                       ) built
+                   ) END as ItemsJson,
+                   o.created_at as CreatedAt
+            FROM orders o
             {whereClause}
-            ORDER BY created_at DESC
+            ORDER BY o.created_at DESC
             LIMIT @Limit OFFSET @Offset";
 
         parameters.Add("Limit", limit);
         parameters.Add("Offset", offset);
+        parameters.Add("IncludeItems", includeItems, DbType.Boolean);
 
-        var orders = await connection.QueryAsync<AdminOrderListDto>(
-            new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
+        // The counters come back as two FLAT columns and are assembled into the nested DTO
+        // by hand below.
+        //
+        // Dapper 2.1.35 maps columns to properties of the queried type; it does NOT turn a
+        // dotted alias (`"ItemsDone.Total"`) into a nested object, which is a different
+        // library's feature. Relying on it is how every ticket on the board read "0 of 0"
+        // while this SQL returned the right numbers.
+        var rows = (await connection.QueryAsync<AdminOrderListRow>(
+            new CommandDefinition(sql, parameters, cancellationToken: cancellationToken))).AsList();
 
-        return orders.AsList();
+        return rows.Select(row => new AdminOrderListDto
+        {
+            Id = row.Id,
+            OrderNumber = row.OrderNumber,
+            CustomerName = row.CustomerName,
+            CustomerPhone = row.CustomerPhone,
+            CustomerEmail = row.CustomerEmail,
+            OrderType = row.OrderType,
+            RequestedTime = row.RequestedTime,
+            Status = row.Status,
+            PaymentMethod = row.PaymentMethod,
+            PaymentStatus = row.PaymentStatus,
+            Subtotal = row.Subtotal,
+            Total = row.Total,
+            Notes = row.Notes,
+            AllergyDeclaration = row.AllergyDeclaration,
+            ItemsDone = new OrderItemProgressDto { Done = row.ItemsDoneDone, Total = row.ItemsDoneTotal },
+            // Null when the caller did not ask for lines, which is NOT the same as an empty
+            // list: an empty array renders as a ticket with nothing to cook.
+            Items = string.IsNullOrEmpty(row.ItemsJson)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<List<AdminOrderListLineDto>>(
+                    row.ItemsJson, JsonOptions),
+            CreatedAt = row.CreatedAt,
+        }).ToList();
+    }
+
+    /// <summary>
+    /// How the line subquery's JSON is read back.
+    /// </summary>
+    /// <remarks>
+    /// Case-INsensitive is the default and is what is wanted here: the SQL projects the
+    /// keys as `"MenuItemName"` to match the DTO property, and pinning the comparison means
+    /// a future rename on either side fails loudly rather than producing silently null
+    /// dish names on every ticket.
+    /// </remarks>
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    /// <summary>
+    /// One row of the admin order list, with the progress counters flattened.
+    /// </summary>
+    /// <remarks>
+    /// A shape for reading only: `GetAllOrdersAsync` projects this and then builds the
+    /// real DTO, so the nested <c>ItemsDone</c> object can be filled from two columns.
+    /// See the comment at the query for why that is necessary rather than a dotted alias.
+    /// </remarks>
+    private sealed class AdminOrderListRow
+    {
+        public int Id { get; set; }
+        public string OrderNumber { get; set; } = string.Empty;
+        public string CustomerName { get; set; } = string.Empty;
+        public string CustomerPhone { get; set; } = string.Empty;
+        public string CustomerEmail { get; set; } = string.Empty;
+        public string OrderType { get; set; } = string.Empty;
+        public DateTime RequestedTime { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? PaymentMethod { get; set; }
+        public string? PaymentStatus { get; set; }
+        public decimal Subtotal { get; set; }
+        public decimal Total { get; set; }
+        public string? Notes { get; set; }
+        public string? AllergyDeclaration { get; set; }
+
+        /// <summary>Every line on the order.</summary>
+        public int ItemsDoneTotal { get; set; }
+
+        /// <summary>Lines ticked.</summary>
+        public int ItemsDoneDone { get; set; }
+
+        /// <summary>
+        /// The lines as RAW JSON, deserialised after the query.
+        /// </summary>
+        /// <remarks>
+        /// A string, not a list. `json_agg` comes back through Npgsql as text, and Dapper
+        /// will not convert text to a List&lt;T&gt; — it throws InvalidCastException and the
+        /// whole endpoint 500s. Reading it as a string and parsing it is what the driver
+        /// actually supports.
+        /// </remarks>
+        public string? ItemsJson { get; set; }
+
+        public DateTime CreatedAt { get; set; }
     }
 
     public async Task<AdminOrderDetailDto?> GetAdminOrderDetailAsync(int orderId, CancellationToken cancellationToken = default)
@@ -612,6 +865,8 @@ public class OrderRepository : IOrderRepository
                 oi.unit_price as UnitPrice,
                 oi.total_price as TotalPrice,
                 oi.special_instructions as SpecialInstructions,
+                oi.is_completed as IsCompleted,
+                oi.completed_at as CompletedAt,
                 oim.id as ModifierRowId,
                 oim.modifier_id as ModifierId,
                 oim.modifier_name as ModifierName,
@@ -640,6 +895,8 @@ public class OrderRepository : IOrderRepository
                     UnitPrice = (decimal)row.UnitPrice,
                     TotalPrice = (decimal)row.TotalPrice,
                     SpecialInstructions = (string?)row.SpecialInstructions,
+                    IsCompleted = (bool)row.IsCompleted,
+                    CompletedAt = (DateTime?)row.CompletedAt,
                     Modifiers = new List<AdminOrderItemModifierDto>()
                 };
             }
