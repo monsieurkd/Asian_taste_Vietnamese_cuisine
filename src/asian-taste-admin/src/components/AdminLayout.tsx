@@ -24,6 +24,12 @@ const ICONS = {
   menu: (
     <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM11 4h7.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H11" />
   ),
+  counter: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <path d="M3.5 9h17M8 4.5v15" />
+    </>
+  ),
   out: (
     <>
       <path d="M14 4h5v16h-5" />
@@ -43,6 +49,7 @@ function Icon({ paths }: { paths: React.ReactNode }) {
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: ICONS.grid },
+  { to: "/counter", label: "Counter", icon: ICONS.counter },
   { to: "/orders", label: "Orders", icon: ICONS.list },
   { to: "/menu", label: "Menu", icon: ICONS.menu },
 ]

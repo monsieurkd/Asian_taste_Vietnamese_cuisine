@@ -10,6 +10,7 @@ import { DashboardPage } from "@/pages/DashboardPage"
 import { OrdersPage } from "@/pages/OrdersPage"
 import { OrderDetailPage } from "@/pages/OrderDetailPage"
 import { MenuManagementPage } from "@/pages/MenuManagementPage"
+import { CounterOrderPage } from "@/pages/CounterOrderPage"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -55,6 +56,10 @@ function App() {
             <Route path="/orders" element={<OrdersPage />} />
             <Route path="/orders/:id" element={<OrderDetailPage />} />
             <Route path="/menu" element={<MenuManagementPage />} />
+            {/* The counter screen is its own route rather than a mode of the order
+                list: it is used standing up, with a customer waiting, and sharing a
+                page with the table would put a search box in the way. */}
+            <Route path="/counter" element={<CounterOrderPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

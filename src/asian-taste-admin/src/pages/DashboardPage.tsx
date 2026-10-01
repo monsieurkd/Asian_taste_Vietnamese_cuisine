@@ -9,6 +9,13 @@ import { StatusPill } from "@/components/ui/StatusPill"
 import { apiStatusValue, isClosed, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
 import { readPayment } from "@/lib/payment"
 import { boardAction } from "@/lib/boardAction"
+import {
+  canTickItems,
+  lineDetail,
+  progressLabel,
+  progressFraction,
+  progressOf,
+} from "@/lib/itemProgress"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
@@ -74,13 +81,34 @@ function isScheduled(order: Order): boolean {
  * so a WebSocket frame carrying an older status cannot talk the board into an illegal
  * move (skipping a stage, or advancing a cancelled order).
  */
-function Ticket({ order, onAdvance, busy }: { order: Order; onAdvance: (next: StatusKey) => void; busy: boolean }) {
+function Ticket({
+  order,
+  onAdvance,
+  onTick,
+  busy,
+  tickingItemId,
+}: {
+  order: Order
+  onAdvance: (next: StatusKey) => void
+  /** Tick or untick one dish. */
+  onTick: (itemId: number, isCompleted: boolean) => void
+  busy: boolean
+  /** The line currently in flight, so only that one reads "saving". */
+  tickingItemId: number | null
+}) {
   const mins = minutesAgo(order.createdAt)
   const payment = readPayment(order.paymentStatus, order.paymentMethod)
   const scheduled = isScheduled(order)
 
   // The rule that decides, not the button's own wording. See lib/boardAction.
   const action = boardAction(order.status)
+
+  // The items and their progress come from the API's own count, not from the lines on
+  // this page — see lib/itemProgress for why that distinction is load-bearing.
+  const lines = order.items ?? []
+  const progress = progressOf(order)
+  const allDone = progress.total > 0 && progress.done === progress.total
+  const tickable = canTickItems(order)
 
   return (
     <article className={`ticket ${mins > URGENT_MINUTES ? "urgent" : ""}`}>
@@ -142,10 +170,85 @@ function Ticket({ order, onAdvance, busy }: { order: Order; onAdvance: (next: St
         )}
         <OpenLink href={`/orders/${order.id}`} />
       </div>
+
+      {/* ── The dish list, at the bottom of the ticket ──────────────────────────
+          This is what the ticket is FOR: a cook needs to know which dishes make up
+          the order, and which of them are still to do. Until this existed the board
+          showed a customer's name and a status, and the food itself was only visible
+          after opening the ticket on another page.
+
+          Each line is the control. One tap marks a dish done, which is the smallest
+          unit of work a kitchen actually has — where before the only expressible
+          progress was "the whole order has moved stage", a question no cook asks. */}
+      {lines.length > 0 && (
+        <div className="ticket-lines">
+          <div className="ticket-progress">
+            <span className="ticket-progress-label">{progressLabel(order)}</span>
+            <span
+              className="ticket-progress-bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={progress.total}
+              aria-valuenow={progress.done}
+              aria-label={`${progress.done} of ${progress.total} dishes done`}
+            >
+              <span style={{ width: `${progressFraction(order) * 100}%` }} />
+            </span>
+          </div>
+
+          <ul className="ticket-line-list">
+            {lines.map((lineItem) => {
+              const detail = lineDetail(lineItem)
+              const inFlight = tickingItemId === lineItem.id
+
+              return (
+                <li key={lineItem.id} data-done={lineItem.isCompleted}>
+                  <button
+                    type="button"
+                    className="ticket-line"
+                    aria-pressed={lineItem.isCompleted}
+                    disabled={!tickable || inFlight}
+                    onClick={() => onTick(lineItem.id, !lineItem.isCompleted)}
+                  >
+                    {/* A real checkbox shape, because that is the gesture: this is the
+                        one control on the board that is pressed tens of times a shift,
+                        and it should read as a tick rather than as a button. */}
+                    <span className="ticket-line-check" aria-hidden="true">
+                      <CheckMark />
+                    </span>
+                    <span className="ticket-line-body">
+                      <span className="ticket-line-name">
+                        <strong>{lineItem.quantity}×</strong> {lineItem.menuItemName}
+                      </span>
+                      {detail && <span className="ticket-line-detail">{detail}</span>}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+
+          {/* The one thing worth saying out loud once the last dish is ticked. The order
+              moves itself (the server decides that, not this screen), so this reports
+              what happened rather than asking for another press. */}
+          {allDone && tickable && (
+            <p className="ticket-alldone" role="status">
+              {tickable ? "Every dish is done — this order is ready." : "Every dish is done."}
+            </p>
+          )}
+        </div>
+      )}
     </article>
   )
 }
 
+function CheckMark() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
 function OpenLink({ href }: { href: string }) {
   return (
     <Link className="btn btn-secondary" to={href} style={{ minHeight: 38, padding: "8px 14px", fontSize: 13 }}>
@@ -166,10 +269,15 @@ export function DashboardPage() {
   const { isConnected } = useOrderWebSocket()
   const queryClient = useQueryClient()
   const [savingId, setSavingId] = useState<number | null>(null)
+  /** The single dish currently being ticked, so only its own row shows as busy. */
+  const [tickingItemId, setTickingItemId] = useState<number | null>(null)
 
+  // The board asks for the LINES, which the Orders table does not. They are what the
+  // ticket renders at its bottom, and fetching them per ticket on demand would mean one
+  // request per tap of "Open" — on the screen whose whole job is to be glanceable.
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["orders", "board"],
-    queryFn: () => ordersApi.getOrders({ limit: 100 }),
+    queryFn: () => ordersApi.getOrders({ limit: 100, includeItems: true }),
     refetchInterval: 30_000,
   })
 
@@ -200,6 +308,84 @@ export function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
     },
     onError: () => showAdminToast("Couldn't update that order — try again"),
+  })
+
+  /**
+   * Tick one dish off, from the ticket.
+   *
+   * Optimistic, and deliberately so: this is the control a cook presses tens of times a
+   * shift, sometimes twice a second, and a round trip of "Saving…" under the finger makes
+   * the pass feel broken. The counts are patched locally at the same time so the ticket's
+   * "2 of 4" moves with the tick rather than a moment later.
+   *
+   * The rollback matters more than the optimism. If the server refuses — the order was
+   * cancelled by somebody else, or the line moved — the locally-added tick is removed, so
+   * the board never keeps a claim the database does not agree with. A kitchen working
+   * from a tick that does not exist is how a dish gets forgotten.
+   *
+   * The response is authoritative on the bigger question (did the order finish?) and is
+   * reported to the cook, because "the customer has been emailed" is not something the
+   * screen could have guessed.
+   */
+  const tick = useMutation({
+    mutationFn: ({ orderId, itemId, isCompleted }: { orderId: number; itemId: number; isCompleted: boolean }) =>
+      ordersApi.setItemCompleted(orderId, itemId, isCompleted),
+
+    onMutate: async ({ orderId, itemId, isCompleted }) => {
+      setTickingItemId(itemId)
+
+      // Stop an in-flight refetch from overwriting the optimistic patch with the old row.
+      await queryClient.cancelQueries({ queryKey: ["orders", "board"] })
+      const previous = queryClient.getQueryData<Order[]>(["orders", "board"])
+
+      queryClient.setQueryData<Order[]>(["orders", "board"], (current) =>
+        (current ?? []).map((order) => {
+          if (order.id !== orderId || !order.items) return order
+
+          const items = order.items.map((line) =>
+            line.id === itemId ? { ...line, isCompleted } : line,
+          )
+
+          return {
+            ...order,
+            items,
+            itemsDone: {
+              done: items.filter((line) => line.isCompleted).length,
+              total: items.length,
+            },
+          }
+        }),
+      )
+
+      return { previous }
+    },
+
+    onError: (_error, { orderId }, context) => {
+      // Put the board back the way the database still says it is.
+      if (context?.previous) {
+        queryClient.setQueryData(["orders", "board"], context.previous)
+      }
+      showAdminToast(`Couldn't update a dish on ${orderId} — check the ticket`)
+    },
+
+    onSuccess: (result) => {
+      // Say the thing the screen could not know. The order moving, and the customer being
+      // told, are both decided on the server and both change what the cook does next —
+      // call the number out, or ring them.
+      if (result.orderMarkedReady) {
+        showAdminToast(
+          result.customerNotified
+            ? "Every dish done — order is ready and the customer has been emailed"
+            : "Every dish done — order is ready. Nobody to email, so call the number out",
+        )
+      }
+    },
+
+    onSettled: () => {
+      setTickingItemId(null)
+      queryClient.invalidateQueries({ queryKey: ["orders"] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
+    },
   })
 
   // The board carries only the open stages. Collected orders are finished, so
@@ -301,7 +487,11 @@ export function DashboardPage() {
                           key={order.id}
                           order={order}
                           busy={savingId === order.id}
+                          tickingItemId={tickingItemId}
                           onAdvance={(status) => advance.mutate({ id: order.id, status })}
+                          onTick={(itemId, isCompleted) =>
+                            tick.mutate({ orderId: order.id, itemId, isCompleted })
+                          }
                         />
                       ))
                     ) : (
