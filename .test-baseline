@@ -30,7 +30,7 @@
 # The same change ADDED tests for the order flow itself (admin column mapping, the
 # real payment state, the pickup estimate, modifier mapping, the local day boundary)
 # and those more than replaced the deleted coverage in the areas that matter.
-251
+271
 
 # Raised 170 -> 174 on 2026-09-25, in the same commit as four tests for a defect
 # found in production by the deployment probe: StripePaymentVerificationTests pins
@@ -57,3 +57,11 @@
 # DTO -> order INSERT -> the edit's SET list -> the admin list query -> the admin detail
 # query), because a break anywhere in it is invisible from both ends — the customer sees
 # their checkout succeed and the kitchen sees a ticket with no allergy block.
+
+# Raised 251 -> 266 for per-dish completion (the kitchen's tick): 10 tests on the rule
+# that the LAST dish finishes the order, moves it to Ready and tells the customer exactly
+# once — asserted on the email queue's collaborator, because a response field could say
+# anything. Plus 4 on the guards (unticking never moves an order backwards, a cancelled
+# order's dishes cannot be ticked, a line from another order is refused, and a counter
+# order with no email is honestly reported as "ready, nobody told"), and 4 added to the
+# admin-query column guard for the new line-progress projection.

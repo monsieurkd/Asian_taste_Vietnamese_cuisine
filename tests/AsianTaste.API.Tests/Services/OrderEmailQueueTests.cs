@@ -29,9 +29,38 @@ public class OrderEmailQueueTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await foreach (var received in queue.ReadAllAsync(cts.Token))
         {
-            Assert.Equal(job.OrderId, received.OrderId);
-            Assert.Equal(job.ToEmail, received.ToEmail);
-            Assert.Equal(job.Model.OrderNumber, received.Model.OrderNumber);
+            // The queue now carries two kinds of message, so the reader gets the union
+            // and picks the one it means. A confirmation must still arrive AS a
+            // confirmation — losing that distinction is how a status update would be
+            // sent with a null model.
+            var confirmation = Assert.IsType<OrderConfirmationEmailWork>(received);
+            Assert.Equal(job.OrderId, confirmation.Job.OrderId);
+            Assert.Equal(job.ToEmail, confirmation.Job.ToEmail);
+            Assert.Equal(job.Model.OrderNumber, confirmation.Job.Model.OrderNumber);
+            break;
+        }
+    }
+
+    /// <summary>
+    /// A "your order is ready" message travels the same queue as a confirmation, and must
+    /// arrive as its own kind so the worker sends the right email.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueStatusUpdate_Then_Read_Yields_A_Status_Update()
+    {
+        var queue = new OrderEmailQueue();
+        var job = new OrderStatusUpdateEmailJob(
+            7, "customer@example.com", "Test Customer", "AT-010100-0007", "Ready", "Your food is ready.");
+
+        await queue.EnqueueStatusUpdateAsync(job, CancellationToken.None);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await foreach (var received in queue.ReadAllAsync(cts.Token))
+        {
+            var update = Assert.IsType<OrderStatusUpdateEmailWork>(received);
+            Assert.Equal("Ready", update.Job.Status);
+            Assert.Equal("Your food is ready.", update.Job.Message);
+            Assert.Equal(7, update.Job.OrderId);
             break;
         }
     }
