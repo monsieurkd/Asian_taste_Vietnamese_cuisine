@@ -2,6 +2,7 @@ import {
   type Order,
   type OrderDetail,
   type DashboardSummary,
+  type ItemCompletionResult,
   type UpdateOrderItemsRequest,
   type UpdateOrderItemsResult,
   type UpdateOrderStatusRequest,
@@ -24,8 +25,37 @@ export const ordersApi = {
     orderNumber?: string
     limit?: number
     offset?: number
+    /**
+     * Include each order's dishes and their ticked state.
+     *
+     * The kitchen board needs them (its ticket renders what to cook); the Orders table
+     * does not, and asking for them there ships a page of lines nobody reads.
+     */
+    includeItems?: boolean
   }): Promise<Order[]> {
     const response = await apiClient.get<Order[]>("/admin/orders", { params })
+    return response.data
+  },
+
+  /**
+   * Mark one dish on an order as done, or take the mark back.
+   *
+   * Ticking the LAST outstanding dish finishes the order — it moves to Ready and the
+   * customer is emailed — but that is decided on the server, not here. The response says
+   * whether it happened, so the board can tell the cook.
+   *
+   * Sends the state the line should be in rather than asking for a toggle, so a doubled
+   * tap on a tablet settles on the same answer instead of flipping twice.
+   */
+  async setItemCompleted(
+    orderId: number,
+    itemId: number,
+    isCompleted: boolean,
+  ): Promise<ItemCompletionResult> {
+    const response = await apiClient.put<ItemCompletionResult>(
+      `/admin/orders/${orderId}/items/${itemId}/completed`,
+      { isCompleted },
+    )
     return response.data
   },
 

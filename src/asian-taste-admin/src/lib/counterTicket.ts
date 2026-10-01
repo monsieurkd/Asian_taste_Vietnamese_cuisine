@@ -1,0 +1,228 @@
+import type { MenuItemDetail, Modifier } from "@/api/menuApi"
+import type { CounterOrderItem } from "@/api/counterOrderApi"
+
+/**
+ * The running ticket on the counter screen.
+ *
+ * This is the logic half of a face-to-face order, kept out of the component so the rules
+ * can be tested without a browser. What it has to get right is narrow but load-bearing:
+ * the person using it is standing in front of a customer, so every rule that would
+ * otherwise be a dialog is a rule that should have been decided here.
+ *
+ * Two decisions worth naming:
+ *
+ *   * **Prices are shown, never sent.** The screen needs a running total because the
+ *     customer asks for one. The REQUEST carries dishes and quantities only — the server
+ *     re-prices from the current menu (the same rule the phone-edit path uses), so a
+ *     tampered request cannot set its own total. The local total is a courtesy to the
+ *     person at the counter, not an input to the bill.
+ *   * **Options add to the line, not to the dish.** The same dish twice with different
+ *     options is two lines, and merging them would lose one set of options — which is
+ *     how a customer gets the wrong bowl.
+ */
+
+/** One line of the ticket as the counter screen holds it. */
+export interface TicketLineDraft {
+  /** Local id, unique per line. Never sent — the server creates its own rows. */
+  key: string
+  menuItemId: number
+  name: string
+  quantity: number
+  /** The chosen modifiers, held so the line can be re-rendered and re-priced. */
+  modifiers: Modifier[]
+  note: string
+  /** Unit price WITH the modifiers applied. Display only. */
+  unitPrice: number
+}
+
+/** A modifier priced onto a dish. */
+export function modifierTotal(modifiers: Modifier[]): number {
+  return modifiers.reduce((sum, m) => sum + (m.priceAdjustment ?? 0), 0)
+}
+
+/**
+ * The unit price of a dish with its options.
+ */
+export function pricedUnit(basePrice: number, modifiers: Modifier[]): number {
+  // Rounded to cents because this is a GST-inclusive retail price that will be shown to a
+  // customer as a figure to hand over. A float artefact here is a wrong number on screen.
+  return Math.round((basePrice + modifierTotal(modifiers)) * 100) / 100
+}
+
+/** What the whole ticket comes to. */
+export function ticketTotal(lines: TicketLineDraft[]): number {
+  return Math.round(
+    lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0) * 100,
+  ) / 100
+}
+
+export function ticketItemCount(lines: TicketLineDraft[]): number {
+  return lines.reduce((sum, l) => sum + l.quantity, 0)
+}
+
+/**
+ * Add one dish, merging into an identical line when there is one.
+ *
+ * Merging is done on DISH + OPTIONS + NOTE, not on dish alone. Two portions of the same
+ * pho with the same options is one line of two, which is what the kitchen wants to read;
+ * the same pho with different spice levels is two lines, because merging would silently
+ * drop a choice the customer made.
+ */
+export function addLine(
+  lines: TicketLineDraft[],
+  dish: MenuItemDetail,
+  selected: Modifier[] = [],
+  note = "",
+  quantity = 1,
+): TicketLineDraft[] {
+  const optionsKey = selectionKey(selected)
+  const signature = `${dish.id}|${optionsKey}|${note.trim()}`
+
+  const existing = lines.find((l) => lineSignature(l) === signature)
+  if (existing) {
+    return lines.map((l) =>
+      l.key === existing.key ? { ...l, quantity: Math.min(MAX_QUANTITY, l.quantity + quantity) } : l,
+    )
+  }
+
+  return [
+    ...lines,
+    {
+      key: nextKey(lines),
+      menuItemId: dish.id,
+      name: dish.name,
+      quantity: Math.min(MAX_QUANTITY, quantity),
+      modifiers: selected,
+      note: note.trim(),
+      unitPrice: pricedUnit(dish.price, selected),
+    },
+  ]
+}
+
+/** Change one line's quantity. Zero or less removes it. */
+export function setQuantity(lines: TicketLineDraft[], key: string, quantity: number): TicketLineDraft[] {
+  if (quantity < 1) return removeLine(lines, key)
+  return lines.map((l) => (l.key === key ? { ...l, quantity: Math.min(MAX_QUANTITY, quantity) } : l))
+}
+
+export function removeLine(lines: TicketLineDraft[], key: string): TicketLineDraft[] {
+  return lines.filter((l) => l.key !== key)
+}
+
+export function clearTicket(): TicketLineDraft[] {
+  return []
+}
+
+/**
+ * The request body for the counter order.
+ *
+ * Deliberately carries no prices and no line keys: the server prices from the menu, and a
+ * local key is an artefact of this screen.
+ */
+export function toRequest(
+  lines: TicketLineDraft[],
+  fields: {
+    customerName?: string
+    customerPhone?: string
+    orderType?: "Pickup" | "DineIn"
+    tableNumber?: string
+    notes?: string
+    allergyDeclaration?: string
+    markedPaid?: boolean
+  },
+): { items: CounterOrderItem[] } & Record<string, unknown> {
+  return {
+    ...fields,
+    items: lines.map((l) => ({
+      menuItemId: l.menuItemId,
+      quantity: l.quantity,
+      specialInstructions: l.note || undefined,
+      modifierIds: l.modifiers.map((m) => m.id),
+    })),
+  }
+}
+
+/**
+ * Whether this dish can be added as it stands.
+ *
+ * A required option group with nothing selected is the one thing the screen must refuse,
+ * and it refuses it by showing WHICH group is unanswered rather than by disabling the
+ * button and leaving the staff member to hunt for it.
+ */
+export function unmetRequiredGroup(dish: MenuItemDetail, selected: Modifier[]): string | null {
+  const chosenIds = new Set(selected.map((m) => m.id))
+
+  for (const group of dish.modifierGroups ?? []) {
+    if (!group.isActive) continue
+    if (group.minRequired <= 0) continue
+
+    const chosen = group.modifiers.filter((m) => m.isActive && chosenIds.has(m.id)).length
+    if (chosen < group.minRequired) return group.name
+  }
+
+  return null
+}
+
+/** Whether a group has had as many options chosen as it allows. */
+export function groupFull(group: { maxAllowed: number }, selected: Modifier[]): boolean {
+  const count = selected.filter((m) => (group as { modifiers?: Modifier[] }).modifiers?.some((g) => g.id === m.id)).length
+  return count >= group.maxAllowed
+}
+
+/**
+ * Toggle an option, respecting the group's own maximum.
+ *
+ * A single-select group replaces rather than adds: tapping a second spice level on a group
+ * that allows one means "that one instead", which is what the customer just said out loud.
+ */
+export function toggleModifier(
+  dish: MenuItemDetail,
+  selected: Modifier[],
+  modifier: Modifier,
+): Modifier[] {
+  const group = (dish.modifierGroups ?? []).find((g) => g.modifiers.some((m) => m.id === modifier.id))
+
+  if (!group) return selected
+
+  const isChosen = selected.some((m) => m.id === modifier.id)
+
+  if (isChosen) {
+    // Removing an option is always allowed, even below a group's minimum: the minimum is
+    // checked when the dish is added, and refusing to let someone undo a choice traps them
+    // on a screen they cannot get out of.
+    return selected.filter((m) => m.id !== modifier.id)
+  }
+
+  const inGroup = selected.filter((m) => group.modifiers.some((g) => g.id === m.id))
+
+  if (inGroup.length >= group.maxAllowed) {
+    // At the limit: this one replaces the oldest choice in the group, which for a
+    // single-select group IS the choice it should replace.
+    const drop = group.maxAllowed === 1 ? inGroup : inGroup.slice(0, inGroup.length - group.maxAllowed + 1)
+    const dropIds = new Set(drop.map((m) => m.id))
+    return [...selected.filter((m) => !dropIds.has(m.id)), modifier]
+  }
+
+  return [...selected, modifier]
+}
+
+/** The max quantity one line may carry — matches the API's own bound. */
+export const MAX_QUANTITY = 10
+
+/** A stable key for a set of options, order-insensitive. */
+function selectionKey(modifiers: Modifier[]): string {
+  return modifiers
+    .map((m) => m.id)
+    .sort((a, b) => a - b)
+    .join(",")
+}
+
+function lineSignature(line: TicketLineDraft): string {
+  return `${line.menuItemId}|${selectionKey(line.modifiers)}|${line.note.trim()}`
+}
+
+function nextKey(lines: TicketLineDraft[]): string {
+  // A counter rather than a random id, so a key is readable in a test failure. It only has
+  // to be unique within one ticket.
+  return `line-${lines.length + 1}-${Date.now()}`
+}

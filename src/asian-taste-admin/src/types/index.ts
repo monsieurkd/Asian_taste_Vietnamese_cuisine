@@ -77,6 +77,22 @@ export interface Order {
   notes?: string
   /** Allergies declared for the order — flagged on the board, not only in the detail. */
   allergyDeclaration?: string | null
+  /**
+   * How many dishes are ticked off.
+   *
+   * On the list rather than derived from `items`, because the Orders table does not fetch
+   * lines and would otherwise have to render progress it cannot see.
+   */
+  itemsDone: OrderItemProgress
+  /**
+   * The order's dishes, when the caller asked for them (`includeItems`).
+   *
+   * Typed as the DETAIL's richer item shape, and used by the board's ticket for name,
+   * quantity, options and tick state. The list endpoint happens to send a narrower object
+   * (no money), which is a subset of this one — so one type describes both without the
+   * board having to know which endpoint its data came from.
+   */
+  items?: OrderItem[] | null
   createdAt: string
 }
 
@@ -91,7 +107,74 @@ export interface OrderItem {
   unitPrice: number
   totalPrice: number
   specialInstructions?: string
+  /** Whether a cook has ticked this dish off on the kitchen board. */
+  isCompleted: boolean
+  completedAt?: string | null
   modifiers: OrderItemModifier[]
+}
+
+/**
+ * One line of an order as the kitchen board's ticket receives it.
+ *
+ * The list endpoint's shape, which is NARROWER than the detail's `OrderItem` — no money.
+ * That is deliberate: the ticket exists to say what to cook, and a price competes for the
+ * attention the dish name needs. Kept as its own type so the difference is visible rather
+ * than implied by which endpoint the data came from.
+ */
+export interface OrderListLine {
+  id: number
+  menuItemName: string
+  quantity: number
+  /** Selected options, already joined for display. */
+  modifiers?: string | null
+  specialInstructions?: string | null
+  isCompleted: boolean
+}
+
+/**
+ * The fields the board's ticket reads off a line, whichever endpoint sent it.
+ *
+ * Structural, not nominal: the list sends `OrderListLine` and the detail sends
+ * `OrderItem`, and both are usable on the board. Naming the subset the ticket actually
+ * touches means neither one has to be bent to fit the other.
+ *
+ * `modifiers` is the one genuinely different field — a joined string from the list, an
+ * array of modifier objects from the detail — so it is left out and read by the two
+ * callers separately where it differs.
+ */
+export interface TicketLine {
+  id: number
+  menuItemName: string
+  quantity: number
+  specialInstructions?: string | null
+  isCompleted: boolean
+}
+
+/**
+ * How many of an order's lines are ticked.
+ */
+export interface OrderItemProgress {
+  done: number
+  total: number
+}
+
+/**
+ * What ticking a dish did to its order.
+ *
+ * `orderMarkedReady` and `customerNotified` are separate because they are different
+ * facts: the food is ready whether or not there was anybody to email (a counter order
+ * has no address), and a send can fail. The board says which, so a cook knows whether
+ * to call the number out or ring the customer.
+ */
+export interface ItemCompletionResult {
+  orderId: number
+  orderItemId: number
+  isCompleted: boolean
+  doneLines: number
+  totalLines: number
+  orderStatus: OrderStatus
+  orderMarkedReady: boolean
+  customerNotified: boolean
 }
 
 /**
