@@ -448,6 +448,161 @@ public class OrderService
     }
 
     /// <summary>
+    /// Ticks or unticks one dish on an order, and finishes the order when it was the last one.
+    /// </summary>
+    /// <remarks>
+    /// This is the kitchen's actual unit of work. A ticket with four dishes is four
+    /// things to cook, and until this existed the only progress the system could express
+    /// was "the whole order has moved stage", which is not a question a cook ever asks.
+    ///
+    /// Three rules, none of which belong in the repository (which knows only rows) or in
+    /// the controller (which knows only HTTP):
+    ///
+    ///  1. **The last line finishes the order.** A ticket whose every dish is ticked is
+    ///     ready — that is what the ticks mean, and making staff press a second control
+    ///     for the same fact is how the board goes stale. Only orders that are actually
+    ///     being cooked are advanced: a cancelled order must not come back to life, and
+    ///     an order someone already marked Ready is left exactly as it is.
+    ///  2. **The customer is told ONCE.** The trigger is a condition that can be reached
+    ///     twice (untick then re-tick, or two tablets racing on the last two lines), so
+    ///     the send is claimed against `ready_notified_at` rather than decided here. The
+    ///     claim is the guarantee; this method only asks for it.
+    ///  3. **A tick never moves an order BACKWARDS.** Unticking a dish on an order that
+    ///     has already gone Ready leaves it Ready. The food is on the counter, the
+    ///     customer has been emailed, and a mistap on a tablet must not un-announce it.
+    /// </remarks>
+    /// <returns>
+    /// What the tick did, or null when the order or the line does not exist. The caller
+    /// needs every part: the item, the counts (the board shows "2 of 4"), whether the
+    /// order moved, and whether a message was sent.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// The line does not belong to this order, or the order is closed (cancelled or
+    /// already collected) so there is nothing to tick.
+    /// </exception>
+    public async Task<OrderItemCompletionResponseDto?> SetItemCompletedAsync(
+        int orderId,
+        int orderItemId,
+        bool isCompleted,
+        CancellationToken cancellationToken = default)
+    {
+        var order = await _orderRepository.GetOrderByIdAsync(orderId, cancellationToken);
+        if (order is null) return null;
+
+        // A closed order is not being cooked, so there is no line left to tick. Saying so
+        // is better than accepting the tick and rendering it: a ticked line on a
+        // cancelled ticket reads as "this was made", which is the opposite of what
+        // happened and is exactly the note someone would later cook from.
+        if (order.Status is OrderStatus.Cancelled or OrderStatus.Completed)
+        {
+            throw new InvalidOperationException(
+                $"Order {order.OrderNumber} is {order.Status} — its items are no longer being cooked.");
+        }
+
+        var result = await _orderRepository.SetOrderItemCompletedAsync(orderId, orderItemId, isCompleted, cancellationToken);
+        if (result is null)
+        {
+            // The repository's update is scoped by order, so this covers both "no such
+            // line" and "that line belongs to a different order".
+            throw new InvalidOperationException($"Item {orderItemId} is not on order {order.OrderNumber}.");
+        }
+
+        var orderMarkedReady = false;
+        var customerNotified = false;
+
+        // Rule 1: every dish is done. Only a LIVE order moves — `Ready` is left alone
+        // (it is already there) and anything closed was rejected above.
+        if (result.AllDone && order.Status is OrderStatus.Pending or OrderStatus.Confirmed or OrderStatus.Preparing)
+        {
+            await _orderRepository.UpdateOrderStatusAsync(orderId, OrderStatus.Ready, cancellationToken);
+            orderMarkedReady = true;
+
+            // The claim on `ready_notified_at` happens inside NotifyCustomerOrderReadyAsync
+            // and nowhere else. Claiming it here as well would mark the order announced and
+            // then let the send be skipped as "already announced" — an order that is ready
+            // and a customer who is never told.
+            customerNotified = await NotifyCustomerOrderReadyAsync(order, cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Order {OrderNumber} item {ItemId} marked {State}: {Done}/{Total} done",
+            order.OrderNumber, orderItemId, isCompleted ? "done" : "not done",
+            result.DoneLines, result.TotalLines);
+
+        return new OrderItemCompletionResponseDto
+        {
+            OrderId = orderId,
+            OrderItemId = orderItemId,
+            IsCompleted = isCompleted,
+            DoneLines = result.DoneLines,
+            TotalLines = result.TotalLines,
+            OrderStatus = orderMarkedReady ? nameof(OrderStatus.Ready) : order.Status.ToString(),
+            OrderMarkedReady = orderMarkedReady,
+            CustomerNotified = customerNotified,
+        };
+    }
+
+    /// <summary>
+    /// Tells the customer their food is ready, at most once.
+    /// </summary>
+    /// <remarks>
+    /// The same care as the confirmation email, for the same reason: this runs on the
+    /// request that happened to tick the last dish, so a failure must not fail the tick
+    /// (the food IS ready — the cook is holding the plate) and the message must not be
+    /// sent twice.
+    ///
+    /// Returns whether the claim succeeded, which is what the console shows the cook.
+    /// A walk-in has no address to send to, so it returns false without pretending.
+    /// </remarks>
+    private async Task<bool> NotifyCustomerOrderReadyAsync(Order order, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Nothing to send to. Reported as "not told", because it is not.
+            if (string.IsNullOrWhiteSpace(order.CustomerEmail))
+            {
+                _logger.LogInformation(
+                    "Order {OrderNumber} is ready but has no customer email (counter order); nobody to tell.",
+                    order.OrderNumber);
+                return false;
+            }
+
+            var claimed = await _orderRepository.TryMarkReadyNotifiedAsync(orderId: order.Id, cancellationToken);
+            if (!claimed)
+            {
+                // Someone else's tick got here first. Not an error: the customer is
+                // already holding the message, and this is the guard doing its job.
+                _logger.LogInformation(
+                    "Order {OrderNumber} was already announced as ready; not sending a second message.",
+                    order.OrderNumber);
+                return false;
+            }
+
+            var settings = await LoadRestaurantSettingsAsync(cancellationToken);
+
+            await _emailQueue.EnqueueStatusUpdateAsync(
+                new OrderStatusUpdateEmailJob(
+                    order.Id,
+                    order.CustomerEmail,
+                    order.CustomerName,
+                    order.OrderNumber,
+                    "Ready",
+                    $"{order.CustomerName}, every dish on order {order.OrderNumber} is ready. "
+                    + $"Collect it at {settings.Address}."),
+                cancellationToken);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // The order is ready whether or not this worked, so the tick stands. The
+            // exception is logged loudly because a customer now has to be rung instead.
+            _logger.LogError(ex, "Could not queue the ready notification for order {OrderNumber}", order.OrderNumber);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Gets order history for a customer.
     /// </summary>
     public async Task<List<OrderDetailResponseDto>> GetCustomerOrdersAsync(string email, CancellationToken cancellationToken = default)
@@ -673,6 +828,136 @@ public class OrderService
             _logger.LogError(ex, "Payment attempt threw for order {OrderNumber}", order.OrderNumber);
             return PaymentOutcome.Failed;
         }
+    }
+
+    /// <summary>
+    /// Creates an order taken at the counter, by a staff member, for a customer in front of them.
+    /// </summary>
+    /// <remarks>
+    /// A different path from <see cref="CreateOrderAsync"/> in four ways, each deliberate:
+    ///
+    ///  1. **No trading-hours gate.** That rule exists to stop a script or a stale browser
+    ///     tab ordering from a building the shop cannot see into. A logged-in staff member
+    ///     with a tablet IS the evidence the shop is open, and the gate would otherwise
+    ///     refuse a walk-in at 9:55pm — the last five minutes of trade, which is not the
+    ///     moment to argue with software.
+    ///  2. **No payment provider is contacted.** No token, no PaymentIntent, no charge.
+    ///     Staff have already taken the money (cash, or their own terminal); this records
+    ///     that, so the board and the day's takings agree with the till. Nothing here can
+    ///     take a card, which is the point — a counter order must never be able to fail
+    ///     because Stripe is unreachable.
+    ///  3. **The order starts Confirmed, not Pending.** Whoever typed it in is the kitchen's
+    ///     acceptance; asking them to accept their own order is a second tap that means
+    ///     nothing. Pending is for orders arriving from outside, where somebody has to
+    ///     decide whether the kitchen can take them.
+    ///  4. **No customer record is created.** A walk-in has no email, and
+    ///     `customers.email_normalized` is UNIQUE — so the second anonymous walk-in of the
+    ///     day would collide with the first. The order carries its own name (that is what
+    ///     `orders.customer_*` is for) and is linked to a customer only when staff choose
+    ///     to put a phone number on it.
+    ///
+    /// The price is not a parameter: the repository prices the lines from the current menu,
+    /// the same way the public checkout does, so the request cannot name its own total.
+    /// </remarks>
+    public async Task<CounterOrderResponseDto> CreateCounterOrderAsync(
+        CreateCounterOrderDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var orderNumber = await GenerateOrderNumberAsync(cancellationToken);
+
+        // A name is what the food is called out as. Refusing an order because someone would
+        // not give one would be the software serving itself rather than the customer.
+        var name = string.IsNullOrWhiteSpace(request.CustomerName) ? "Counter" : request.CustomerName.Trim();
+
+        // The till number goes into the notes rather than a column of its own: there is no
+        // table layout in v1, and the kitchen reads the note.
+        var notes = string.IsNullOrWhiteSpace(request.TableNumber)
+            ? request.Notes
+            : $"Table {request.TableNumber.Trim()}"
+              + (string.IsNullOrWhiteSpace(request.Notes) ? string.Empty : $" — {request.Notes}");
+
+        var paid = request.MarkedPaid;
+
+        var checkoutRequest = new CreateCheckoutOrderDto
+        {
+            CustomerName = name,
+            // Empty is the documented "not given" for a counter order. NOT NULL columns are
+            // satisfied by the empty string rather than a placeholder that would read as
+            // real contact details later.
+            CustomerPhone = request.CustomerPhone?.Trim() ?? string.Empty,
+            CustomerEmail = string.Empty,
+            OrderType = request.OrderType,
+            // ASAP, always: the person is standing at the counter. There is no scheduled
+            // counter order to express, so one is not offered.
+            PickupTime = new PickupTimeDto { Type = "ASAP" },
+            SpecialInstructions = notes,
+            AllergyDeclaration = request.AllergyDeclaration,
+            Items = request.Items.Select(i => new CheckoutOrderItemDto
+            {
+                MenuItemId = i.MenuItemId,
+                Quantity = i.Quantity,
+                SpecialInstructions = i.SpecialInstructions,
+                SelectedModifierIds = i.ModifierIds,
+            }).ToList(),
+            // Cash unless told otherwise, because that is what a counter sale usually is and
+            // the value is required to be something. Without MarkedPaid it still reads as
+            // owing, which is the safe direction to be wrong in.
+            PaymentMethod = request.PaymentMethod ?? PaymentMethod.Cash,
+        };
+
+        var order = await _orderRepository.CreateOrderAsync(checkoutRequest, orderNumber, cancellationToken);
+
+        // Status and payment are set together, after creation, because `CreateOrderAsync`
+        // owns the insert and hardcodes Pending/unpaid — the public checkout's assumptions.
+        order.Status = OrderStatus.Confirmed;
+        if (paid)
+        {
+            order.PaymentStatus = Models.Enums.PaymentStatus.Succeeded;
+            order.PaidAmount = order.Total;
+            order.PaidAt = DateTime.UtcNow;
+        }
+        order.Notes = notes;
+        await _orderRepository.UpdateOrderAsync(order, cancellationToken);
+
+        _logger.LogInformation(
+            "Counter order {OrderNumber} created by staff: {LineCount} line(s), {Total} AUD, payment {Payment}",
+            order.OrderNumber, request.Items.Count, order.Total, paid ? "taken" : "outstanding");
+
+        // The kitchen board hears about it the same way it hears about a web order. Without
+        // this a counter order would appear on the board only on the next poll, and the cook
+        // is looking at the customer who just ordered it.
+        try
+        {
+            await _orderNotifier.BroadcastNewOrderAsync(new
+            {
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                customerName = order.CustomerName,
+                orderType = order.OrderType.ToString(),
+                total = order.Total,
+                paymentMethod = order.PaymentMethod?.ToString(),
+                source = "counter",
+                createdAt = order.CreatedAt
+            });
+        }
+        catch (Exception ex)
+        {
+            // A missed push delays the board, it does not lose the order — the list polls.
+            _logger.LogError(ex, "Failed to broadcast counter order {OrderNumber} to the boards", orderNumber);
+        }
+
+        return new CounterOrderResponseDto
+        {
+            OrderId = order.Id,
+            OrderNumber = order.OrderNumber,
+            Subtotal = order.Subtotal,
+            Total = order.Total,
+            Status = order.Status.ToString(),
+            Paid = paid,
+            CounterNote = paid
+                ? $"Paid {order.Total:0.00} — nothing to collect."
+                : $"Collect {order.Total:0.00} when the food is handed over.",
+        };
     }
 
     /// <summary>

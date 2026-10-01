@@ -25,7 +25,17 @@ public interface IEmailService
     /// <summary>
     /// Sends an order status update email.
     /// </summary>
-    Task<bool> SendOrderStatusUpdateAsync(string toEmail, string toName, string orderNumber, string status, CancellationToken cancellationToken = default);
+    /// <param name="message">
+    /// The sentence to send, or null to use the wording for <paramref name="status"/>.
+    /// </param>
+    /// <remarks>
+    /// <paramref name="message"/> exists because not every status update is worth the
+    /// same words. "Your order is ready to collect" is the one the customer acts on and
+    /// it is worth saying where and since when; a generic "status updated to Ready" is
+    /// true and useless. The default wording stays for callers that have nothing more to
+    /// say than the status itself.
+    /// </remarks>
+    Task<bool> SendOrderStatusUpdateAsync(string toEmail, string toName, string orderNumber, string status, string? message = null, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

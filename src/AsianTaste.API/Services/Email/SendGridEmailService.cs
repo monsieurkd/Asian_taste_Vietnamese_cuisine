@@ -61,11 +61,17 @@ public class SendGridEmailService : IEmailService
         return await SendEmailAsync(toEmail, toName, subject, htmlBody, textBody, cancellationToken);
     }
 
-    public async Task<bool> SendOrderStatusUpdateAsync(string toEmail, string toName, string orderNumber, string status, CancellationToken cancellationToken = default)
+    public async Task<bool> SendOrderStatusUpdateAsync(string toEmail, string toName, string orderNumber, string status, string? message = null, CancellationToken cancellationToken = default)
     {
-        var subject = $"Order {orderNumber} Update - {status}";
-        var htmlBody = GenerateOrderStatusUpdateHtml(toName, orderNumber, status);
-        var textBody = GenerateOrderStatusUpdateText(toName, orderNumber, status);
+        // The status is what the SUBJECT says; the message is what the customer reads.
+        // Two different jobs: a mailbox list needs to be scannable, and the sentence
+        // inside needs to answer the question the subject raised.
+        var subject = status.Equals("Ready", StringComparison.OrdinalIgnoreCase)
+            ? $"Order {orderNumber} is ready to collect - Asian Taste"
+            : $"Order {orderNumber} Update - {status}";
+
+        var htmlBody = GenerateOrderStatusUpdateHtml(toName, orderNumber, status, message);
+        var textBody = GenerateOrderStatusUpdateText(toName, orderNumber, status, message);
 
         return await SendEmailAsync(toEmail, toName, subject, htmlBody, textBody, cancellationToken);
     }
@@ -341,9 +347,19 @@ public class SendGridEmailService : IEmailService
 </html>";
     }
 
-    private string GenerateOrderStatusUpdateHtml(string customerName, string orderNumber, string status)
+    /// <summary>
+    /// The sentence a status update carries: the caller's, or the default for the status.
+    /// </summary>
+    /// <remarks>
+    /// One resolver, called by both the HTML and the text template, because two copies of
+    /// this switch is how a customer ends up with a plain-text email saying "ready for
+    /// pickup" and an HTML one saying something else.
+    /// </remarks>
+    private static string ResolveStatusMessage(string status, string? message)
     {
-        var statusMessage = status switch
+        if (!string.IsNullOrWhiteSpace(message)) return message;
+
+        return status switch
         {
             "Confirmed" => "Your order has been confirmed and is being prepared.",
             "Preparing" => "Your order is currently being prepared in the kitchen.",
@@ -351,6 +367,11 @@ public class SendGridEmailService : IEmailService
             "Completed" => "Your order has been completed. Thank you for dining with us!",
             _ => $"Your order status has been updated to: {status}"
         };
+    }
+
+    private string GenerateOrderStatusUpdateHtml(string customerName, string orderNumber, string status, string? message = null)
+    {
+        var statusMessage = ResolveStatusMessage(status, message);
 
         return $@"
 <!DOCTYPE html>
@@ -485,16 +506,9 @@ Asian Taste Vietnamese Restaurant
 """;
     }
 
-    private string GenerateOrderStatusUpdateText(string customerName, string orderNumber, string status)
+    private string GenerateOrderStatusUpdateText(string customerName, string orderNumber, string status, string? message = null)
     {
-        var statusMessage = status switch
-        {
-            "Confirmed" => "Your order has been confirmed and is being prepared.",
-            "Preparing" => "Your order is currently being prepared in the kitchen.",
-            "Ready" => "Great news! Your order is ready for pickup!",
-            "Completed" => "Your order has been completed. Thank you for dining with us!",
-            _ => $"Your order status has been updated to: {status}"
-        };
+        var statusMessage = ResolveStatusMessage(status, message);
 
         return $$"""
 ASIAN TASTE - ORDER STATUS UPDATE
