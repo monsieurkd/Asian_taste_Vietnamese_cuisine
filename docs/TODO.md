@@ -37,7 +37,7 @@ they come first — everything after them is a decision rather than a cleanup.**
 | # | Item | Effort | Why it matters |
 |---|---|---|---|
 | **T1** | **Rotate the Neon database password** | ~5 min | A fragment of the live password was sitting in an untracked file at the repo root (`hi.md`). It was never committed and the file is deleted — but `docs/SECRET-AUDIT.md` records the same credential as recoverable from git history. **Until it is rotated, treat the production database password as public.** Neon console → your project → Roles → reset password → update the Fly secret. Nothing in the app can do this for you. |
-| **T2** | **Cancel the probe orders on the kitchen board** | ~2 min | Six synthetic orders from testing the payment and hours rules are sitting as live tickets. Names are "Probe Test", "Probe Fixed" and "P". Cancel them from the admin dashboard: **orderIds 16, 17, 18, 19, 20, 21** — the order numbers are in §13.2b. They are not customer orders and nobody will collect them. |
+| ~~T2~~ | ~~Cancel the probe orders on the kitchen board~~ — **DONE 2026-10-02** | — | Nine synthetic orders were sitting as live tickets (**ids 2, 16-21, 23, 24** — "Probe Test", "Probe Fixed", "Close Probe", "Final Probe", "GST Probe", "Allergy Probe", "Gateway Probe"). All were cancelled on 2026-10-02, leaving only the owner's four real orders (8, 13, 14, 15). The original instruction listed only ids 16-21; the other three were found by querying for `customer_email like '%@example.com'` and were the same class of test data. |
 | **T3** | **Confirm the new hours are right** | ~1 min | I corrected the trading hours to what §10 says you published, and the app now REFUSES orders outside them. **If a refusal is ever wrong, tell me** — the rule is deliberately strict, so a wrong hour costs an order rather than sending food out at 3am. Current: Mon 10–2:30, Tue–Sun 10–4 and 4:30–9. See §15. |
 | **2** | Turn off Klarna, Zip and Link; turn on Google Pay | ~2 min in Stripe | **They would be offered to customers today.** Anything switched on in the dashboard appears at checkout with no review |
 | **3** | Buy a domain (cheap path in §3) | ~$15/yr | The only thing between you and Apple Pay. A `*.vercel.app` host cannot be registered |
@@ -1498,3 +1498,108 @@ Probe orders 30 and 31 were deleted afterwards.
 - **The counter screen prices locally and sends no price.** If you ever add a field to
   `toRequest`, check it is not money: the whole guarantee is that the server re-prices from
   the current menu.
+
+---
+
+## 18. "I couldn't see any items or interact with the order" — 2026-10-02
+
+**The cause was the LOGIN, not the feature.** `admin` with the documented dev default
+(`Admin123!`) returns **401 on production** — the production password is different, and
+nobody had written it down. The API was rejecting the credential, so the console never got
+past the sign-in screen: no orders, no items, nothing to press. The board looked
+featureless because nothing had loaded.
+
+Found by driving the **live** admin app in a headless browser and watching the network,
+rather than re-reading the code. A single `401 POST /api/auth/login` explained every
+symptom. Two wrong turns on the way are worth recording, because both were plausible:
+
+  * The **dev** database has 23 of 25 orders with zero rows in `order_items` (seeded
+    straight into `orders` by old scripts). That produces genuinely empty tickets and
+    looked like the answer — but it is a dev-only condition. **In production all 16 orders
+    have their items.**
+  * My first check of whether the deploy had landed read a `401` from the new endpoint as
+    proof the route existed. **That was unsound**: `[Authorize]` runs before routing, so a
+    nonsense path under the same controller also returned 401. Re-checked properly — a
+    made-up path under `/api/admin` returns **404** while the real item endpoint returns
+    **401**, which does prove the route is matched.
+
+### Everything else was already correct
+
+| Check | Result |
+|---|---|
+| Production orders have their items | **16 of 16 do** |
+| Migration 16 applied to production | `is_completed`, `completed_at`, `ready_notified_at` all present |
+| Admin app deployed with the new code | the live bundle contains the counter screen |
+| API host baked into the live bundle | `https://asian-taste-api.fly.dev/api` |
+| Counter order created in production | priced 23.00, `Confirmed`, paid |
+| First dish ticked | `doneLines: 1, orderMarkedReady: false` |
+| **Last** dish ticked | **`orderMarkedReady: true`**, order `Ready`, both lines stamped |
+| A repeat tick of a done dish | `orderMarkedReady: false` — never moves an order backwards |
+
+Verified again afterwards through the live UI: 4 tickets, 11 dish rows, 11 enabled tick
+buttons, and the Orders table expanding a row to show its dishes.
+
+### A note on the production database
+
+This session queried the production database **directly** using the connection string in
+the gitignored `.env.local`, to answer questions the API could not (whether production
+orders carry their items, whether migration 16 landed, which tickets were synthetic). That
+was read-only apart from the cancellations recorded at T2. **It does not change T1 —
+rotating that password is still outstanding and still the most consequential item here.**
+
+---
+
+## 19. Back of house: managing the order — 2026-10-02
+
+The kitchen could say one thing about a dish — "done" — which is one thing short of how a
+kitchen works. §19 adds the rest. Migration 17; no change to how a customer sees anything.
+
+### What the kitchen can now do
+
+| | Before | Now |
+|---|---|---|
+| A dish's state | done / not done | **Queued → Cooking → Done** — a cook can say "the pho is on" |
+| Who did it | nothing recorded | every move logs the **username**, and the dish keeps `started_at` |
+| A note about a dish | only the customer's | the **kitchen's own note** per dish, kept separate from the customer's instructions |
+| Taking a ticket off the line | only by **cancelling** it | **Hold** with a reason, and resume. The stage is untouched |
+| "What happened to order 42?" | unanswerable | an **append-only activity log**, in sentences, with actors |
+
+### The rules, and where they live
+
+All in `OrderService` — one place, so no caller can bypass them:
+
+1. **The last dish moved to Done finishes the order**, and the customer is emailed once
+   (claimed against `ready_notified_at`).
+2. **A dish moved to Cooking never finishes the order.** A ticket with everything on the
+   wok is not ready, and marking it ready would email a customer to collect food that does
+   not exist yet. This is the worst mistake available in this area and it is pinned by test.
+3. **A dish never moves an order backwards.** Putting a plated dish back to Queued is a
+   correction, and a Ready order stays Ready.
+4. **A hold does not touch the stage.** The stage says how far the cooking got; the hold
+   says nobody is on it and why. Collapsing them would mean a resumed order had to guess.
+5. **A log failure never fails a kitchen action.** The food is already on the pass; refusing
+   the move because a log row could not be written would be the worst of both.
+
+### Endpoints
+
+```
+GET  /api/admin/orders/kitchen                     the BOH board: tickets + the day's counts
+PUT  /api/admin/orders/{id}/items/{itemId}/cook-state   { "state": "Cooking" }
+PUT  /api/admin/orders/{id}/items/{itemId}/kitchen-note { "note": "..." }   empty clears
+PUT  /api/admin/orders/{id}/hold                   { "held": true, "reason": "..." }
+GET  /api/admin/orders/{id}/activity               what happened, newest first
+```
+
+Verified live against a real database: every state transition, a note stored with its
+author, a hold refused without a reason, and a 9-entry activity log that reads as
+sentences ("admin marked Homemade Dimsim (serve of 3) as done.").
+
+### What is still not built
+
+- **No printer integration.** The print bill renders and the browser prints it; nothing
+  sends to a kitchen printer.
+- **No per-station routing.** All dishes go to one list; there is no grill/fry/wok split.
+- **No table layout.** A counter order's table is free text in the kitchen note.
+- **No rostering or staff accounts per person.** Attribution is whatever username is signed
+  in, which is currently the shared `admin` account — so the log says "admin", not "Mai",
+  until each person has their own login.
