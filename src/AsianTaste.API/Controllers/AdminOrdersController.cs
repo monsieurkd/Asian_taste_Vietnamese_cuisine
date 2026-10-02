@@ -24,6 +24,21 @@ public class AdminOrdersController : ControllerBase
     private readonly IOrderNotifier _orderNotifier;
     private readonly ILogger<AdminOrdersController> _logger;
 
+    /// <summary>
+    /// Who is doing this, for the activity log.
+    /// </summary>
+    /// <remarks>
+    /// Taken from the JWT's name claim, which JwtService fills with the admin's USERNAME.
+    /// A username rather than an id because the log is read by a person ("Mai marked Pho Bo
+    /// as done"), and because the log has to stay readable after an account is retired —
+    /// see the note on `cooked_by` in migration 17.
+    ///
+    /// Null rather than "unknown" when there is no claim: the service renders a null actor
+    /// as "the system", which is the accurate description of a change made by a token that
+    /// did not carry an identity.
+    /// </remarks>
+    private string? Actor => User?.Identity?.Name;
+
     public AdminOrdersController(
         IOrderRepository orderRepository,
         OrderService orderService,
@@ -214,6 +229,18 @@ public class AdminOrdersController : ControllerBase
             _logger.LogInformation(
                 "Order {OrderId} items replaced by admin: new total {Total}", id, result.Total);
 
+            // An edit changes what the kitchen is cooking. Recording it on the ticket is the
+            // difference between "this ticket is wrong" and "this ticket was changed at 7:12
+            // because the customer rang" — the second is the one that stops an argument.
+            await _orderService.LogActivityAsync(
+                id,
+                "ItemsEdited",
+                $"Order edited by {Actor ?? "the system"} \u2014 {request.Items.Count} line(s), new total {result.Total:0.00}."
+                    + (result.AmountDueAtCounter ? " Money is owed at the counter." : string.Empty),
+                Actor,
+                null,
+                CancellationToken.None);
+
             return Ok(result);
         }
         catch (ShopClosedException ex)
@@ -266,6 +293,18 @@ public class AdminOrdersController : ControllerBase
 
             await _orderRepository.UpdateOrderStatusAsync(id, status);
 
+            // Record it. Until now nothing about an order's history was kept anywhere, so
+            // "who moved this to Ready at 7pm" had no answer at all.
+            await _orderService.LogActivityAsync(
+                id,
+                "StatusChanged",
+                status == OrderStatus.Cancelled
+                    ? $"Order cancelled by {Actor ?? "the system"}: \u201c{request.Reason}\u201d"
+                    : $"Order moved to {status} by {Actor ?? "the system"}.",
+                Actor,
+                status.ToString(),
+                CancellationToken.None);
+
             // Tell the other tablets. Until now nothing called this, so a status set on
             // one screen reached the others only when their 30-second poll came round —
             // which on a busy pass is long enough for two staff to act on the same
@@ -286,6 +325,194 @@ public class AdminOrdersController : ControllerBase
         {
             _logger.LogError(ex, "Error updating status for order {OrderId}", id);
             return StatusCode(500, new { error = "An error occurred while updating order status" });
+        }
+    }
+
+    /// <summary>
+    /// The kitchen's board — live tickets with their dishes, cook state and holds.
+    /// </summary>
+    /// <remarks>
+    /// The back-of-house view. Distinct from <c>GET /api/admin/orders</c>, which is the
+    /// order LIST (search, history, one row per order): this one is built for a screen
+    /// somebody stands in front of, so it carries the cook state of every dish, the hold,
+    /// the age, and the day's counts in the same response.
+    /// </remarks>
+    /// <param name="includeFinished">
+    /// Include collected and cancelled orders. Off for the live board — a handed-over ticket
+    /// leaves it — and on for history.
+    /// </param>
+    /// <response code="200">The board, with its tickets and counts.</response>
+    [HttpGet("kitchen")]
+    [ProducesResponseType(typeof(KitchenBoardDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<KitchenBoardDto>> GetKitchenBoard(
+        [FromQuery] bool includeFinished = false,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Ok(await _orderService.GetKitchenBoardAsync(includeFinished, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error building the kitchen board");
+            return StatusCode(500, new { error = "An error occurred while building the kitchen board" });
+        }
+    }
+
+    /// <summary>
+    /// Moves one dish to a cook state: Queued, Cooking or Done.
+    /// </summary>
+    /// <remarks>
+    /// Ticking the LAST dish to Done finishes the order and emails the customer, decided in
+    /// <c>OrderService.SetItemCookStateAsync</c> rather than here, so the rule cannot be
+    /// bypassed by a second caller.
+    ///
+    /// PUT with the state in the body, because the caller states where the dish should end
+    /// up rather than asking for a change: a doubled tap on a tablet settles on the state
+    /// the cook meant instead of flipping twice.
+    /// </remarks>
+    /// <param name="id">Order ID.</param>
+    /// <param name="itemId">The order item's own ID.</param>
+    /// <param name="request">The state to set.</param>
+    /// <response code="200">The dish's new state and what it did to the order.</response>
+    /// <response code="400">An unknown state, a line from another order, or a closed order.</response>
+    /// <response code="404">Order not found.</response>
+    [HttpPut("{id}/items/{itemId}/cook-state")]
+    [ProducesResponseType(typeof(CookStateResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CookStateResponseDto>> SetItemCookState(
+        int id,
+        int itemId,
+        [FromBody] SetCookStateDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _orderService.SetItemCookStateAsync(id, itemId, request.State, Actor, cancellationToken);
+            if (result is null) return NotFound(new { error = $"Order with ID {id} not found" });
+
+            // Tell the other screens. Swallowed on failure: the write already happened, and
+            // refusing a cook's move because a socket was closed is the worse error.
+            await BroadcastStatusAsync(result.OrderId, result.OrderStatus,
+                result.OrderMarkedReady ? "All dishes done" : null, "cook-state");
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting cook state on item {ItemId} of order {OrderId}", itemId, id);
+            return StatusCode(500, new { error = "An error occurred while updating the dish" });
+        }
+    }
+
+    /// <summary>
+    /// Writes or clears the kitchen's own note on a dish.
+    /// </summary>
+    /// <remarks>
+    /// Separate from the customer's instructions, which arrive at checkout and cannot be
+    /// edited here. This is what the cook needs the front to know — a substitution, an
+    /// apology, "made extra hot as asked".
+    /// </remarks>
+    /// <response code="200">The note as stored.</response>
+    /// <response code="400">The line is not on this order.</response>
+    /// <response code="404">Order not found.</response>
+    [HttpPut("{id}/items/{itemId}/kitchen-note")]
+    [ProducesResponseType(typeof(KitchenNoteResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<KitchenNoteResponseDto>> SetItemKitchenNote(
+        int id,
+        int itemId,
+        [FromBody] KitchenNoteDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _orderService.SetItemKitchenNoteAsync(id, itemId, request.Note, Actor, cancellationToken);
+            if (result is null) return NotFound(new { error = $"Order with ID {id} not found" });
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting the kitchen note on item {ItemId} of order {OrderId}", itemId, id);
+            return StatusCode(500, new { error = "An error occurred while saving the note" });
+        }
+    }
+
+    /// <summary>
+    /// Holds a ticket off the line, or puts it back.
+    /// </summary>
+    /// <remarks>
+    /// The alternative to cancelling, which is what it was before this existed. A held order
+    /// keeps its stage and its dishes and simply stops being the next thing the kitchen looks
+    /// at. The reason is required to hold, so the next person does not have to ask around.
+    /// </remarks>
+    /// <response code="200">The hold state as stored.</response>
+    /// <response code="400">No reason given, or the order is already closed.</response>
+    /// <response code="404">Order not found.</response>
+    [HttpPut("{id}/hold")]
+    [ProducesResponseType(typeof(HoldResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<HoldResponseDto>> SetOrderHeld(
+        int id,
+        [FromBody] HoldOrderDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _orderService.SetOrderHeldAsync(id, request.Held, request.Reason, Actor, cancellationToken);
+            if (result is null) return NotFound(new { error = $"Order with ID {id} not found" });
+
+            // A hold takes a ticket off every board, so the other screens need to hear about
+            // it immediately — a held order still showing as next-in-line is the exact
+            // confusion the hold exists to prevent.
+            await _orderNotifier.BroadcastDashboardUpdateAsync(new { orderId = id, held = result.IsHeld });
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting the hold on order {OrderId}", id);
+            return StatusCode(500, new { error = "An error occurred while holding the order" });
+        }
+    }
+
+    /// <summary>
+    /// Everything that has happened to an order, newest first.
+    /// </summary>
+    /// <remarks>
+    /// The answer to "what happened to order 42?" — asked an hour later, when something has
+    /// gone wrong. Every other table holds current state, which is enough to run a service
+    /// and useless for that question.
+    /// </remarks>
+    /// <response code="200">The activity log.</response>
+    [HttpGet("{id}/activity")]
+    [ProducesResponseType(typeof(List<OrderActivityDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<OrderActivityDto>>> GetOrderActivity(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _orderService.GetOrderActivityAsync(id, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading the activity for order {OrderId}", id);
+            return StatusCode(500, new { error = "An error occurred while reading the order's history" });
         }
     }
 

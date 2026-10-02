@@ -194,7 +194,14 @@ public class DatabaseInitializationService : IDatabaseInitializationService
         var itemCompletionSql = await GetMigrationScriptAsync("16_add_item_completion.sql");
         await ExecuteScriptAsync(itemCompletionSql, cancellationToken);
 
-        // 11. Seed the admin user, once every script that touches admin_users has
+        // 11. The kitchen's own workflow: who cooked a dish, the state between "not
+        //     started" and "plated", a per-dish note, and a way to hold a ticket
+        //     without cancelling it — plus the append-only log that ties them together.
+        //     Adds only; runs after 16 because it extends the columns 16 introduces.
+        var backOfHouseSql = await GetMigrationScriptAsync("17_add_back_of_house_workflow.sql");
+        await ExecuteScriptAsync(backOfHouseSql, cancellationToken);
+
+        // 12. Seed the admin user, once every script that touches admin_users has
         //    run. Only when no admin row exists: this creates the documented default
         //    account, and recreating it unconditionally would undo an operator
         //    deleting it. (A database with NO admin at all is unusable, so that case

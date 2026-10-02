@@ -542,6 +542,299 @@ public class OrderService
         };
     }
 
+    // ══ Back-of-house (§18) ══════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The kitchen's board, with the day's counts.
+    /// </summary>
+    /// <remarks>
+    /// One response rather than two, because the board and its numbers are read together
+    /// and two requests means two chances to disagree about how many orders are live.
+    ///
+    /// Overdue is judged against the restaurant's own `pickup_minutes` setting rather than
+    /// a number in this method: the shop already decides how long it promises, and a second
+    /// hard-coded threshold would be a promise the kitchen does not keep.
+    /// </remarks>
+    public async Task<KitchenBoardDto> GetKitchenBoardAsync(bool includeFinished, CancellationToken cancellationToken = default)
+    {
+        var tickets = await _orderRepository.GetKitchenBoardAsync(includeFinished, cancellationToken);
+        var settings = await LoadRestaurantSettingsAsync(cancellationToken);
+
+        // An order is late when it was wanted `pickupMinutes` ago. A scheduled order is
+        // judged against its OWN time, which is what requested_time holds for both kinds.
+        var now = DateTime.UtcNow;
+        var overdueAfter = TimeSpan.FromMinutes(settings.PickupMinutes);
+
+        var live = tickets.Where(t => !string.Equals(t.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        return new KitchenBoardDto
+        {
+            Tickets = tickets,
+            Summary = new KitchenBoardSummaryDto
+            {
+                LiveOrders = live.Count(t => !t.IsHeld),
+                AwaitingAcceptance = live.Count(t => string.Equals(t.Status, "Pending", StringComparison.OrdinalIgnoreCase)),
+                DishesToCook = live.Where(t => !t.IsHeld).Sum(t => t.RemainingLines),
+                DishesCooking = live.Where(t => !t.IsHeld).Sum(t => t.CookingLines),
+                OverdueOrders = live.Count(t => !t.IsHeld && !t.IsScheduled && (now - DateTime.SpecifyKind(t.RequestedTime, DateTimeKind.Utc)) > overdueAfter),
+                HeldOrders = live.Count(t => t.IsHeld),
+                CollectedToday = live.Count(t => string.Equals(t.Status, "Completed", StringComparison.OrdinalIgnoreCase)),
+            },
+        };
+    }
+
+    /// <summary>
+    /// Moves one dish to a cook state, and finishes the order when the last one is plated.
+    /// </summary>
+    /// <remarks>
+    /// The same three rules as <see cref="SetItemCompletedAsync"/>, restated for three
+    /// states rather than two, and in the same one place so no caller can bypass them:
+    ///
+    ///  1. **The last dish at Done finishes the order.** A dish moving to Done is the only
+    ///     transition that can complete a ticket; moving to Cooking never does, because a
+    ///     ticket with everything on the wok is not ready.
+    ///  2. **The customer is told at most once**, claimed against `ready_notified_at`.
+    ///  3. **A dish never moves an order backwards.** Putting a plated dish back to Queued
+    ///     is a correction, and the order stays Ready — the food is on the counter and the
+    ///     customer has been emailed.
+    ///
+    /// Every move is written to the activity log with its author, from here rather than
+    /// from the repository, so the sentence a person reads ("Mai marked Pho Bo as cooking")
+    /// is composed where the dish's name is known.
+    /// </remarks>
+    public async Task<CookStateResponseDto?> SetItemCookStateAsync(
+        int orderId,
+        int orderItemId,
+        string state,
+        string? actor,
+        CancellationToken cancellationToken = default)
+    {
+        var parsed = ParseCookState(state);
+        if (parsed is null)
+        {
+            throw new InvalidOperationException($"Unknown cook state '{state}'. Use Queued, Cooking or Done.");
+        }
+
+        var order = await _orderRepository.GetOrderByIdAsync(orderId, cancellationToken);
+        if (order is null) return null;
+
+        if (order.Status is OrderStatus.Cancelled or OrderStatus.Completed)
+        {
+            throw new InvalidOperationException(
+                $"Order {order.OrderNumber} is {order.Status} — its dishes are no longer being cooked.");
+        }
+
+        var result = await _orderRepository.SetItemCookStateAsync(orderId, orderItemId, parsed.Value.ToString(), actor, cancellationToken);
+        if (result is null)
+        {
+            throw new InvalidOperationException($"Item {orderItemId} is not on order {order.OrderNumber}.");
+        }
+
+        var dishName = await GetDishNameAsync(orderId, orderItemId, cancellationToken);
+
+        // Write to the log BEFORE deciding anything else, so a move that turns out to change
+        // nothing is still recorded — "who put this back on the queue" is a question that
+        // only ever gets asked about a change somebody regrets.
+        await SafeLogAsync(
+            orderId, orderItemId, "ItemCookState",
+            $"{Describe(actor)} marked {dishName} as {parsed.Value.ToString().ToLowerInvariant()}.",
+            actor, order.Status.ToString(), cancellationToken);
+
+        var orderMarkedReady = false;
+        var customerNotified = false;
+
+        if (result.AllDone && order.Status is OrderStatus.Pending or OrderStatus.Confirmed or OrderStatus.Preparing)
+        {
+            await _orderRepository.UpdateOrderStatusAsync(orderId, OrderStatus.Ready, cancellationToken);
+            orderMarkedReady = true;
+
+            await SafeLogAsync(
+                orderId, null, "StatusChanged",
+                $"Every dish is done — order moved to ready by {Describe(actor)}.",
+                actor, nameof(OrderStatus.Ready), cancellationToken);
+
+            customerNotified = await NotifyCustomerOrderReadyAsync(order, cancellationToken);
+
+            if (customerNotified)
+            {
+                await SafeLogAsync(
+                    orderId, null, "ReadyNotified",
+                    $"Customer told {order.OrderNumber} is ready to collect.",
+                    null, nameof(OrderStatus.Ready), cancellationToken);
+            }
+        }
+
+        _logger.LogInformation(
+            "Order {OrderNumber} item {ItemId} -> {State} by {Actor}: {Done}/{Total} done, {Cooking} cooking",
+            order.OrderNumber, orderItemId, parsed.Value, actor ?? "system",
+            result.DoneLines, result.TotalLines, result.CookingLines);
+
+        return new CookStateResponseDto
+        {
+            OrderId = orderId,
+            OrderItemId = orderItemId,
+            CookState = parsed.Value.ToString(),
+            DoneLines = result.DoneLines,
+            TotalLines = result.TotalLines,
+            CookingLines = result.CookingLines,
+            OrderStatus = orderMarkedReady ? nameof(OrderStatus.Ready) : order.Status.ToString(),
+            OrderMarkedReady = orderMarkedReady,
+            CustomerNotified = customerNotified,
+        };
+    }
+
+    /// <summary>
+    /// Writes or clears the kitchen's note on a dish.
+    /// </summary>
+    /// <remarks>
+    /// A separate act from ticking the dish, because it is a different kind of fact: the
+    /// tick says "done", the note says "and here is something the front needs to know".
+    /// Logged with the note's own text, so the log is readable without the row it describes.
+    /// </remarks>
+    public async Task<KitchenNoteResponseDto?> SetItemKitchenNoteAsync(int orderId, int orderItemId, string? note, string? actor, CancellationToken cancellationToken = default)
+    {
+        var order = await _orderRepository.GetOrderByIdAsync(orderId, cancellationToken);
+        if (order is null) return null;
+
+        var cleared = string.IsNullOrWhiteSpace(note);
+        var ok = await _orderRepository.SetItemKitchenNoteAsync(orderId, orderItemId, note, actor, cancellationToken);
+        if (!ok)
+        {
+            throw new InvalidOperationException($"Item {orderItemId} is not on order {order.OrderNumber}.");
+        }
+
+        var dishName = await GetDishNameAsync(orderId, orderItemId, cancellationToken);
+
+        await SafeLogAsync(
+            orderId, orderItemId, "NoteAdded",
+            cleared
+                ? $"{Describe(actor)} cleared the kitchen note on {dishName}."
+                : $"{Describe(actor)} noted on {dishName}: \u201c{note!.Trim()}\u201d",
+            actor, order.Status.ToString(), cancellationToken);
+
+        return new KitchenNoteResponseDto
+        {
+            OrderId = orderId,
+            OrderItemId = orderItemId,
+            KitchenNote = cleared ? null : note!.Trim(),
+            NoteBy = cleared ? null : actor,
+        };
+    }
+
+    /// <summary>
+    /// Holds a ticket off the line, or puts it back.
+    /// </summary>
+    /// <remarks>
+    /// The reason is required to hold and required to be thrown away to resume. A held
+    /// ticket with no reason is one the next person has to ask about, which defeats the
+    /// point of taking it off the line quietly instead of cancelling it.
+    ///
+    /// Holding deliberately does NOT change the order's status. The stage still describes
+    /// how far the cooking got; the hold is a separate axis, and collapsing them would mean
+    /// a resumed order had to guess which stage to go back to.
+    /// </remarks>
+    public async Task<HoldResponseDto?> SetOrderHeldAsync(int orderId, bool held, string? reason, string? actor, CancellationToken cancellationToken = default)
+    {
+        var order = await _orderRepository.GetOrderByIdAsync(orderId, cancellationToken);
+        if (order is null) return null;
+
+        if (held && string.IsNullOrWhiteSpace(reason))
+        {
+            throw new InvalidOperationException("Give a reason for holding the order — the next person has to act on it.");
+        }
+
+        if (order.Status is OrderStatus.Cancelled or OrderStatus.Completed)
+        {
+            throw new InvalidOperationException($"Order {order.OrderNumber} is {order.Status} — there is nothing to hold.");
+        }
+
+        await _orderRepository.SetOrderHeldAsync(orderId, held, reason, actor, cancellationToken);
+
+        await SafeLogAsync(
+            orderId, null, held ? "Held" : "Resumed",
+            held
+                ? $"{Describe(actor)} took this order off the line: \u201c{reason!.Trim()}\u201d"
+                : $"{Describe(actor)} put this order back on the line.",
+            actor, order.Status.ToString(), cancellationToken);
+
+        _logger.LogInformation(
+            "Order {OrderNumber} {Action} by {Actor}{Reason}",
+            order.OrderNumber, held ? "held" : "resumed", actor ?? "system",
+            held ? $": {reason}" : string.Empty);
+
+        return new HoldResponseDto
+        {
+            OrderId = orderId,
+            IsHeld = held,
+            HeldReason = held ? reason!.Trim() : null,
+            HeldBy = held ? actor : null,
+        };
+    }
+
+    /// <summary>Everything that has happened to an order, newest first.</summary>
+    public Task<List<OrderActivityDto>> GetOrderActivityAsync(int orderId, CancellationToken cancellationToken = default) =>
+        _orderRepository.GetActivityAsync(orderId, cancellationToken);
+
+    /// <summary>
+    /// Records an order-level event from another path (an edit, a refund).
+    /// </summary>
+    /// <remarks>
+    /// Public so the controller can log an act that <see cref="OrderService"/> does not own,
+    /// with the actor the request carries.
+    /// </remarks>
+    public Task LogActivityAsync(int orderId, string kind, string detail, string? actor, string? statusAtEvent, CancellationToken cancellationToken = default) =>
+        SafeLogAsync(orderId, null, kind, detail, actor, statusAtEvent, cancellationToken);
+
+    /// <summary>
+    /// Writes to the activity log, and never lets a logging failure fail the action.
+    /// </summary>
+    /// <remarks>
+    /// The kitchen's change has already happened by the time this runs, and refusing the
+    /// tick because a log row could not be written would be the worst of both — the food is
+    /// on the pass and the screen says it is not. A failure is logged loudly instead.
+    /// </remarks>
+    private async Task SafeLogAsync(int orderId, int? orderItemId, string kind, string detail, string? actor, string? statusAtEvent, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _orderRepository.AddActivityAsync(orderId, orderItemId, kind, detail, actor, statusAtEvent, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not write the activity log for order {OrderId} ({Kind})", orderId, kind);
+        }
+    }
+
+    /// <summary>The dish's name, for a log line a person reads.</summary>
+    private async Task<string> GetDishNameAsync(int orderId, int orderItemId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var items = await _orderRepository.GetOrderItemsAsync(orderId, cancellationToken);
+            return items.FirstOrDefault(i => i.Id == orderItemId)?.MenuItemName ?? $"item {orderItemId}";
+        }
+        catch
+        {
+            // A log line is not worth failing a kitchen action over; the id still identifies
+            // the dish well enough to follow up.
+            return $"item {orderItemId}";
+        }
+    }
+
+    /// <summary>Reads a cook state from the wire, case-insensitively.</summary>
+    private static CookState? ParseCookState(string? state) =>
+        Enum.TryParse<CookState>(state?.Trim(), ignoreCase: true, out var parsed) ? parsed : null;
+
+    /// <summary>
+    /// How to name the person who did something, in a sentence.
+    /// </summary>
+    /// <remarks>
+    /// "System" rather than "someone" when there is no actor: the events with no actor are
+    /// the ones the API did itself (a webhook, a timer), and saying so is more useful than
+    /// a vague pronoun when the question being asked is "who moved my order".
+    /// </remarks>
+    private static string Describe(string? actor) => string.IsNullOrWhiteSpace(actor) ? "The system" : actor;
+
     /// <summary>
     /// Tells the customer their food is ready, at most once.
     /// </summary>

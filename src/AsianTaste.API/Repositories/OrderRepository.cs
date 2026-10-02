@@ -759,6 +759,350 @@ public class OrderRepository : IOrderRepository
         PropertyNameCaseInsensitive = true,
     };
 
+    // ══ Back-of-house (§18) ══════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The kitchen's board: live orders with their dishes, cook state and holds.
+    /// </summary>
+    /// <remarks>
+    /// Built on the same outer-select discipline as <see cref="GetAllOrdersAsync"/>, and for
+    /// the same reason: inside these correlated subqueries an unqualified `id` resolves to
+    /// the INNER table's column, which silently produced "0 of 0" on every ticket once
+    /// already. The orders table is aliased `o` and every reference is qualified.
+    ///
+    /// The dishes are aggregated to JSON in the database and deserialised here, because
+    /// Dapper will not map `json_agg` onto a List<T> — it throws InvalidCastException. That
+    /// is the second half of the same lesson.
+    /// </remarks>
+    public async Task<List<KitchenTicketDto>> GetKitchenBoardAsync(bool includeFinished, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        // "Not finished" is expressed as "not collected and not cancelled" rather than as a
+        // list of live stages, so a stage added later cannot silently fall out of the board.
+        var finishedClause = includeFinished
+            ? string.Empty
+            : "WHERE o.status NOT IN ('Completed'::order_status, 'Cancelled'::order_status)";
+
+        var sql = $@"
+            SELECT o.id,
+                   o.order_number as OrderNumber,
+                   o.customer_name as CustomerName,
+                   o.customer_phone as CustomerPhone,
+                   o.customer_email as CustomerEmail,
+                   o.order_type::text as OrderType,
+                   o.requested_time as RequestedTime,
+                   o.status::text as Status,
+                   o.payment_method::text as PaymentMethod,
+                   o.payment_status::text as PaymentStatus,
+                   o.subtotal as Subtotal,
+                   o.total as Total,
+                   o.notes as Notes,
+                   o.allergy_declaration as AllergyDeclaration,
+                   o.created_at as CreatedAt,
+                   o.held_at as HeldAt,
+                   o.held_reason as HeldReason,
+                   o.held_by as HeldBy,
+                   (o.held_at IS NOT NULL) as IsHeld,
+                   (SELECT COUNT(*) FILTER (WHERE li.cook_state <> 'Done')::int
+                      FROM order_items li WHERE li.order_id = o.id) as RemainingLines,
+                   (SELECT COUNT(*) FILTER (WHERE li.cook_state = 'Cooking')::int
+                      FROM order_items li WHERE li.order_id = o.id) as CookingLines,
+                   (SELECT COUNT(*)::int FROM order_items li WHERE li.order_id = o.id) as ItemsDoneTotal,
+                   (SELECT COUNT(*) FILTER (WHERE li.cook_state = 'Done')::int
+                      FROM order_items li WHERE li.order_id = o.id) as ItemsDoneDone,
+                   CASE WHEN @IncludeItems THEN (
+                       SELECT json_agg(built ORDER BY built.""Id"")
+                       FROM (
+                           SELECT li.id as ""Id"",
+                                  li.menu_item_name as ""MenuItemName"",
+                                  li.quantity as ""Quantity"",
+                                  li.special_instructions as ""SpecialInstructions"",
+                                  li.kitchen_note as ""KitchenNote"",
+                                  li.note_by as ""NoteBy"",
+                                  li.cook_state as ""CookState"",
+                                  li.is_completed as ""IsCompleted"",
+                                  li.started_at as ""StartedAt"",
+                                  li.completed_at as ""CompletedAt"",
+                                  li.cooked_by as ""CookedBy"",
+                                  (SELECT string_agg(md.modifier_name, ', ' ORDER BY md.id)
+                                     FROM order_item_modifiers md
+                                    WHERE md.order_item_id = li.id) as ""Modifiers""
+                           FROM order_items li
+                           WHERE li.order_id = o.id
+                       ) built
+                   ) END as ItemsJson
+            FROM orders o
+            {finishedClause}
+            ORDER BY o.requested_time ASC, o.created_at ASC";
+
+        var parameters = new DynamicParameters();
+        parameters.Add("IncludeItems", true, DbType.Boolean);
+
+        var rows = (await connection.QueryAsync<KitchenTicketRow>(
+            new CommandDefinition(sql, parameters, cancellationToken: cancellationToken))).AsList();
+
+        if (rows.Count == 0) return new List<KitchenTicketDto>();
+
+        // Overdue is judged against the WANTED time, not the placed time: an order for 7pm
+        // placed at 4pm is not late at 4:05pm, it is early. Only requested_time can tell
+        // those apart, which is why the ordering above is by it.
+        var now = DateTime.UtcNow;
+
+        return rows.Select(row => new KitchenTicketDto
+        {
+            Id = row.Id,
+            OrderNumber = row.OrderNumber,
+            CustomerName = row.CustomerName,
+            CustomerPhone = row.CustomerPhone,
+            CustomerEmail = row.CustomerEmail,
+            OrderType = row.OrderType,
+            RequestedTime = row.RequestedTime,
+            Status = row.Status,
+            PaymentMethod = row.PaymentMethod,
+            PaymentStatus = row.PaymentStatus,
+            Subtotal = row.Subtotal,
+            Total = row.Total,
+            Notes = row.Notes,
+            AllergyDeclaration = row.AllergyDeclaration,
+            CreatedAt = row.CreatedAt,
+            HeldAt = row.HeldAt,
+            HeldReason = row.HeldReason,
+            HeldBy = row.HeldBy,
+            IsHeld = row.IsHeld,
+            RemainingLines = row.RemainingLines,
+            CookingLines = row.CookingLines,
+            ItemsDone = new OrderItemProgressDto { Done = row.ItemsDoneDone, Total = row.ItemsDoneTotal },
+            Items = string.IsNullOrEmpty(row.ItemsJson)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<List<KitchenItemDto>>(row.ItemsJson, JsonOptions),
+            AgeMinutes = (int)Math.Max(0, (now - DateTime.SpecifyKind(row.CreatedAt, DateTimeKind.Utc)).TotalMinutes),
+            // The same five-minute rule the board uses to tell a scheduled order from an
+            // immediate one, so the two screens agree about what "ASAP" means.
+            IsScheduled = row.RequestedTime - row.CreatedAt > TimeSpan.FromMinutes(5),
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Moves a dish to a cook state, in one transaction with the order locked.
+    /// </summary>
+    /// <remarks>
+    /// The lock and the counts exist for the same reason they do in
+    /// <see cref="SetOrderItemCompletedAsync"/>: "is this the last dish?" decides whether
+    /// the order moves, and two cooks finishing the last two dishes at once must not both
+    /// conclude they are not last.
+    ///
+    /// `is_completed` is kept in step with `cook_state` rather than replaced, so the write
+    /// path that shipped in migration 16 keeps working and nothing that reads the boolean
+    /// has to learn a second concept. The two are updated together, in one statement, so
+    /// they cannot disagree.
+    /// </remarks>
+    public async Task<CookStateResult?> SetItemCookStateAsync(
+        int orderId,
+        int orderItemId,
+        string state,
+        string? actor,
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            var now = DateTime.UtcNow;
+            var done = state == "Done";
+
+            // The `AND order_id = @OrderId` scoping is not decoration: it is what stops a
+            // move for one order landing on a line of another, and the two ids arrive from
+            // different places on the client.
+            //
+            // `started_at` is set the first time a dish enters Cooking and NOT cleared when
+            // it moves on to Done — "when did this go on the wok" is the question a
+            // post-mortem asks, and a column that forgets it cannot answer.
+            var updated = await connection.ExecuteAsync(
+                new CommandDefinition(
+                    @"UPDATE order_items
+                         SET cook_state = @State,
+                             is_completed = @Done,
+                             started_at = CASE
+                                 WHEN @State = 'Cooking' THEN COALESCE(started_at, @Now)
+                                 WHEN @State = 'Queued' THEN NULL
+                                 ELSE started_at END,
+                             cooked_by = CASE
+                                 WHEN @State = 'Queued' THEN NULL
+                                 ELSE @Actor END,
+                             completed_at = CASE WHEN @Done THEN @Now ELSE NULL END
+                       WHERE id = @OrderItemId AND order_id = @OrderId",
+                    new { OrderId = orderId, OrderItemId = orderItemId, State = state, Done = done, Actor = actor, Now = now },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            if (updated == 0)
+            {
+                transaction.Rollback();
+                return null;
+            }
+
+            var statusText = await connection.ExecuteScalarAsync<string?>(
+                new CommandDefinition(
+                    "SELECT status::text FROM orders WHERE id = @OrderId FOR UPDATE",
+                    new { OrderId = orderId },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            if (statusText is null)
+            {
+                transaction.Rollback();
+                return null;
+            }
+
+            var counts = await connection.QuerySingleAsync<(int Total, int Done, int Cooking)>(
+                new CommandDefinition(
+                    @"SELECT COUNT(*)::int as Total,
+                             COUNT(*) FILTER (WHERE cook_state = 'Done')::int as Done,
+                             COUNT(*) FILTER (WHERE cook_state = 'Cooking')::int as Cooking
+                        FROM order_items
+                       WHERE order_id = @OrderId",
+                    new { OrderId = orderId },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+            transaction.Commit();
+
+            return new CookStateResult
+            {
+                OrderId = orderId,
+                OrderItemId = orderItemId,
+                State = state,
+                TotalLines = counts.Total,
+                DoneLines = counts.Done,
+                CookingLines = counts.Cooking,
+                OrderStatus = statusText,
+            };
+        }
+        catch
+        {
+            if (transaction.Connection != null) transaction.Rollback();
+            throw;
+        }
+    }
+
+    public async Task<bool> SetItemKitchenNoteAsync(int orderId, int orderItemId, string? note, string? actor, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        // An empty note clears both the text and its author: leaving the author behind on
+        // a blank note would read as somebody having said something.
+        var rows = await connection.ExecuteAsync(
+            new CommandDefinition(
+                @"UPDATE order_items
+                     SET kitchen_note = @Note,
+                         note_by = CASE WHEN @Note IS NULL THEN NULL ELSE @Actor END
+                   WHERE id = @OrderItemId AND order_id = @OrderId",
+                new { OrderId = orderId, OrderItemId = orderItemId, Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(), Actor = actor },
+                cancellationToken: cancellationToken));
+
+        return rows > 0;
+    }
+
+    public async Task<bool> SetOrderHeldAsync(int orderId, bool held, string? reason, string? actor, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        // Holding stamps who and why; resuming clears all three, because a stale reason on
+        // a live order is a lie the next person acts on.
+        var rows = await connection.ExecuteAsync(
+            new CommandDefinition(
+                @"UPDATE orders
+                     SET held_at = CASE WHEN @Held THEN @Now ELSE NULL END,
+                         held_reason = CASE WHEN @Held THEN @Reason ELSE NULL END,
+                         held_by = CASE WHEN @Held THEN @Actor ELSE NULL END,
+                         updated_at = @Now
+                   WHERE id = @OrderId",
+                new { OrderId = orderId, Held = held, Reason = reason, Actor = actor, Now = DateTime.UtcNow },
+                cancellationToken: cancellationToken));
+
+        return rows > 0;
+    }
+
+    public async Task AddActivityAsync(int orderId, int? orderItemId, string kind, string detail, string? actor, string? statusAtEvent, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                @"INSERT INTO order_activity (order_id, order_item_id, kind, detail, actor, status_at_event)
+                  VALUES (@OrderId, @OrderItemId, @Kind, @Detail, @Actor, @StatusAtEvent)",
+                new { OrderId = orderId, OrderItemId = orderItemId, Kind = kind, Detail = detail, Actor = actor, StatusAtEvent = statusAtEvent },
+                cancellationToken: cancellationToken));
+    }
+
+    public async Task<List<OrderActivityDto>> GetActivityAsync(int orderId, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        // Aliased exactly, for the reason every other query in this file is: Dapper maps by
+        // property name with underscore matching off, so `status_at_event` maps to nothing
+        // and arrives null on every row.
+        const string sql = @"
+            SELECT id as Id,
+                   kind as Kind,
+                   detail as Detail,
+                   actor as Actor,
+                   status_at_event as StatusAtEvent,
+                   created_at as CreatedAt
+            FROM order_activity
+            WHERE order_id = @OrderId
+            ORDER BY created_at DESC, id DESC";
+
+        var rows = await connection.QueryAsync<OrderActivityDto>(
+            new CommandDefinition(sql, new { OrderId = orderId }, cancellationToken: cancellationToken));
+
+        return rows.AsList();
+    }
+
+    /// <summary>
+    /// One kitchen-board row, with the JSON and counters flattened.
+    /// </summary>
+    /// <remarks>
+    /// A reading shape only. `GetKitchenBoardAsync` projects this and then builds the DTO,
+    /// so `ItemsDone` can be assembled from two columns and the JSON deserialised — see the
+    /// comment at the query for why both of those steps are necessary.
+    /// </remarks>
+    private sealed class KitchenTicketRow
+    {
+        public int Id { get; set; }
+        public string OrderNumber { get; set; } = string.Empty;
+        public string CustomerName { get; set; } = string.Empty;
+        public string CustomerPhone { get; set; } = string.Empty;
+        public string CustomerEmail { get; set; } = string.Empty;
+        public string OrderType { get; set; } = string.Empty;
+        public DateTime RequestedTime { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? PaymentMethod { get; set; }
+        public string? PaymentStatus { get; set; }
+        public decimal Subtotal { get; set; }
+        public decimal Total { get; set; }
+        public string? Notes { get; set; }
+        public string? AllergyDeclaration { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? HeldAt { get; set; }
+        public string? HeldReason { get; set; }
+        public string? HeldBy { get; set; }
+        public bool IsHeld { get; set; }
+        public int RemainingLines { get; set; }
+        public int CookingLines { get; set; }
+        public int ItemsDoneTotal { get; set; }
+        public int ItemsDoneDone { get; set; }
+        public string? ItemsJson { get; set; }
+    }
+
     /// <summary>
     /// One row of the admin order list, with the progress counters flattened.
     /// </summary>

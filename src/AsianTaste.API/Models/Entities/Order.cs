@@ -113,6 +113,22 @@ public class Order
     public string? AllergyDeclaration { get; set; }
 
     /// <summary>When the order was created.</summary>
+    /// <summary>
+    /// When this order was taken off the kitchen's line, or null when it is live.
+    /// </summary>
+    /// <remarks>
+    /// A hold is a separate axis from the status: the stage still says how far the cooking
+    /// got, and the hold says nobody is working on it and why. Collapsing the two would
+    /// mean a resumed order had to guess which stage to go back to.
+    /// </remarks>
+    public DateTime? HeldAt { get; set; }
+
+    /// <summary>Why it was held. Required to hold, cleared on resume.</summary>
+    public string? HeldReason { get; set; }
+
+    /// <summary>Who held it.</summary>
+    public string? HeldBy { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>When the order was last updated.</summary>

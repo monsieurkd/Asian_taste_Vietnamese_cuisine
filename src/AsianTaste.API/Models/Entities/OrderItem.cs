@@ -44,6 +44,29 @@ public class OrderItem
     /// <summary>When the line was ticked, or null while it is still to be cooked.</summary>
     public DateTime? CompletedAt { get; set; }
 
+    /// <summary>
+    /// The kitchen's working state for this dish: Queued, Cooking or Done.
+    /// </summary>
+    /// <remarks>
+    /// Stored as text to mirror the `cook_state` column, which is a VARCHAR with a CHECK
+    /// rather than a Postgres enum — an enum needs ALTER TYPE, which cannot run inside the
+    /// migration service's transaction. Kept in step with <see cref="IsCompleted"/> at the
+    /// write, so the older boolean path keeps working and the two cannot disagree.
+    /// </remarks>
+    public string CookState { get; set; } = "Queued";
+
+    /// <summary>When a cook started this dish. Set once, and not cleared when it finishes.</summary>
+    public DateTime? StartedAt { get; set; }
+
+    /// <summary>Who started, then finished, this dish. A username, denormalised on purpose.</summary>
+    public string? CookedBy { get; set; }
+
+    /// <summary>A note written BY the kitchen about this dish — not the customer's instructions.</summary>
+    public string? KitchenNote { get; set; }
+
+    /// <summary>Who wrote the kitchen note.</summary>
+    public string? NoteBy { get; set; }
+
     // ==================== LIGHTSPEED SYNC FIELDS (Phase 3) ====================
 
     /// <summary>Lightspeed product ID for this order line item.</summary>

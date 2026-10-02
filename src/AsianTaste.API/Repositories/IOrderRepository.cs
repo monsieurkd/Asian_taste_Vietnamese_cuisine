@@ -54,6 +54,31 @@ public record OrderItemCompletionResult
 }
 
 /// <summary>
+/// What a dish's move to a new cook state left the order looking like.
+/// </summary>
+public record CookStateResult
+{
+    public int OrderId { get; init; }
+    public int OrderItemId { get; init; }
+    public string State { get; init; } = string.Empty;
+
+    /// <summary>Every dish on the order.</summary>
+    public int TotalLines { get; init; }
+
+    /// <summary>Dishes at Done.</summary>
+    public int DoneLines { get; init; }
+
+    /// <summary>Dishes at Cooking.</summary>
+    public int CookingLines { get; init; }
+
+    /// <summary>True when every dish is Done.</summary>
+    public bool AllDone => TotalLines > 0 && DoneLines == TotalLines;
+
+    /// <summary>The order's status as of this change, before any move the caller makes.</summary>
+    public string OrderStatus { get; init; } = string.Empty;
+}
+
+/// <summary>
 /// Repository interface for order data access.
 /// </summary>
 public interface IOrderRepository
@@ -110,6 +135,53 @@ public interface IOrderRepository
     /// </summary>
     /// <returns>Null when the line does not exist on that order.</returns>
     Task<OrderItemCompletionResult?> SetOrderItemCompletedAsync(int orderId, int orderItemId, bool isCompleted, CancellationToken cancellationToken = default);
+
+    // ── Back-of-house (§18) ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The kitchen's board: live tickets with their dishes, cook state and holds.
+    /// </summary>
+    /// <param name="includeFinished">
+    /// Include orders that are collected or cancelled. Off for the board (they leave the
+    /// line the moment they are handed over), on for the history view.
+    /// </param>
+    Task<List<KitchenTicketDto>> GetKitchenBoardAsync(bool includeFinished, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Moves one dish to a cook state, recording who did it and when.
+    /// </summary>
+    /// <returns>The resulting counts, or null when the line is not on that order.</returns>
+    Task<CookStateResult?> SetItemCookStateAsync(
+        int orderId,
+        int orderItemId,
+        string state,
+        string? actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets or clears the kitchen's own note on a dish.
+    /// </summary>
+    /// <returns>False when the line is not on that order.</returns>
+    Task<bool> SetItemKitchenNoteAsync(int orderId, int orderItemId, string? note, string? actor, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Holds a ticket off the line, or puts it back.
+    /// </summary>
+    /// <returns>False when the order does not exist.</returns>
+    Task<bool> SetOrderHeldAsync(int orderId, bool held, string? reason, string? actor, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Appends one line to an order's activity log.
+    /// </summary>
+    /// <remarks>
+    /// Called from the same code path as the state change it describes, so the log cannot
+    /// drift from the state. Deliberately fire-and-forget in spirit: a failure to write the
+    /// log must never fail the change, because the kitchen's action already happened.
+    /// </remarks>
+    Task AddActivityAsync(int orderId, int? orderItemId, string kind, string detail, string? actor, string? statusAtEvent, CancellationToken cancellationToken = default);
+
+    /// <summary>Everything that has happened to an order, newest first.</summary>
+    Task<List<OrderActivityDto>> GetActivityAsync(int orderId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Records that the customer has been told the order is ready, at most once.
