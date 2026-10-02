@@ -1637,3 +1637,131 @@ board's counts). Now 280, 204 and 182 lines, with all 296 API tests unchanged an
 (`gh run list --json conclusion,workflowName,headSha`), and run
 `./scripts/check-ci-integrity.sh` — without `--static-only` — before a push that adds a
 large file.
+
+---
+
+## 20. The "Open" button was a dead end — 2026-10-02
+
+**Reported as four things; the first one was an outage.** "The open button in an order doesn't
+link to anything." It links fine. The page it lands on was a 500.
+
+Every Open control in the console — the dashboard ticket, the Orders table row, an expanded
+row — is a `<Link to={/orders/${id}}>` and all three navigated correctly to
+`GET /api/admin/orders/{id}`, which answered:
+
+```
+HTTP 500
+{"error":"An error occurred while retrieving order details"}
+```
+
+### The cause, and why it is a new member of an old family
+
+`OrderRepository.GetAdminOrderDetailAsync` built its item list with Dapper's **untyped**
+`QueryAsync(sql)`, then read the columns back with casts:
+
+```csharp
+var itemId = (int)row.ItemId;
+PriceAdjustment = (decimal)row.PriceAdjustment
+```
+
+Through an untyped row every column is `dynamic`, so **a cast compiles no matter what the
+column is called**. Postgres folds the unquoted `as PriceAdjustment` to `priceadjustment`, so
+the member being reached for did not exist; and because the `LEFT JOIN` hands back NULL for any
+dish with no modifiers, the binder refused:
+
+```
+Microsoft.CSharp.RuntimeBinder.RuntimeBinderException:
+Cannot convert null to 'decimal' because it is a non-nullable value type
+   at OrderRepository.GetAdminOrderDetailAsync(...) in OrderRepository.cs:line 1230
+```
+
+`row.ModifierRowId != null` guarded the modifier **row** but not the modifier **fields**, so the
+branch was entered and the first non-nullable cast died. Every order with no modifiers on any
+line returned 500 — which on this menu is most of them. **Staff could see a ticket on the board
+and not open it.**
+
+This is the fifth defect of the "SQL that reads correctly and behaves silently wrong" family in
+§17, and it is the first to hit an *untyped* row rather than a typed one. That is exactly why
+the aliasing rules already written down did not catch it: **the SQL was correct.** Every column
+was aliased precisely as `OrderQueryColumnMappingTests` demands, and those tests passed the whole
+time.
+
+### Why 296 green tests said nothing
+
+- `OrderQueryColumnMappingTests` asserts `oi.id`/`oim.id` **are aliased**, never that the alias
+  is **spelled** the way the cast expects — and it is a source-text regex that never executes the
+  query.
+- Every service-level `FakeOrderRepository` returns `Task.FromResult<AdminOrderDetailDto?>(null)`,
+  so nothing in the suite ever ran this SQL.
+
+### The fix
+
+Map onto a typed `AdminOrderItemRow`, with the four modifier columns nullable — which is what the
+`LEFT JOIN` actually produces. Chosen over a null guard because **the type is what makes the
+compiler reject the next version of this mistake**, and because `AdminOrderListRow` already
+exists in that file for the same reason.
+
+Verified against a real database (a throwaway Postgres on `:5433`, seeded with counter orders),
+with one dish carrying a modifier and one without: the modified dish returns "Extra protein /
++4.00" with both ids, the unmodified one returns cleanly, and all five probe orders returned 200
+where every one had 500'd. Driven through the real UI afterwards: Open lands on a working ticket
+with its order number as the heading, its dish rows, and its status control — no 4xx or 5xx
+anywhere on the page.
+
+### The guard, and the one thing worth stating plainly
+
+`.test-baseline` 296 -> 301. Two tests assert the source (the query maps onto `AdminOrderItemRow`;
+that row's modifier columns are nullable) and **three reproduce the mechanism in-process with no
+database** — they build the two-row shape the join produces and show the untyped read throwing
+where the typed one does not.
+
+The honest note: the source-text guards that failed to catch this **still cannot catch its next
+occurrence**, because the defect is a row *type*, not SQL text. The three execution tests are the
+real guard. `TicketItemRowMappingTests` was written in that shape deliberately — a pure
+in-process test — because CI runs `dotnet test` with **no Postgres**, so anything needing a
+connection would have had to be skipped, and `check-test-health.sh` fails the build on a skipped
+test. Locally the same trap is still worth closing later: the suite has no test that executes
+`OrderRepository` against a real database at all, which is the gap all five of §17's defects and
+this one share.
+
+### Three reports still open
+
+The other three asks from the same message are tracked and **not** built:
+
+- **[issue #5](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues/5)** — the
+  counter screen cannot add a dish to an existing order, **and its dish grid renders empty**:
+  the component filters on `d.isActive` while the endpoint sends `isAvailable`, and reads
+  `categoryName`/`price`/`modifierGroups` which the list DTO does not carry. Separately,
+  `GET /api/admin/menu/items` calls `GetPopularItemsAsync` behind a literal `// TODO`, returning
+  **7 items of 82** — so even once the fields match, a counter screen could only sell the
+  popular dishes.
+- **[issue #6](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues/6)** — back of
+  house and the dashboard are the same screen twice (both render the same four orders and four
+  stat cards; neither is complete). Agreed shape: one board with BOH's stage columns and the
+  dashboard's tap-to-cross-out dishes. The one genuine fork — BOH's three-state
+  `Queued → Cooking → Done` (migration 17) against the dashboard's binary `is_completed` — is
+  flagged there rather than chosen.
+
+### A note on how this was found, and a mistake worth recording
+
+Found by running the app, not by reading it — the same way §17's four defects were found. That
+is now six sessions running where execution found what inspection and unit tests did not.
+
+**And one thing I got wrong.** Reproducing this, I started the API against the machine's local
+Homebrew Postgres on `:5432`, believing it to be my own container: a `docker run` was still
+pulling when I checked `docker ps -a` at roughly eight seconds, I saw no container, concluded it
+had failed, and did not re-check. The container had in fact been created and was publishing
+`:5432`. Two servers were answering to "5432" — Homebrew's on `localhost`, the container's via
+`docker exec` — so my own probe was consistent and the conclusion was wrong.
+
+The first API run therefore booted its migration sequence against the local database, which holds
+this project's data. Checked read-only afterwards: **25 orders, 22 cancelled, and zero orders or
+order_items created in the window** — no data was written. The migrations are idempotent DDL and
+16/17 were already applied, so the re-run was a no-op by construction, but that is inference and
+it is recorded as such: there is no ledger table to diff, so it cannot be proven after the fact.
+
+**The generalisable bit, which is why this is here:** `appsettings.Development.json` defaults to
+`Host=localhost;Port=5432;Database=AsianTaste_Dev` with an **empty password**, and AGENTS.md
+documents `ASPNETCORE_ENVIRONMENT=Development dotnet run` as the normal local command. So any
+plain `dotnet run` in this repo connects to a populated database without being asked. That is
+worth a deliberate decision of its own, and it is not mine to make.

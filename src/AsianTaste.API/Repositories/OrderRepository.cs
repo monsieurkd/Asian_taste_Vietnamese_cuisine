@@ -1148,6 +1148,36 @@ public class OrderRepository : IOrderRepository
         public DateTime CreatedAt { get; set; }
     }
 
+    /// <summary>
+    /// One row of the kitchen ticket's item join, mapped onto a TYPE.
+    /// </summary>
+    /// <remarks>
+    /// Typed rather than dynamic for the reason spelled out at the query: an untyped
+    /// row turns a missing column into a runtime binder failure instead of a compile
+    /// error, and this query's LEFT JOIN means the modifier columns are routinely
+    /// absent. Every modifier field is therefore nullable — that is what the join
+    /// actually produces, and saying so is what stops the next `(decimal)` cast on a
+    /// null from taking the endpoint down.
+    /// </remarks>
+    private sealed class AdminOrderItemRow
+    {
+        public int ItemId { get; set; }
+        public int MenuItemId { get; set; }
+        public string MenuItemName { get; set; } = string.Empty;
+        public int Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal TotalPrice { get; set; }
+        public string? SpecialInstructions { get; set; }
+        public bool IsCompleted { get; set; }
+        public DateTime? CompletedAt { get; set; }
+
+        // Null unless the dish has a modifier: the LEFT JOIN's all-null row.
+        public int? ModifierRowId { get; set; }
+        public int? ModifierId { get; set; }
+        public string? ModifierName { get; set; }
+        public decimal? PriceAdjustment { get; set; }
+    }
+
     public async Task<AdminOrderDetailDto?> GetAdminOrderDetailAsync(int orderId, CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();
@@ -1220,41 +1250,65 @@ public class OrderRepository : IOrderRepository
             WHERE oi.order_id = @OrderId
             ORDER BY oi.id ASC, oim.id ASC";
 
-        var itemsData = await connection.QueryAsync(
+        // Mapped onto a TYPED row, not Dapper's dynamic one.
+        //
+        // This was the last untyped query in the file, and it was an outage. Read back
+        // through `QueryAsync` with no type argument, every column arrives as `dynamic`,
+        // so `(decimal)row.PriceAdjustment` compiles whatever the column is called — and
+        // resolves at RUNTIME to a dynamic member that simply is not there. Postgres
+        // folds an unquoted `as PriceAdjustment` to `priceadjustment`, so the cast found
+        // nothing and threw:
+        //
+        //   RuntimeBinderException: Cannot convert null to 'decimal' because it is a
+        //   non-nullable value type
+        //
+        // The row-level null check below was no defence: it skips a modifier that is not
+        // there, but an order whose dishes have NO modifiers still reaches inside the
+        // branch's columns — all of which are NULL from the LEFT JOIN — and the first
+        // non-nullable cast dies. Every order with no modifiers on any line 500'd, which
+        // on this menu is most of them: staff could see a ticket on the board and not
+        // open it.
+        //
+        // A typed row is the fix rather than a null guard, because the type is what makes
+        // the compiler reject the next version of this mistake. That is the same reason
+        // AdminOrderListRow exists, and the reason this one bug is the fifth of its family
+        // in this file.
+        var itemsData = await connection.QueryAsync<AdminOrderItemRow>(
             new CommandDefinition(itemsSql, new { OrderId = orderId }, cancellationToken: cancellationToken));
 
         // Group items with their modifiers
         var itemsDict = new Dictionary<int, AdminOrderItemDto>();
         foreach (var row in itemsData)
         {
-            var itemId = (int)row.ItemId;
-            if (!itemsDict.ContainsKey(itemId))
+            if (!itemsDict.ContainsKey(row.ItemId))
             {
-                itemsDict[itemId] = new AdminOrderItemDto
+                itemsDict[row.ItemId] = new AdminOrderItemDto
                 {
-                    Id = itemId,
-                    MenuItemId = (int)row.MenuItemId,
-                    MenuItemName = (string)row.MenuItemName,
-                    Quantity = (int)row.Quantity,
-                    UnitPrice = (decimal)row.UnitPrice,
-                    TotalPrice = (decimal)row.TotalPrice,
-                    SpecialInstructions = (string?)row.SpecialInstructions,
-                    IsCompleted = (bool)row.IsCompleted,
-                    CompletedAt = (DateTime?)row.CompletedAt,
+                    Id = row.ItemId,
+                    MenuItemId = row.MenuItemId,
+                    MenuItemName = row.MenuItemName,
+                    Quantity = row.Quantity,
+                    UnitPrice = row.UnitPrice,
+                    TotalPrice = row.TotalPrice,
+                    SpecialInstructions = row.SpecialInstructions,
+                    IsCompleted = row.IsCompleted,
+                    CompletedAt = row.CompletedAt,
                     Modifiers = new List<AdminOrderItemModifierDto>()
                 };
             }
 
             // The LEFT JOIN produces one all-null modifier row for an item that has
             // none, so the check is on the modifier's own id rather than the row.
-            if (row.ModifierRowId != null)
+            // Nullable on the row type, so the check is now enforced rather than
+            // remembered.
+            if (row.ModifierRowId is not null)
             {
-                itemsDict[itemId].Modifiers.Add(new AdminOrderItemModifierDto
+                itemsDict[row.ItemId].Modifiers.Add(new AdminOrderItemModifierDto
                 {
-                    Id = (int)row.ModifierRowId,
-                    ModifierId = (int)row.ModifierId,
-                    ModifierName = (string)row.ModifierName,
-                    PriceAdjustment = (decimal)row.PriceAdjustment
+                    Id = row.ModifierRowId.Value,
+                    ModifierId = row.ModifierId ?? 0,
+                    ModifierName = row.ModifierName ?? string.Empty,
+                    PriceAdjustment = row.PriceAdjustment ?? 0m
                 });
             }
         }
