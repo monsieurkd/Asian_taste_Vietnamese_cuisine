@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import type { Order } from "@/types"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ordersApi } from "@/api/orders"
 import { AdminTop } from "@/components/AdminLayout"
 import { Panel, PanelBody, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
 import { STATUS_META, STATUS_ORDER, statusKey, type StatusKey } from "@/lib/orderStatus"
 import { readPayment } from "@/lib/payment"
+import { OrderItems, OrderProgressPill } from "@/components/orders/OrderItems"
+import { showAdminToast } from "@/components/ui/AdminToast"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 
 type StatusFilter = "all" | StatusKey
@@ -76,6 +78,16 @@ function SearchIcon() {
 export function OrdersPage() {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<StatusFilter>("all")
+  const queryClient = useQueryClient()
+  /**
+   * The row whose dishes are showing, if any.
+   *
+   * One at a time, because the point of expanding here is to answer a question about ONE
+   * order — usually a phone call — and a table where every row is open is the board
+   * with more columns.
+   */
+  const [openRowId, setOpenRowId] = useState<number | null>(null)
+  const [tickingItemId, setTickingItemId] = useState<number | null>(null)
 
   // Digits are what an order number is made of, so a query containing any is
   // treated as a potential number lookup. A name or a phone also contains digits
@@ -86,10 +98,51 @@ export function OrdersPage() {
     return /\d/.test(q) ? q : ""
   }, [query])
 
+  // The list fetches the LINES too, so a row can show what to cook without opening the
+  // order. It is the same payload the board asks for; the alternative is one request per
+  // expanded row, which is the round trip this screen exists to skip.
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["orders", "list", numberQuery],
-    queryFn: () => ordersApi.getOrders({ limit: 100, orderNumber: numberQuery || undefined }),
+    queryFn: () =>
+      ordersApi.getOrders({
+        limit: 100,
+        orderNumber: numberQuery || undefined,
+        includeItems: true,
+      }),
     refetchInterval: 30_000,
+  })
+
+  /**
+   * Tick a dish from the list.
+   *
+   * Deliberately NOT optimistic here, unlike the board. This screen is used one-handed
+   * while talking to somebody on the phone, where a row that changes under the cursor
+   * before the server agrees is worse than a half-second of "saving" — and there is no
+   * pressure to keep up with, because nobody is cooking from this table.
+   */
+  const tick = useMutation({
+    mutationFn: ({ orderId, itemId, isCompleted }: { orderId: number; itemId: number; isCompleted: boolean }) =>
+      ordersApi.setItemCompleted(orderId, itemId, isCompleted),
+
+    onMutate: ({ itemId }) => setTickingItemId(itemId),
+    onSettled: () => {
+      setTickingItemId(null)
+      queryClient.invalidateQueries({ queryKey: ["orders"] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
+    },
+    onSuccess: (result) => {
+      // Say what the screen could not know: whether the last dish finished the order, and
+      // whether the customer was actually emailed. Same wording as the board, because it
+      // is the same fact.
+      if (result.orderMarkedReady) {
+        showAdminToast(
+          result.customerNotified
+            ? "Every dish done — order is ready and the customer has been emailed"
+            : "Every dish done — order is ready. Nobody to email, so call the number out",
+        )
+      }
+    },
+    onError: () => showAdminToast("Couldn't update that dish — try again"),
   })
 
   const rows = useMemo(() => {
@@ -183,6 +236,7 @@ export function OrdersPage() {
                     <th scope="col">Wanted</th>
                     <th scope="col">Placed</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Items</th>
                     <th scope="col" className="num-col">
                       Total
                     </th>
@@ -194,7 +248,7 @@ export function OrdersPage() {
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={7}>
+                      <td colSpan={8}>
                         <div className="state-block">
                           <span className="state-icon">
                             <SearchIcon />
@@ -208,41 +262,85 @@ export function OrdersPage() {
                       </td>
                     </tr>
                   ) : (
-                    rows.map((order) => (
-                      <tr key={order.id}>
-                        <td>
-                          <Link className="order-id" to={`/orders/${order.id}`}>
-                            {order.orderNumber}
-                          </Link>
-                        </td>
-                        <td>
-                          <strong>{order.customerName}</strong>
-                          <br />
-                          <span className="meta">{order.customerPhone}</span>
-                          {paymentFor(order).attention && (
-                            <>
+                    rows.map((order) => {
+                      const open = openRowId === order.id
+                      const panelId = `order-items-${order.id}`
+
+                      return (
+                        <Fragment key={order.id}>
+                          <tr data-open={open}>
+                            <td>
+                              <Link className="order-id" to={`/orders/${order.id}`}>
+                                {order.orderNumber}
+                              </Link>
+                            </td>
+                            <td>
+                              <strong>{order.customerName}</strong>
                               <br />
-                              <Pill className="pill-warn">{paymentFor(order).label}</Pill>
-                            </>
+                              <span className="meta">{order.customerPhone}</span>
+                              {paymentFor(order).attention && (
+                                <>
+                                  <br />
+                                  <Pill className="pill-warn">{paymentFor(order).label}</Pill>
+                                </>
+                              )}
+                            </td>
+                            <td>{wantedFor(order)}</td>
+                            <td>
+                              {formatDate(order.createdAt, "time")}
+                              <br />
+                              <span className="meta">{minutesAgo(order.createdAt)} min ago</span>
+                            </td>
+                            <td>
+                              <StatusPill status={order.status} />
+                            </td>
+                            <td>
+                              {/* The dishes are one press away rather than always on
+                                  screen: a table with every ticket open is the board with
+                                  more columns, and this screen is for finding an order,
+                                  not for working the pass. */}
+                              <button
+                                type="button"
+                                className="row-expand"
+                                aria-expanded={open}
+                                aria-controls={panelId}
+                                onClick={() => setOpenRowId(open ? null : order.id)}
+                              >
+                                <OrderProgressPill order={order} />
+                                <span className="row-expand-chev" aria-hidden="true">
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="m6 9.5 6 5.5 6-5.5" />
+                                  </svg>
+                                </span>
+                                <span className="sr-only">
+                                  {open ? "Hide dishes" : "Show dishes"}
+                                </span>
+                              </button>
+                            </td>
+                            <td className="num-col">{formatCurrency(order.total)}</td>
+                            <td>
+                              <Link className="btn btn-ghost" style={{ minHeight: 36, padding: "6px 12px", fontSize: 13 }} to={`/orders/${order.id}`}>
+                                Open
+                              </Link>
+                            </td>
+                          </tr>
+
+                          {open && (
+                            <tr className="row-items">
+                              <td colSpan={8} id={panelId}>
+                                <OrderItems
+                                  order={order}
+                                  tickingItemId={tickingItemId}
+                                  onTick={(itemId, isCompleted) =>
+                                    tick.mutate({ orderId: order.id, itemId, isCompleted })
+                                  }
+                                />
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td>{wantedFor(order)}</td>
-                        <td>
-                          {formatDate(order.createdAt, "time")}
-                          <br />
-                          <span className="meta">{minutesAgo(order.createdAt)} min ago</span>
-                        </td>
-                        <td>
-                          <StatusPill status={order.status} />
-                        </td>
-                        <td className="num-col">{formatCurrency(order.total)}</td>
-                        <td>
-                          <Link className="btn btn-ghost" style={{ minHeight: 36, padding: "6px 12px", fontSize: 13 }} to={`/orders/${order.id}`}>
-                            Open
-                          </Link>
-                        </td>
-                      </tr>
-                    ))
+                        </Fragment>
+                      )
+                    })
                   )}
                 </tbody>
               </table>

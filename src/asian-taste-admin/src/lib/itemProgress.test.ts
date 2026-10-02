@@ -184,3 +184,35 @@ describe('lineDetail and isOutstanding', () => {
     expect(isOutstanding(line({ isCompleted: true }))).toBe(false);
   });
 });
+
+/**
+ * The list is now rendered on THREE screens (board ticket, Orders row, ticket page), so
+ * these pin the cases that decide whether a cook can press a dish or not. The failure mode
+ * is not a crash: it is someone standing at the pass looking at food they cannot mark, or
+ * reading "nothing to cook" from an order whose list merely failed to load.
+ */
+describe('rendering the list on three screens', () => {
+  it('offers the tick on every live stage', () => {
+    for (const status of ['Pending', 'Confirmed', 'Preparing', 'Ready'] as const) {
+      expect(canTickItems(order({ status }))).toBe(true);
+    }
+  });
+
+  it('reports the SERVER count when the lines did not arrive', () => {
+    // The dangerous case: the count says four dishes exist but the list is missing. This
+    // is what lets the panel say "could not be loaded" instead of looking like an order
+    // with no food — which is what a staff member would otherwise believe.
+    const o = order({ items: null, itemsDone: { done: 0, total: 4 } });
+    expect(progressOf(o)).toEqual({ done: 0, total: 4 });
+    expect(progressLabel(o)).toBe('4 to cook');
+  });
+
+  it('treats a genuinely empty order as empty, not as a failure', () => {
+    // A real state in this database: orders were seeded straight into `orders` by older
+    // scripts, without their lines. Zero of zero, and no label — the component renders
+    // "This order has no items recorded." for this case.
+    const o = order({ items: [], itemsDone: { done: 0, total: 0 } });
+    expect(progressOf(o)).toEqual({ done: 0, total: 0 });
+    expect(progressLabel(o)).toBeNull();
+  });
+});

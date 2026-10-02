@@ -2245,3 +2245,312 @@
     cursor: pointer;
   }
 }
+
+/* ==========================================================================
+   Printing.
+
+   The console is a dashboard: a brown rail, panels, buttons, a status scale.
+   "Print docket" used to call window.print() with no stylesheet at all, so the
+   page that came out of the printer was the dashboard — the rail, the buttons,
+   and the status control — with the order somewhere inside it. On a receipt
+   roll that is several feet of paper and the bill is not findable in it.
+
+   Two rules do the work:
+
+     1. Everything the screen needs and paper does not is hidden.
+     2. The bill itself is rendered ONLY for print. It is not a view of the
+        screen with things hidden, because the screen and the bill show
+        genuinely different things — the screen shows a refund button and a
+        status scale, the bill shows a GST line and where to collect.
+
+   The bill is white, 14px and monochrome on purpose: receipt printers are
+   1-bit, so a cream background with brand colours would come out as a grey
+   block with muddy text.
+   ========================================================================== */
+@layer print {
+  /* The bill is in the DOM at all times but occupies no space on screen. The
+     `display: none` here is the screen half of the pair; print turns it back on. */
+  .bill {
+    display: none;
+  }
+
+  @media print {
+    /* ── the page itself ────────────────────────────────────────────────
+       Printed margin is the printer driver's business, not ours, and the
+       console's cream background wastes toner on a thermal roll. */
+    html,
+    body {
+      background: #fff !important;
+      color: #000 !important;
+    }
+
+    /* ── hide the console chrome ────────────────────────────────────────
+       `.admin` is the two-column shell (rail + main) and `.admin-top` is the
+       sticky header. `.admin-page` is deliberately NOT hidden — the bill is
+       rendered inside it, and hiding an ancestor hides the bill too. */
+    .admin,
+    .admin-rail,
+    .admin-top,
+    .filterbar {
+      display: none !important;
+    }
+
+    /* Anything that only makes sense with a mouse or a network. */
+    .btn,
+    button,
+    [role="dialog"],
+    .toast {
+      display: none !important;
+    }
+
+    /* ── the bill ───────────────────────────────────────────────────────
+       Block, not flex: some print drivers drop flex children onto their own
+       pages, and a bill that prints one field per page is worse than no bill.
+       `.admin-page` is a flex column with a 32px gap, which is inherited by
+       the bill's children — so it is reset to a plain block here. */
+    .bill {
+      display: block !important;
+      width: 100%;
+      max-width: 80mm;
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      color: #000;
+      font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    /* The parent is a flex column with a 32px gap; a block here would still be
+       a flex ITEM, so the gap and the padding would survive into the printout. */
+    .admin-page:has(.bill) {
+      display: block !important;
+      padding: 0 !important;
+      gap: 0 !important;
+    }
+    .admin-main {
+      display: block !important;
+    }
+
+    .bill-head {
+      text-align: center;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed #000;
+    }
+    .bill-head .bill-name {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .bill-head .bill-sub {
+      font-size: 11px;
+    }
+
+    .bill-meta {
+      display: block;
+      padding: 6px 0;
+      border-bottom: 1px dashed #000;
+    }
+    .bill-meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .bill-lines {
+      padding: 6px 0;
+      border-bottom: 1px dashed #000;
+    }
+    .bill-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .bill-line .bill-qty {
+      flex: 0 0 2.2em;
+    }
+    .bill-line .bill-dish {
+      flex: 1 1 auto;
+    }
+    .bill-line .bill-amt {
+      flex: 0 0 auto;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+    /* Options and notes sit under their dish, indented past the quantity, so a
+       line reads as one thing rather than three unrelated rows. */
+    .bill-sub {
+      padding-left: 2.2em;
+      font-size: 11px;
+    }
+
+    .bill-totals {
+      padding: 6px 0;
+      border-bottom: 1px dashed #000;
+    }
+    .bill-total-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .bill-total-row.bill-grand {
+      font-size: 14px;
+      font-weight: 800;
+      margin-top: 4px;
+    }
+
+    /* The allergy block is the one thing on the bill that must survive a glance.
+       Printed as a box rather than bold text because a receipt is read in a
+       hurry, at an angle, sometimes in bad light. */
+    .bill-allergy {
+      margin-top: 8px;
+      padding: 6px;
+      border: 2px solid #000;
+      font-weight: 700;
+    }
+    .bill-allergy .bill-allergy-head {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .bill-foot {
+      padding-top: 8px;
+      text-align: center;
+      font-size: 11px;
+    }
+    .bill-foot .bill-number {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── keep a bill on one page ────────────────────────────────────────
+       A thermal roll paginates unpredictably; a break inside the totals block
+       splits the number the customer is being asked to pay from the dishes it
+       is for. `page-break-*` is kept alongside `break-*` for older drivers. */
+    .bill,
+    .bill-lines,
+    .bill-totals,
+    .bill-allergy,
+    .bill-line {
+      break-inside: avoid;
+    page-break-inside: avoid;
+    }
+
+    /* No shadows, no rounded corners, no colour: none of it survives 1-bit. */
+    .bill * {
+      box-shadow: none !important;
+      text-shadow: none !important;
+      border-radius: 0 !important;
+    }
+  }
+}
+
+/* ==========================================================================
+   The dish list, wherever it appears — board ticket, Orders row, ticket page.
+
+   One block for all three because the control is deliberately identical on each:
+   a dish tickable on one screen and not another is what makes staff distrust it.
+   ========================================================================== */
+@layer components {
+  /* The expand toggle in the Orders table. The whole cell is the target, because a
+     chevron on its own is a 12px hit area. */
+  .row-expand {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 2px 6px 2px 2px;
+    background: none;
+    border: 0;
+    border-radius: var(--radius-sm, 7px);
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .row-expand:hover {
+    background-color: var(--color-fg-soft);
+  }
+  .row-expand:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+  .row-expand-chev {
+    display: grid;
+    place-items: center;
+    color: var(--color-muted);
+    transition: transform 140ms ease;
+  }
+  .row-expand-chev svg {
+    width: 14px;
+    height: 14px;
+  }
+  .row-expand[aria-expanded='true'] .row-expand-chev {
+    transform: rotate(180deg);
+  }
+  /* The open row keeps its own highlight so the dishes below can be traced back to the
+     order they belong to — a bare inset block under a long table is easy to lose. */
+  tr[data-open='true'] > td {
+    background-color: var(--color-accent-soft);
+  }
+
+  /* The expanded dish panel. Sits in its own row so the table's columns do not have to
+     accommodate it, and is indented to read as belonging to the row above. */
+  .row-items > td {
+    padding: 0 14px 16px;
+    background-color: color-mix(in oklch, var(--color-bg) 45%, var(--color-surface));
+    border-bottom: 1px solid var(--color-border);
+  }
+  .row-items .order-items {
+    padding-top: 12px;
+    border-top: 1px dashed var(--color-border);
+  }
+
+  /* A dish list that cannot be ticked (a summary, or a closed order). Plain rows, and
+     deliberately NOT disabled buttons: a greyed-out control invites a tap and explains
+     nothing, whereas a row of text says "this is information". */
+  .ticket-line-static {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 7px 8px;
+    min-height: 40px;
+  }
+  .ticket-line-static .ticket-line-check {
+    display: grid;
+    place-items: center;
+  }
+  /* Somewhere between the two: recorded as done, and shown as such without claiming to
+     be a control. */
+  .ticket-line-static .ticket-line-check.is-done {
+    background-color: var(--color-gf);
+    border-color: var(--color-gf);
+    color: #fff;
+  }
+  .ticket-line-static[data-done='true'] .ticket-line-name,
+  .ticket-line-static[data-done='true'] .ticket-line-detail {
+    text-decoration: line-through;
+    color: var(--color-muted);
+  }
+
+  /* The empty state. Says what is true rather than leaving a blank, because an order
+     with no items IS a real thing in this database (older scripts seeded orders without
+     their lines) and a blank panel is indistinguishable from a broken one. */
+  .items-empty {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-sm, 8px);
+    font-size: 12.5px;
+    color: var(--color-muted);
+    background-color: color-mix(in oklch, var(--color-bg) 40%, var(--color-surface));
+  }
+
+  /* The ticket page's dish list sits inside a PanelBody, where the board's tight
+     ticket spacing would read as cramped. */
+  .panel .order-items .ticket-line-list {
+    margin-top: 2px;
+  }
+}

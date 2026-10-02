@@ -12,6 +12,8 @@ import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { AdminModal } from "@/components/ui/AdminModal"
 import { OrderEditor } from "@/components/orders/OrderEditor"
+import { OrderItems } from "@/components/orders/OrderItems"
+import { PrintBill } from "@/components/orders/PrintBill"
 import { refundEligibility } from "@/lib/refund"
 
 function CheckMark() {
@@ -37,6 +39,8 @@ export function OrderDetailPage() {
   const [refunding, setRefunding] = useState(false)
   /** Whether the order editor is open. */
   const [editing, setEditing] = useState(false)
+  /** The single dish currently being ticked, so only its own row shows as busy. */
+  const [tickingItemId, setTickingItemId] = useState<number | null>(null)
 
   const { data: order, isLoading } = useQuery({
     queryKey: ["order-detail", id],
@@ -85,6 +89,36 @@ export function OrderDetailPage() {
     },
     onError: (err: unknown) =>
       showAdminToast(err instanceof Error ? err.message : "Couldn't refund that order"),
+  })
+
+  /**
+   * Tick one dish off, from the ticket page.
+   *
+   * Optimistic like the board rather than plain like the Orders table: this page is
+   * opened from the board, by the same person, and a control that behaves differently on
+   * two screens a tap apart is a control nobody trusts.
+   */
+  const tick = useMutation({
+    mutationFn: ({ itemId, isCompleted }: { itemId: number; isCompleted: boolean }) =>
+      ordersApi.setItemCompleted(Number(id), itemId, isCompleted),
+
+    onMutate: ({ itemId }) => setTickingItemId(itemId),
+    onSettled: () => {
+      setTickingItemId(null)
+      queryClient.invalidateQueries({ queryKey: ["order-detail", id] })
+      queryClient.invalidateQueries({ queryKey: ["orders"] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
+    },
+    onSuccess: (result) => {
+      if (result.orderMarkedReady) {
+        showAdminToast(
+          result.customerNotified
+            ? "Every dish done — order is ready and the customer has been emailed"
+            : "Every dish done — order is ready. Nobody to email, so call the number out",
+        )
+      }
+    },
+    onError: () => showAdminToast("Couldn't update that dish — try again"),
   })
 
   const setStatus = (key: (typeof STATUS_ORDER)[number]) => {
@@ -250,20 +284,20 @@ export function OrderDetailPage() {
                 </div>
               </PanelHead>
               <PanelBody>
-                {order.items.map((item) => (
-                  <div className="line-item" key={item.id}>
-                    <span className="li-qty">{item.quantity}×</span>
-                    <div>
-                      <strong>{item.menuItemName}</strong>
-                      {item.specialInstructions && <p className="li-mod">Note: {item.specialInstructions}</p>}
-                      {item.modifiers.length > 0 && (
-                        <p className="li-mod">{item.modifiers.map((m) => m.modifierName).join(" · ")}</p>
-                      )}
-                    </div>
-                    <span className="li-price">{formatCurrency(item.totalPrice)}</span>
-                  </div>
-                ))}
-                <div style={{ marginTop: 12 }}>
+                {/* The dishes are the SAME control as on the board and in the list, so a
+                    cook who opens a ticket from the table can carry on ticking. It was
+                    plain text here until now, which made this the one screen where an
+                    order's dishes were visible but could not be marked — and that is the
+                    screen a staff member lands on after tapping "Open". */}
+                <OrderItems
+                  order={order}
+                  tickingItemId={tickingItemId}
+                  onTick={(itemId, isCompleted) =>
+                    tick.mutate({ itemId, isCompleted })
+                  }
+                />
+
+                <div style={{ marginTop: 14 }}>
                   <SumRow label="Items" value={formatCurrency(order.subtotal)} total />
                 </div>
               </PanelBody>
@@ -393,7 +427,7 @@ export function OrderDetailPage() {
                     variant="ghost"
                     onClick={() => window.print()}
                   >
-                    Print docket
+                    Print bill
                   </Button>
                 </div>
               </PanelBody>
@@ -427,6 +461,13 @@ export function OrderDetailPage() {
             </Panel>
           </div>
         </div>
+
+        {/* Printed, never seen. Placed inside `.admin-page` so the print rules
+            scope to the page the button lives on, and outside every Panel so a
+            panel's padding cannot indent a receipt. It also has to be BELOW the
+            two-column grid in source order — printing only hides the columns,
+            it does not reorder them. */}
+        <PrintBill order={order} />
       </div>
 
       {editing && <OrderEditor order={order} onClose={() => setEditing(false)} />}

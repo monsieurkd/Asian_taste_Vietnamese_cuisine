@@ -9,13 +9,7 @@ import { StatusPill } from "@/components/ui/StatusPill"
 import { apiStatusValue, isClosed, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
 import { readPayment } from "@/lib/payment"
 import { boardAction } from "@/lib/boardAction"
-import {
-  canTickItems,
-  lineDetail,
-  progressLabel,
-  progressFraction,
-  progressOf,
-} from "@/lib/itemProgress"
+import { OrderItems } from "@/components/orders/OrderItems"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
@@ -103,13 +97,6 @@ function Ticket({
   // The rule that decides, not the button's own wording. See lib/boardAction.
   const action = boardAction(order.status)
 
-  // The items and their progress come from the API's own count, not from the lines on
-  // this page — see lib/itemProgress for why that distinction is load-bearing.
-  const lines = order.items ?? []
-  const progress = progressOf(order)
-  const allDone = progress.total > 0 && progress.done === progress.total
-  const tickable = canTickItems(order)
-
   return (
     <article className={`ticket ${mins > URGENT_MINUTES ? "urgent" : ""}`}>
       <div className="ticket-top">
@@ -177,78 +164,20 @@ function Ticket({
           showed a customer's name and a status, and the food itself was only visible
           after opening the ticket on another page.
 
-          Each line is the control. One tap marks a dish done, which is the smallest
-          unit of work a kitchen actually has — where before the only expressible
-          progress was "the whole order has moved stage", a question no cook asks. */}
-      {lines.length > 0 && (
-        <div className="ticket-lines">
-          <div className="ticket-progress">
-            <span className="ticket-progress-label">{progressLabel(order)}</span>
-            <span
-              className="ticket-progress-bar"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={progress.total}
-              aria-valuenow={progress.done}
-              aria-label={`${progress.done} of ${progress.total} dishes done`}
-            >
-              <span style={{ width: `${progressFraction(order) * 100}%` }} />
-            </span>
-          </div>
-
-          <ul className="ticket-line-list">
-            {lines.map((lineItem) => {
-              const detail = lineDetail(lineItem)
-              const inFlight = tickingItemId === lineItem.id
-
-              return (
-                <li key={lineItem.id} data-done={lineItem.isCompleted}>
-                  <button
-                    type="button"
-                    className="ticket-line"
-                    aria-pressed={lineItem.isCompleted}
-                    disabled={!tickable || inFlight}
-                    onClick={() => onTick(lineItem.id, !lineItem.isCompleted)}
-                  >
-                    {/* A real checkbox shape, because that is the gesture: this is the
-                        one control on the board that is pressed tens of times a shift,
-                        and it should read as a tick rather than as a button. */}
-                    <span className="ticket-line-check" aria-hidden="true">
-                      <CheckMark />
-                    </span>
-                    <span className="ticket-line-body">
-                      <span className="ticket-line-name">
-                        <strong>{lineItem.quantity}×</strong> {lineItem.menuItemName}
-                      </span>
-                      {detail && <span className="ticket-line-detail">{detail}</span>}
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-
-          {/* The one thing worth saying out loud once the last dish is ticked. The order
-              moves itself (the server decides that, not this screen), so this reports
-              what happened rather than asking for another press. */}
-          {allDone && tickable && (
-            <p className="ticket-alldone" role="status">
-              {tickable ? "Every dish is done — this order is ready." : "Every dish is done."}
-            </p>
-          )}
-        </div>
-      )}
+          The list and its tick control come from components/orders/OrderItems, so the
+          board, the Orders list and the ticket page cannot drift apart on what a dish
+          can be ticked from. */}
+      <div className="ticket-lines">
+        <OrderItems
+          order={order}
+          onTick={onTick}
+          tickingItemId={tickingItemId}
+        />
+      </div>
     </article>
   )
 }
 
-function CheckMark() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 13l4 4L19 7" />
-    </svg>
-  )
-}
 function OpenLink({ href }: { href: string }) {
   return (
     <Link className="btn btn-secondary" to={href} style={{ minHeight: 38, padding: "8px 14px", fontSize: 13 }}>
