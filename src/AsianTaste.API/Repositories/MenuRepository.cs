@@ -448,6 +448,163 @@ public class MenuRepository : IMenuRepository
         return items.AsList();
     }
 
+    /// <summary>
+    /// Every sellable dish, with the fields a counter till needs — category name, the
+    /// price to charge, and the option groups — for the whole available menu.
+    /// </summary>
+    /// <remarks>
+    /// This exists because the counter screen was built against `MenuItemDetailDto` and
+    /// the endpoint behind it returned `MenuItemSummaryDto` for the POPULAR items only.
+    /// The grid then filtered on `isActive` (absent — the field is `isAvailable`), read
+    /// `categoryName` (absent), `price` (absent, it is `basePrice`) and `modifierGroups`
+    /// (absent, only a `hasModifiers` boolean), so it filtered every dish away and mapped
+    /// over an empty array. The screen rendered its frame with an empty grid, which reads
+    /// as a broken page rather than a failed request.
+    ///
+    /// `GetAvailableItemsAsync` is the right SET — every available dish, not the popular
+    /// ones — so this is that query plus the two things the detail shape carries. The
+    /// option groups are two flat queries rather than one join, for the reason spelled out
+    /// on `GetItemByIdAsync`: Dapper splits multi-mapping on the first column aliased
+    /// `Id`, and both tables here have one, which silently collapses groups, their
+    /// modifiers and a NULL phantom row into the wrong entities.
+    /// </remarks>
+    public async Task<List<MenuItemDetailDto>> GetCounterMenuAsync(CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        // `is_available` only. A dish the shop has run out of is not sellable, and the
+        // counter is the one screen where a staff member cannot work around it — there is
+        // a customer waiting, so the dish simply must not be there to tap.
+        var items = (await connection.QueryAsync<MenuItemDetailDto>(
+            @"
+            SELECT
+                mi.id as Id,
+                mi.category_id as CategoryId,
+                c.name as CategoryName,
+                mi.name as Name,
+                mi.description as Description,
+                mi.base_price as BasePrice,
+                mi.base_price as Price,
+                mi.image_url as ImageUrl,
+                mi.is_available as IsAvailable,
+                TRUE as IsActive,
+                mi.is_popular as IsPopular,
+                mi.is_gluten_free as IsGlutenFree,
+                mi.is_vegetarian as IsVegetarian,
+                mi.is_vegan as IsVegan,
+                mi.spicy_level as SpicyLevel
+            FROM menu_items mi
+            INNER JOIN categories c ON c.id = mi.category_id
+            WHERE mi.is_available = TRUE
+            ORDER BY c.display_order ASC, c.name ASC, mi.name ASC;
+            ")).ToList();
+
+        if (items.Count == 0) return items;
+
+        // Option groups for the whole menu in one query rather than one per dish: 82 items
+        // is 82 round trips otherwise, on a screen that has a customer standing at it.
+        var itemIds = items.Select(i => i.Id).ToArray();
+
+        var groups = (await connection.QueryAsync<CounterModifierGroupRow>(
+            @"
+            SELECT
+                mg.id as Id,
+                mg.menu_item_id as MenuItemId,
+                mg.name as Name,
+                mg.is_required as IsRequired,
+                mg.min_select as MinSelect,
+                mg.max_select as MaxSelect,
+                mg.display_order as DisplayOrder
+            FROM modifier_groups mg
+            WHERE mg.menu_item_id = ANY(@ItemIds)
+            ORDER BY mg.display_order ASC, mg.id ASC;
+            ",
+            new { ItemIds = itemIds })).ToList();
+
+        if (groups.Count > 0)
+        {
+            var groupIds = groups.Select(g => g.Id).ToArray();
+
+            // `is_available`, not `is_active`: the modifiers table has the former. Reading
+            // the wrong one threw 42703 the first time this ran, which is how the same
+            // mistake was found in GetItemByIdAsync.
+            var modifiers = await connection.QueryAsync<ModifierDto>(
+                @"
+                SELECT
+                    m.id as Id,
+                    m.modifier_group_id as ModifierGroupId,
+                    m.name as Name,
+                    m.price_adjustment as PriceAdjustment,
+                    m.display_order as DisplayOrder
+                FROM modifiers m
+                WHERE m.modifier_group_id = ANY(@GroupIds)
+                  AND m.is_available = TRUE
+                ORDER BY m.display_order ASC, m.id ASC;
+                ",
+                new { GroupIds = groupIds });
+
+            var byGroup = modifiers
+                .GroupBy(m => m.ModifierGroupId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var group in groups)
+            {
+                if (byGroup.TryGetValue(group.Id, out var choices))
+                {
+                    group.Modifiers = choices;
+                }
+            }
+        }
+
+        var groupsByItem = groups
+            .GroupBy(g => g.MenuItemId)
+            .ToDictionary(g => g.Key, g => g.Select(ToGroupDto).ToList());
+
+        foreach (var item in items)
+        {
+            if (groupsByItem.TryGetValue(item.Id, out var forItem))
+            {
+                item.ModifierGroups = forItem;
+            }
+        }
+
+        return items;
+    }
+
+    /// <summary>
+    /// A modifier group row with its owning dish, so the whole menu can be assembled from
+    /// one query. <see cref="ModifierGroupDto"/> deliberately has no item id — it is nested
+    /// under its dish on the way out — so this carries it only as far as the grouping.
+    /// </summary>
+    private sealed class CounterModifierGroupRow
+    {
+        public int Id { get; set; }
+        public int MenuItemId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public bool IsRequired { get; set; }
+        public int MinSelect { get; set; }
+        public int MaxSelect { get; set; }
+        public int DisplayOrder { get; set; }
+        public List<ModifierDto> Modifiers { get; set; } = new();
+    }
+
+    private static ModifierGroupDto ToGroupDto(CounterModifierGroupRow row) => new()
+    {
+        Id = row.Id,
+        Name = row.Name,
+        IsRequired = row.IsRequired,
+        MinSelect = row.MinSelect,
+        MaxSelect = row.MaxSelect,
+        DisplayOrder = row.DisplayOrder,
+        // Both spellings are populated because the mapper's two consumers read different
+        // ones: the menu editor reads MinRequired/MaxAllowed, the counter reads MinSelect
+        // via the same fields. They are the same numbers under two historical names.
+        MinRequired = row.MinSelect,
+        MaxAllowed = row.MaxSelect,
+        Modifiers = row.Modifiers,
+    };
+
     public async Task<List<MenuItemSummaryDto>> SearchItemsAdvancedAsync(SearchParametersDto parameters, CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();

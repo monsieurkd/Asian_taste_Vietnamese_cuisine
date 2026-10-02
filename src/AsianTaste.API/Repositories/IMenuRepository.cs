@@ -58,6 +58,13 @@ public interface IMenuRepository
     /// <summary>Gets available items (for current order type).</summary>
     Task<List<MenuItemSummaryDto>> GetAvailableItemsAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The whole sellable menu, in the detail shape the counter's dish grid reads:
+    /// category name, the price to charge and the option groups. See the implementation
+    /// for why the summary shape behind the admin list was not enough.
+    /// </summary>
+    Task<List<MenuItemDetailDto>> GetCounterMenuAsync(CancellationToken cancellationToken = default);
+
     // ── Writes ───────────────────────────────────────────────────────────────
     //
     // These exist because the admin controller advertised them and implemented none:

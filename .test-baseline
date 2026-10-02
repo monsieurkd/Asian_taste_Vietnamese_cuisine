@@ -30,7 +30,7 @@
 # The same change ADDED tests for the order flow itself (admin column mapping, the
 # real payment state, the pickup estimate, modifier mapping, the local day boundary)
 # and those more than replaced the deleted coverage in the areas that matter.
-296 -> 301
+296 -> 305
 
 # Raised 170 -> 174 on 2026-09-25, in the same commit as four tests for a defect
 # found in production by the deployment probe: StripePaymentVerificationTests pins

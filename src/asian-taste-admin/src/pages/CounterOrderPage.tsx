@@ -11,6 +11,7 @@ import {
   MAX_QUANTITY,
   addLine,
   clearTicket,
+  hasOptions,
   removeLine,
   setQuantity,
   ticketItemCount,
@@ -67,7 +68,10 @@ export function CounterOrderPage() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const available = useMemo(() => dishes.filter((d) => d.isActive), [dishes])
+  // `isAvailable` is the field the server sends. This used to filter on `isActive`,
+  // which the endpoint never returned — so the list was empty and the grid below mapped
+  // over nothing, rendering a counter screen with no dishes on it at all.
+  const available = useMemo(() => dishes.filter((d) => d.isAvailable), [dishes])
 
   /** Grouped by category, so the grid can be read the way the printed menu is. */
   const byCategory = useMemo(() => {
@@ -114,9 +118,11 @@ export function CounterOrderPage() {
 
   /** Add a dish, opening its options first when it has any. */
   const choose = (dish: MenuItemDetail) => {
-    const hasOptions = (dish.modifierGroups ?? []).some((g) => g.isActive && g.modifiers.some((m) => m.isActive))
-
-    if (!hasOptions) {
+    // "Has options" is about whether there is anything to CHOOSE, not whether a flag
+    // says so. This read `g.isActive && m.isActive`, neither of which the server sends —
+    // so every dish looked option-less and went straight onto the ticket, and a dish with
+    // a required choice could be added without ever being asked for it.
+    if (!hasOptions(dish)) {
       setLines((current) => addLine(current, dish))
       return
     }
@@ -167,9 +173,9 @@ export function CounterOrderPage() {
                 <h3 className="counter-group-head">{category}</h3>
                 <div className="counter-dishes">
                   {group.map((dish) => {
-                    const hasOptions = (dish.modifierGroups ?? []).some(
-                      (g) => g.isActive && g.modifiers.some((m) => m.isActive),
-                    )
+                    // One shared rule, so the flag on the button and the panel it opens
+                    // cannot disagree. See hasOptions.
+                    const opensPanel = hasOptions(dish)
 
                     return (
                       <button
@@ -180,7 +186,7 @@ export function CounterOrderPage() {
                       >
                         <span className="dk-name">{dish.name}</span>
                         <span className="dk-price">{formatCurrency(dish.price)}</span>
-                        {hasOptions && (
+                        {opensPanel && (
                           <span className="dk-flag" aria-label="has options">
                             ⋯
                           </span>
@@ -398,7 +404,7 @@ export function CounterOrderPage() {
           }
         >
           {(openDish.modifierGroups ?? [])
-            .filter((g) => g.isActive && g.modifiers.some((m) => m.isActive))
+            .filter((g) => (g.modifiers ?? []).length > 0)
             .map((group) => (
               <fieldset key={group.id} className="opt-group">
                 <legend>
@@ -407,7 +413,6 @@ export function CounterOrderPage() {
                 </legend>
                 <div className="opt-list">
                   {group.modifiers
-                    .filter((m) => m.isActive)
                     .map((modifier) => {
                       const chosen = pending.some((m) => m.id === modifier.id)
                       return (

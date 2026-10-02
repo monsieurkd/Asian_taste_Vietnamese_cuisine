@@ -3,6 +3,7 @@ import {
   MAX_QUANTITY,
   addLine,
   clearTicket,
+  hasOptions,
   modifierTotal,
   pricedUnit,
   removeLine,
@@ -32,11 +33,11 @@ import type { MenuItemDetail, Modifier, ModifierGroup } from '../api/menuApi';
 function modifier(overrides: Partial<Modifier> = {}): Modifier {
   return {
     id: 1,
+    modifierGroupId: 10,
     name: 'Extra spicy',
     priceAdjustment: 0,
     displayOrder: 0,
     isDefault: false,
-    isActive: true,
     ...overrides,
   };
 }
@@ -47,24 +48,38 @@ function group(overrides: Partial<ModifierGroup> = {}): ModifierGroup {
     name: 'Spice level',
     minRequired: 0,
     maxAllowed: 1,
+    minSelect: 0,
+    maxSelect: 1,
+    isRequired: false,
     displayOrder: 0,
-    isActive: true,
     modifiers: [],
     ...overrides,
   };
 }
 
 function dish(overrides: Partial<MenuItemDetail> = {}): MenuItemDetail {
+  // The fields here mirror a REAL response from GET /admin/menu/items, field for field.
+  //
+  // This fixture used to carry `isActive`, `isSpicy` and a group-level `isActive` — none
+  // of which that endpoint sends. So the suite was testing a shape that could not occur,
+  // and it passed against code that could not work. A fixture that invents its own
+  // contract is worse than no fixture: it is how a whole screen shipped empty with a
+  // green suite. If this ever fails to match the API, fix the API or the type, never the
+  // fixture.
   return {
     id: 100,
     name: 'Pho Bo',
     price: 17,
+    basePrice: 17,
     categoryId: 1,
     categoryName: 'Noodles',
     isActive: true,
-    isSpicy: false,
+    isAvailable: true,
+    isPopular: false,
     spicyLevel: 0,
     isVegetarian: false,
+    isVegan: false,
+    isGlutenFree: false,
     modifierGroups: [],
     ...overrides,
   };
@@ -210,9 +225,15 @@ describe('options', () => {
     expect(unmetRequiredGroup(withGroups, [modifier({ id: 1 })])).toBeNull();
   });
 
-  it('ignores an inactive required group', () => {
-    const retired = dish({ modifierGroups: [group({ minRequired: 1, isActive: false })] });
-    expect(unmetRequiredGroup(retired, [])).toBeNull();
+  it('ignores an OPTIONAL group, which is a group with no minimum', () => {
+    // This case used to read "ignores an inactive required group" and passed by setting
+    // `isActive: false` on the fixture. The API has never sent a group-level isActive, so
+    // the assertion was true of a shape that does not exist — and the code it justified
+    // skipped EVERY group and never refused anything.
+    //
+    // Optional-ness is `minRequired`, and a group with no minimum is genuinely ignored.
+    const optional = dish({ modifierGroups: [group({ minRequired: 0, maxAllowed: 3 })] });
+    expect(unmetRequiredGroup(optional, [])).toBeNull();
   });
 
   it('replaces the choice in a single-select group', () => {
@@ -243,5 +264,33 @@ describe('options', () => {
     // A modifier from another dish — the API would price it, but it is not this dish's.
     const selected = [modifier({ id: 1 })];
     expect(toggleModifier(withGroups, selected, modifier({ id: 999 }))).toEqual(selected);
+  });
+});
+
+describe('hasOptions — the rule behind the panel', () => {
+  // The counter's grid was EMPTY because it filtered dishes on a field the API never
+  // sends, and then every dish that survived looked option-less for the same reason.
+  // These tests exist because the screen's whole behaviour hangs on this one predicate:
+  // it decides whether a tap opens a panel or drops the dish straight onto the ticket.
+
+  it('is true for a dish with a group that has choices', () => {
+    expect(hasOptions(dish({ modifierGroups: [group({ modifiers: [modifier()] })] }))).toBe(true);
+  });
+
+  it('is false for a dish with no groups at all', () => {
+    expect(hasOptions(dish())).toBe(false);
+  });
+
+  it('is false for a group that HAS no choices', () => {
+    // The seeded menu's "Spice level" range group carries no modifier rows by design.
+    // Counting it as options would open a panel with nothing in it to tap.
+    expect(hasOptions(dish({ modifierGroups: [group({ modifiers: [] })] }))).toBe(false);
+  });
+
+  it('finds the options even when an empty group comes first', () => {
+    const mixed = dish({
+      modifierGroups: [group({ id: 9, name: 'Spice level', modifiers: [] }), group({ id: 11, modifiers: [modifier()] })],
+    });
+    expect(hasOptions(mixed)).toBe(true);
   });
 });

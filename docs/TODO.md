@@ -1765,3 +1765,105 @@ it is recorded as such: there is no ledger table to diff, so it cannot be proven
 documents `ASPNETCORE_ENVIRONMENT=Development dotnet run` as the normal local command. So any
 plain `dotnet run` in this repo connects to a populated database without being asked. That is
 worth a deliberate decision of its own, and it is not mine to make.
+
+---
+
+## 21. The counter screen's empty grid — 2026-10-02
+
+Issue #5, parts (a) and (b). The third part — adding a dish to an EXISTING order — is
+**not** built; see the bottom of this section.
+
+**The dish grid rendered nothing at all.** Measured on the live screen before the fix:
+`dishButtons: 0`, `groupHeads: 0`, `skeletonsShowing: 0`, `gridText: "(empty)"`. The page
+still drew its frame, its ticket panel and its Send button, so it read as a broken screen
+rather than a failed request — the same "renders but says nothing" shape as #4.
+
+### Two separate faults, both "wrong name for a real thing"
+
+**1. The fields did not exist.** `CounterOrderPage` filtered on `d.isActive` and read
+`dish.categoryName`, `dish.price` and `dish.modifierGroups`. The endpoint returned
+`MenuItemSummaryDto`, which carries `isAvailable`, `categoryId`, `basePrice` and a bare
+`hasModifiers` boolean. So `available` was `[]` and the grid mapped over an empty array.
+
+**2. The endpoint served 7 dishes of 82.** `GetAllMenuItemsAdmin` called
+`GetPopularItemsAsync` behind a literal `// TODO: Add IMenuRepository.GetAllItemsForAdminAsync`.
+Fixing the field names alone would have produced a counter screen that renders perfectly and
+cannot sell most of the menu.
+
+Fixed by adding `MenuRepository.GetCounterMenuAsync` — every `is_available` dish, with
+`categoryName` joined from `categories`, `price`, and the option groups assembled from two
+flat queries. `GET /api/admin/menu/items` now calls it and keeps `categoryId` as an optional
+narrowing filter. The two-flat-queries shape is `GetItemByIdAsync`'s, for the reason already
+documented there: Dapper splits multi-mapping on the first column aliased `Id`, and both
+`modifier_groups` and `modifiers` project one.
+
+### The root cause was the TYPE, and the types were fiction
+
+`src/asian-taste-admin/src/api/menuApi.ts` declared `isActive` and `isSpicy` on
+`MenuItemDetail`, `isActive` on `ModifierGroup`, and `isActive` on `Modifier` — **none of
+which the API has ever sent**. So TypeScript accepted every read of them, reported `undefined`
+at runtime, and `npm run build` was green throughout. The types were an aspiration, not the
+wire.
+
+That is why this could not have been caught by reading the code, and why the fix includes
+correcting the interfaces to what the server actually sends, comment by comment.
+
+**Two more bugs fell out of correcting them, which is the useful part:**
+
+3. **Every dish was added without its required choice.** `unmetRequiredGroup` began
+   `if (!group.isActive) continue`. No `isActive` on a group means the guard skipped EVERY
+   group, so the function always returned `null` and its whole purpose — refusing a dish whose
+   required option has not been picked, naming the group — never ran. The same function
+   counted `group.modifiers.filter((m) => m.isActive && ...)`, comparing against `undefined`
+   and counting zero.
+4. **The Menu screen told the owner their whole menu was off.** `MenuManagementPage` renders
+   `!item.isActive` as "Off menu right now" and drives an availability toggle from
+   `item.isActive`. With the field absent, every dish rendered as off the menu and every
+   toggle read `off`. Now bound to `isAvailable`, which is the field the toggle actually flips.
+
+### The test fixture was the same fiction
+
+`counterTicket.test.ts` built its fixtures with `isActive: true` on modifiers and groups, and
+one case was named **"ignores an inactive required group"** — asserting exactly the behaviour
+that was the bug, and passing because it invented its own contract. Correcting the types made
+four of those fixtures stop compiling, which is how they were found. That case is now
+`"ignores an OPTIONAL group, which is a group with no minimum"`, and the `dish()` fixture
+carries a comment saying it mirrors a real response field for field.
+
+**A fixture that invents its own contract is worse than no fixture.** It is how a whole screen
+shipped empty with a green suite.
+
+### What was verified
+
+Against a real database (throwaway container on `:5433`) and through the real UI in headless
+Chrome, after the fix:
+
+| | Before | After |
+|---|---|---|
+| Dishes in the grid | 0 | **82** |
+| Category groups | 0 | **14** |
+| Images in the grid | 0 | **0** (text grid, as asked for) |
+| Options panel for a dish with choices | never opened | opens with its real groups |
+| Dish with no choices | n/a | one tap, no panel |
+| `GET /api/admin/menu/items` | 7 of 82, summary shape | 82 of 82, detail shape |
+
+No 4xx or 5xx anywhere on the screen. `hasOptions` is now one shared rule instead of two
+copies that disagreed with each other and with the server.
+
+Tests: `.test-baseline` 301 -> 305 (4 API guards, all proved to FAIL on the pre-fix source),
+and the admin app 160 -> 164 (4 on `hasOptions`, which had no coverage at all). The existing
+suite catching its own fixtures is the part worth repeating.
+
+### Still not built — part (c), the add-to-existing-order path
+
+**The counter screen can still only take NEW orders.** There is no way to add a dish to an
+order that already exists, which was the original ask ("counter should have menu to add item
+into an order").
+
+Agreed but not implemented: a mode toggle on the one counter screen — **"New order"** or
+**"Add to order #…"** — where the second mode searches for an existing order and loads its
+lines. It is a materially bigger change than (a) or (b): it needs the ticket to start from the
+order's existing contents, a re-price path that goes through `PUT /admin/orders/{id}/items`
+rather than `POST /admin/orders`, and a considered answer for the money when the total moves
+(the `OrderEditor` already models that problem — see `editMoney` — and the counter should not
+invent a second answer). Tracked on #5.

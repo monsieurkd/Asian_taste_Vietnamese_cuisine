@@ -225,6 +225,7 @@ internal static class KitchenTestHarness
         public Task<List<MenuItemSummaryDto>> SearchItemsAdvancedAsync(SearchParametersDto parameters, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<List<MenuItemSummaryDto>> GetPopularItemsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<List<MenuItemSummaryDto>> GetAvailableItemsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<MenuItemDetailDto>> GetCounterMenuAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 
     private sealed class StubNotifier : IOrderNotifier

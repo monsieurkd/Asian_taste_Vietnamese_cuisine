@@ -143,6 +143,23 @@ export function toRequest(
 }
 
 /**
+ * Whether this dish has anything to choose.
+ *
+ * The single decision behind two things the screen does differently: a dish with options
+ * opens a panel before it can be added, and a dish without one goes straight onto the
+ * ticket with the same tap. It lives here rather than being written twice because the two
+ * copies disagreed with each other and with the server — both read `g.isActive`/`m.isActive`,
+ * fields the API does not send, so the answer was always "no options".
+ *
+ * A group with no choices does NOT count. The seeded menu has a "Spice level" range group
+ * that carries no modifier rows by design, and treating that as "has options" would open a
+ * panel containing nothing to tap.
+ */
+export function hasOptions(dish: MenuItemDetail): boolean {
+  return (dish.modifierGroups ?? []).some((g) => (g.modifiers ?? []).length > 0)
+}
+
+/**
  * Whether this dish can be added as it stands.
  *
  * A required option group with nothing selected is the one thing the screen must refuse,
@@ -153,10 +170,16 @@ export function unmetRequiredGroup(dish: MenuItemDetail, selected: Modifier[]): 
   const chosenIds = new Set(selected.map((m) => m.id))
 
   for (const group of dish.modifierGroups ?? []) {
-    if (!group.isActive) continue
+    // `minRequired`, not a validity flag. This line used to read `if (!group.isActive)
+    // continue` and the server has never sent an `isActive` on a group — so the guard
+    // skipped EVERY group, this function always returned null, and a dish whose required
+    // choice had not been picked was added silently. A group with no minimum is the
+    // optional case and is skipped for the reason the next line gives.
     if (group.minRequired <= 0) continue
 
-    const chosen = group.modifiers.filter((m) => m.isActive && chosenIds.has(m.id)).length
+    // No `m.isActive` either: modifiers are filtered server-side, so anything in this
+    // list is selectable. The old check compared against `undefined` and counted zero.
+    const chosen = group.modifiers.filter((m) => chosenIds.has(m.id)).length
     if (chosen < group.minRequired) return group.name
   }
 

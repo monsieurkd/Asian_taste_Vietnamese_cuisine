@@ -138,6 +138,15 @@ public class AdminMenuController : ControllerBase
     /// <summary>
     /// Gets all menu items for admin management.
     /// </summary>
+    /// <remarks>
+    /// Returns the DETAIL shape for the WHOLE available menu, not the summary shape for
+    /// the popular items. It used to call `GetPopularItemsAsync` behind a `// TODO`, which
+    /// meant this endpoint — the one the counter's dish grid is built on — served 7 dishes
+    /// out of 82 and none of the fields that grid reads. A till that can only sell the
+    /// popular items is not a till.
+    ///
+    /// `categoryId` still narrows it, for a caller that wants one category.
+    /// </remarks>
     [HttpGet("items")]
     [ProducesResponseType(typeof(List<MenuItemDetailDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<MenuItemDetailDto>>> GetAllMenuItemsAdmin(
@@ -146,11 +155,15 @@ public class AdminMenuController : ControllerBase
     {
         try
         {
-            // Get all items, optionally filtered by category
-            // TODO: Add IMenuRepository.GetAllItemsForAdminAsync
-            var items = categoryId.HasValue
-                ? await _menuRepository.GetItemsByCategoryAsync(categoryId.Value, cancellationToken)
-                : await _menuRepository.GetPopularItemsAsync(cancellationToken); // Temporary - using popular items
+            var items = await _menuRepository.GetCounterMenuAsync(cancellationToken);
+
+            // Filtered in memory rather than by a second query: the whole menu is one
+            // screen's worth of rows and it is already fetched, so a second round trip to
+            // narrow it would be the slower way to answer the same question.
+            if (categoryId.HasValue)
+            {
+                items = items.Where(i => i.CategoryId == categoryId.Value).ToList();
+            }
 
             return Ok(items);
         }

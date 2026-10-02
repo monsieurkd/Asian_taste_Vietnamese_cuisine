@@ -23,38 +23,79 @@ export interface MenuItemSummary {
   spicyLevel: number
 }
 
+/**
+ * A dish as `GET /admin/menu/items` actually returns it.
+ *
+ * THESE TYPES ARE THE WIRE, NOT AN ASPIRATION, and that distinction is the bug this
+ * comment exists to stop recurring. The interface used to declare `isActive` and
+ * `isSpicy` — neither of which the endpoint has ever sent — so TypeScript accepted
+ * every read of them and reported `undefined` at runtime. A filter on
+ * `d.isActive` therefore removed EVERY dish, which is why the counter's grid was
+ * empty while the screen itself rendered.
+ *
+ * The API is the source of truth: it sends `isAvailable` (not `isActive`),
+ * `basePrice` and a `price` copy, `categoryName`, and `spicyLevel` with no
+ * `isSpicy` flag. Anything read here must appear in a response. When you add a
+ * field, add it to the DTO in `Models/DTOs` first and check it against a real
+ * response — `npm run build` cannot catch a field that was never there.
+ */
 export interface MenuItemDetail {
   id: number
   name: string
   description?: string
+  /** What to charge. The server sends this alongside `basePrice`; they are equal today. */
   price: number
+  basePrice: number
   categoryId: number
+  /** Joined from `categories` — absent from the summary shape, which is why it was null. */
   categoryName: string
   imageUrl?: string
+  /**
+   * Whether the shop has run out. This is the availability flag.
+   *
+   * `isActive` is a SECOND, separate flag that the API derives as constantly true for
+   * anything it returns, because the query already filters to available dishes. It is
+   * kept so the menu screen's on/off switch reads one field name, but `isAvailable` is
+   * the truth about stock.
+   */
   isActive: boolean
-  isSpicy: boolean
+  isAvailable: boolean
+  isPopular: boolean
   spicyLevel: number
   isVegetarian: boolean
+  isVegan: boolean
+  isGlutenFree: boolean
   modifierGroups: ModifierGroup[]
 }
 
 export interface ModifierGroup {
   id: number
   name: string
+  /** Minimum choices that must be picked. 0 means the group is optional. */
   minRequired: number
   maxAllowed: number
+  minSelect: number
+  maxSelect: number
+  /**
+   * Whether a choice is REQUIRED. Not a validity flag.
+   *
+   * There is no `isActive` on a group: the server never sends one, and the counter used
+   * to skip groups whose `isActive` was undefined — silently dropping every option from
+   * every dish, so "Add to order" refused with "Choose a required option" for a group it
+   * could not render.
+   */
+  isRequired: boolean
   displayOrder: number
-  isActive: boolean
   modifiers: Modifier[]
 }
 
 export interface Modifier {
   id: number
+  modifierGroupId: number
   name: string
   priceAdjustment: number
   displayOrder: number
   isDefault: boolean
-  isActive: boolean
 }
 
 // Request DTOs

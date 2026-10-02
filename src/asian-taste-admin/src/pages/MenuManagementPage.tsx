@@ -77,7 +77,7 @@ export function MenuManagementPage() {
     })
   }, [items, categoryId, query])
 
-  const offCount = items.filter((item) => !item.isActive).length
+  const offCount = items.filter((item) => !item.isAvailable).length
 
   return (
     <>
@@ -172,9 +172,13 @@ export function MenuManagementPage() {
                   <strong style={{ fontSize: 15 }}>{item.name}</strong>
                   <p className="meta" style={{ margin: "2px 0 0" }}>
                     {item.categoryName}
-                    {item.isSpicy && item.spicyLevel > 0 ? ` · heat ${item.spicyLevel}/5` : ""}
+                    {item.spicyLevel > 0 ? ` · heat ${item.spicyLevel}/5` : ""}
                   </p>
-                  {!item.isActive && (
+                  {/* `isAvailable`, not `isActive`. The API has never sent an `isActive`
+                      flag, so `!item.isActive` was true for every dish and this screen
+                      told the owner their whole menu was off. `isAvailable` is the field
+                      the toggle below actually flips. */}
+                  {!item.isAvailable && (
                     <p className="field-error" style={{ margin: "4px 0 0" }}>
                       Off menu right now
                     </p>
@@ -188,14 +192,14 @@ export function MenuManagementPage() {
                 <label className="switch">
                   <input
                     type="checkbox"
-                    checked={item.isActive}
+                    checked={item.isAvailable}
                     disabled={toggle.isPending}
-                    aria-label={`Mark ${item.name} ${item.isActive ? "unavailable" : "available"}`}
+                    aria-label={`Mark ${item.name} ${item.isAvailable ? "unavailable" : "available"}`}
                     onChange={(e) => toggle.mutate({ id: item.id, isActive: e.target.checked })}
                   />
                   <span className="track" aria-hidden="true" />
                   <span className="switch-label" style={{ fontSize: 12 }}>
-                    {item.isActive ? "Available" : "Off"}
+                    {item.isAvailable ? "Available" : "Off"}
                   </span>
                 </label>
 
