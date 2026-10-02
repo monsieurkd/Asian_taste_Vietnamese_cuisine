@@ -30,6 +30,12 @@ const ICONS = {
       <path d="M3.5 9h17M8 4.5v15" />
     </>
   ),
+  kitchen: (
+    <>
+      <path d="M4 20a8 8 0 0 1 16 0" />
+      <path d="M12 12v4M9.5 8.5c0-1.3 1.1-1.7 1.1-2.8M14 8.5c0-1.3 1.1-1.7 1.1-2.8" />
+    </>
+  ),
   out: (
     <>
       <path d="M14 4h5v16h-5" />
@@ -48,6 +54,9 @@ function Icon({ paths }: { paths: React.ReactNode }) {
 }
 
 const NAV = [
+  // Back of house first: it is where the kitchen spends its shift. The dashboard is the
+  // manager's overview, and burying the working screen under it would cost a tap every time.
+  { to: "/kitchen", label: "Back of house", icon: ICONS.kitchen },
   { to: "/dashboard", label: "Dashboard", icon: ICONS.grid },
   { to: "/counter", label: "Counter", icon: ICONS.counter },
   { to: "/orders", label: "Orders", icon: ICONS.list },

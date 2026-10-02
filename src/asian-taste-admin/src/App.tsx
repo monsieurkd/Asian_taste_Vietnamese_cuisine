@@ -11,6 +11,7 @@ import { OrdersPage } from "@/pages/OrdersPage"
 import { OrderDetailPage } from "@/pages/OrderDetailPage"
 import { MenuManagementPage } from "@/pages/MenuManagementPage"
 import { CounterOrderPage } from "@/pages/CounterOrderPage"
+import { KitchenPage } from "@/pages/KitchenPage"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,6 +61,9 @@ function App() {
                 list: it is used standing up, with a customer waiting, and sharing a
                 page with the table would put a search box in the way. */}
             <Route path="/counter" element={<CounterOrderPage />} />
+            {/* Back of house: the kitchen's own workspace for WORKING orders, as opposed to
+                /orders which is for FINDING one. Different question, different screen. */}
+            <Route path="/kitchen" element={<KitchenPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
