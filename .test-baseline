@@ -30,7 +30,7 @@
 # The same change ADDED tests for the order flow itself (admin column mapping, the
 # real payment state, the pickup estimate, modifier mapping, the local day boundary)
 # and those more than replaced the deleted coverage in the areas that matter.
-271
+296
 
 # Raised 170 -> 174 on 2026-09-25, in the same commit as four tests for a defect
 # found in production by the deployment probe: StripePaymentVerificationTests pins
@@ -65,3 +65,10 @@
 # order's dishes cannot be ticked, a line from another order is refused, and a counter
 # order with no email is honestly reported as "ready, nobody told"), and 4 added to the
 # admin-query column guard for the new line-progress projection.
+
+# Raised 271 -> 296 for the back-of-house workflow (§18): 25 tests on the kitchen's own
+# rules — three cook states, per-dish attribution, a note with its author, a hold that
+# does not touch the stage, and the activity log written on the same path as the change.
+# The one that matters most is that a ticket with EVERY dish cooking is still not ready:
+# emailing a customer to collect food that does not exist yet is the worst mistake
+# available in that file.
