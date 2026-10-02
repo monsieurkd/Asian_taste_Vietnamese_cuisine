@@ -1603,3 +1603,37 @@ sentences ("admin marked Homemade Dimsim (serve of 3) as done.").
 - **No rostering or staff accounts per person.** Attribution is whatever username is signed
   in, which is currently the shared `admin` account — so the log says "admin", not "Mai",
   until each person has their own login.
+
+### The deploy that nearly did not ship, and why
+
+Worth recording, because the failure was invisible locally and the cause is a trap in this
+repo's own tooling.
+
+`e2a32bc` added `KitchenWorkflowTests.cs` at **615 lines in one commit**, over the
+repository's 600-line single-file limit. `check-ci-integrity.sh` fails on that, and the
+Deploy workflow waits for CI to succeed — so **CI and Deploy both went red on `main` and
+the back-of-house work did not reach production**. Confirmed after the fact:
+
+```
+gh run view --log-failed
+  FAIL: 1 CI-integrity problem(s)
+    - single file changed 615 lines (> 600): .../KitchenWorkflowTests.cs
+```
+
+**Why it was missed.** Every commit in this session printed
+`PASS: guardrails intact and the change is reviewable` — but that line comes from the
+pre-commit hook, which runs `check-ci-integrity.sh --static-only`, and `--static-only`
+**skips the size tripwire by design** (it says so in its own output: *"the commit-diff size
+tripwire did not run. CI runs it on the branch"*). The full check has to be run
+deliberately. A green pre-commit hook says nothing about size.
+
+The fix is the readable outcome the limit asks for rather than a raised threshold: the
+file was split **by subject** — `KitchenTestHarness.cs` (the shared fakes, extracted so two
+suites share one definition of what the real repository does), `KitchenWorkflowTests.cs`
+(a dish's states and the activity log) and `KitchenTicketTests.cs` (a note, a hold, the
+board's counts). Now 280, 204 and 182 lines, with all 296 API tests unchanged and passing.
+
+**The habit worth keeping:** after pushing, check the actual run
+(`gh run list --json conclusion,workflowName,headSha`), and run
+`./scripts/check-ci-integrity.sh` — without `--static-only` — before a push that adds a
+large file.
