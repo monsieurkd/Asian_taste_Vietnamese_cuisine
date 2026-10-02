@@ -1379,7 +1379,7 @@ found after every unit test passed.
 | Per-dish done marks | `order_items.is_completed` / `completed_at` (migration 16) | A cook ticks each dish off. Reversible, and unticking never moves an order backwards. |
 | Finish-on-last-dish | `OrderService.SetItemCompletedAsync` | The last dish moves the order to Ready. Decided in one place, so no caller can bypass it. |
 | "Your order is ready" email | `OrderEmailQueue` + `SendGridEmailService` | Sent AT MOST ONCE, claimed against `orders.ready_notified_at`. |
-| Ticket dish list | `DashboardPage.tsx`, `lib/itemProgress.ts` | Each board ticket ends with its dishes; each dish is a one-tap control. |
+| Ticket dish list | `components/orders/OrderItems.tsx` | Each dish is a one-tap control, on the board, the Orders row (expandable) and the ticket page — one component, so the three cannot disagree. |
 | Counter order API | `POST /api/admin/orders` | A staff-created walk-in order, priced from the current menu, no payment provider involved. |
 | Counter screen | `CounterOrderPage.tsx`, `lib/counterTicket.ts` | Compact tap-to-add dish grid and a running ticket. |
 
@@ -1405,7 +1405,17 @@ seconds for their poll.
 Two more the owner set directly: **staff-created orders bypass the trading-hours gate** (a
 person with a tablet is proof the shop is open, and the gate would refuse a walk-in at
 9:55pm — verified live: the public checkout returned 409 at the same hour the counter path
-accepted), and **ticks live on the kitchen board's ticket only**, not on the Orders table.
+accepted), and the ticks were scoped to the kitchen board's ticket.
+
+**That last one was corrected.** "The admin view" reasonably means the Orders table and
+the ticket page, and on those screens the same order showed its dishes as plain text with
+nothing to press — which reads as a broken feature rather than a scoped one. The list and
+its tick are now one component (`components/orders/OrderItems.tsx`) used by all three
+screens. The two deliberate differences that remain: the **board is optimistic** (a cook
+presses it twice a second, and a round trip under the finger makes the pass feel broken)
+while the **Orders list is not** (used one-handed mid-phone-call, where a row that changes
+before the server agrees is worse than half a second of latency); and the board's list is
+always open while the table's is one press away.
 
 ### The four defects a real database found
 
@@ -1479,6 +1489,12 @@ Probe orders 30 and 31 were deleted afterwards.
   call. Making that retryable is a real change, not a tweak.
 - **A counter order has no `customers` row.** Anything that assumes every order has a
   customer id will miss counter orders — the name lives on the order itself.
+- **Most orders in the development database have NO items at all.** 23 of the 25 rows in
+  `orders` were seeded straight into that table by older scripts without their
+  `order_items`, so their tickets have nothing to cook. This is a data condition, not a
+  bug — check `select count(*) from order_items where order_id = N` before believing the
+  dish list is broken. The board now says "This order has no items recorded." instead of
+  rendering nothing, precisely so the two cases are distinguishable.
 - **The counter screen prices locally and sends no price.** If you ever add a field to
   `toRequest`, check it is not money: the whole guarantee is that the server re-prices from
   the current menu.

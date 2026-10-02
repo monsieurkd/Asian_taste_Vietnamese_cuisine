@@ -89,8 +89,19 @@ explained commit.
 
 ## The kitchen's dish-by-dish flow (docs/TODO.md §17)
 
-The unit of work is **one dish**, not one order. Each board ticket renders its lines and
-each line is a one-tap control (`DashboardPage.tsx` + `lib/itemProgress.ts`).
+The unit of work is **one dish**, not one order. One component renders the list —
+`components/orders/OrderItems.tsx` — and it is used by the **kitchen board**
+(`DashboardPage`), the **Orders table** (expand a row) and the **ticket page**
+(`OrderDetailPage`). It is shared rather than copied because two renderers drift, and here
+the drift would be a dish tickable on one screen and not another, which staff read as the
+app being unreliable. Pass `onTick` and it is interactive; omit it and it renders plain
+rows.
+
+The two screens differ on purpose in exactly two ways: the **board's tick is optimistic**
+(a cook presses it twice a second and a round trip under the finger makes the pass feel
+broken) and the **Orders list's is not** (used one-handed mid-phone-call, where a row that
+changes before the server agrees is worse than half a second of latency); and the board's
+list is always open while the table's is one press away.
 
 Three rules live in **one** place, `OrderService.SetItemCompletedAsync`:
 
