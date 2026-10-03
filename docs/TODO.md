@@ -2621,3 +2621,51 @@ a fourth item blaming you for something I had not investigated. **Before recordi
 needs the owner, check whether the inputs already exist.** Three of the nine defects found this
 session were found by running the software rather than reasoning about it; this one was found
 by running `find`.
+
+---
+
+## 30. Wrapped here — 2026-10-02
+
+Stopping with the tree clean and everything pushed. This is the state to pick up from.
+
+### The UI is yours to review
+
+**You will look at the interface yourself.** Nothing below is waiting on me to touch it.
+
+Two screens changed the most and are worth the most attention:
+
+- **`/counter`** — rebuilt twice in this session. It has a **collapsible console rail** (the
+  chevron at the top of the dark sidebar), a **category rail** down the left of the dishes,
+  a **pinned bill** with the total and Save always visible, and an **Edit** button on each
+  bill line for its options and note. Verified mechanically at five viewports — the page
+  does not scroll at all during an order — but *whether it feels fast at a real counter is
+  not something a measurement can tell you.* That is the review worth doing.
+- **`/kitchen`** — back of house and the dashboard are now one board: stage columns, with
+  the tap-to-cross-out dish list, Hold, History and per-dish notes on each ticket.
+
+Both are also reachable with the rail collapsed, which is the state a counter tablet will
+probably live in.
+
+### What is outstanding, and who it needs
+
+| | Item | Needs |
+|---|---|---|
+| **T1a** | Pick two storefront photos from the ten staged in `/tmp/photo-review` | **your eye** — I can confirm they are appetising and well-framed, not that they are Asian Taste's food |
+| **T1b** | Rotate the Neon password | **you** — `neonctl` has no reset command, so this is console-only |
+| **#9** | Admin deploy verification | **~30 min of mine**, once the admin Vercel project id is recorded |
+| **#7 / #8** | Photos, and the `/menu` fold | **your photos→ then mine**, one piece of work |
+| Strike / domain / live mode | Three console tasks | **you** |
+| D1–D3, D5–D6 | Five decisions in §9 | none urgent, all have defaults |
+
+### The measurement, so the next person does not have to take my word for it
+
+`/tmp/photo-review` holds the ten photos. Everything else is in git — §20–§29 record each
+change with its verification, including the numbers: 4,070px of scrolling before the counter
+redesign and 0 after; 7 of 82 dishes served before the counter menu fix and 82 after; four
+defects found by running the code, and two that were about money.
+
+### Verification as of this commit
+
+306 API tests and 188 frontend tests pass, nothing skipped; both apps build and lint clean;
+CI, Deploy and `check-deployment-health.sh` all green; no containers, servers or scratch
+files left behind; the working tree is clean and `main` is current.
