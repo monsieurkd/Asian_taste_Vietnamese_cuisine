@@ -2276,3 +2276,111 @@ The measurement stands as evidence on #8; only the fix waits.
   what a screen reader reads out.
 - **Then re-measure `/menu`'s fold** and decide the hero's height against real content, which
   is the work #8 is actually about.
+
+---
+
+## 26. T1: the secret audit's three findings, re-verified — 2026-10-02
+
+T1 has been on this list since before the current work. It was re-checked against the live
+state rather than trusted from the September document, and **one of the three findings was
+fixable in code and is now fixed**. The Neon rotation is not, and still needs the console.
+
+### 1. The JWT signing key — FIXED (commit `d5031ca`)
+
+The audit listed this as "low today, but a real latent risk" and recommended replacing the
+literal with a placeholder. Re-checking found it was **worse than described**: the same
+public string was committed in **two** places, and the second one was a fallback that made
+the risk real rather than theoretical.
+
+```
+src/AsianTaste.API/appsettings.json    "SecretKey": "AsianTasteSecretKey2025For..."
+
+src/AsianTaste.API/Program.cs
+    var jwtSecretKey = builder.Configuration["Jwt:SecretKey"]
+        ?? "AsianTasteSecretKey2025ForJWTTokenGenerationMin32Chars";
+```
+
+That `??` is the whole problem. A deployment whose `Jwt__SecretKey` went missing — a dropped
+secret, a recreated app, a bad `fly.toml` — would **silently** sign every admin token with a
+value committed to this repository. Logins would work, tokens would validate, and anyone who
+had read the source could mint an admin JWT. Nothing would fail. Blanking the JSON alone
+would not have helped, because the C# fallback supplied the same string.
+
+**Production was never exposed** — `fly secrets list` shows `Jwt__SecretKey` Deployed, so the
+live signer is the environment variable, confirmed again after deploy. The exposure was
+always the fallback.
+
+Now `Program.cs` refuses to start instead, following the trade it already makes for the mock
+payment gateway ("so even an explicit setting cannot turn a production deployment free"):
+
+| Case | Behaviour |
+|---|---|
+| No key | refuse, naming `Jwt__SecretKey` |
+| Key < 32 chars | refuse — a placeholder cannot pass as a real secret |
+| The committed placeholder, outside Development | refuse, naming the value |
+
+All four verified by running the built app: three refusals with exit 134 and the intended
+message, plus Development starting normally and Production with a real key getting past the
+check to the database. The production deploy afterwards succeeded and `/healthz` returns 200,
+which is the live proof that the deployed secret passes all three.
+
+**One consequence found the hard way:** `appsettings.Development.json` is gitignored, and the
+local copy held the committed placeholder — so the new check refused it and would have
+refused every existing local setup. The local file now matches what its own tracked template
+already recommended, and the placeholder check is scoped to non-Development environments,
+where the risk actually is.
+
+**A first attempt was removed rather than shipped.** It generated a random per-run key for
+Development. Its console notice never appeared in the logs and the behaviour could not be
+explained from two log lines and a stale build; an unexplained mechanism in a startup path is
+worse than the small inconvenience it avoided, so it went and `Program.cs` says so. Chasing
+it also cost several turns of confusion that a rebuilt DLL would have prevented.
+
+### 2. The Stripe test key — still outstanding, low stakes
+
+`sk_test_51…` is recoverable from history (`bfface9`, removed by `9e51994`). It is a test key,
+so it cannot move real money. Rotate it in the Stripe dashboard; it costs nothing.
+
+**Re-verified, and this was worth doing:** `sk_live_` also appears in history across three
+commits, which the September audit did not record. It is **not a credential** — every
+occurrence is the bare prefix `sk_live_...` inside documentation examples showing how to set
+the key. No live Stripe key was ever committed. Recorded so the next audit does not
+re-investigate it.
+
+### 3. The Neon database password — STILL OUTSTANDING, and still the one that matters
+
+**`neonctl` cannot rotate a password and cannot tell you whether one was.** Its `roles`
+subcommand has only `list`, `create` and `delete` — there is no password reset, and no
+rotation timestamp is exposed. Checked directly.
+
+What can be said: the role `neondb_owner` was created **2026-09-12** and has not been
+recreated, so there is no evidence of rotation. Rotation does not recreate a role, so this is
+weak evidence of *not* having rotated rather than proof — but the lack of any signal is
+consistent with T1 being open.
+
+**The exposure today is limited only by the repository being PRIVATE** (verified: private,
+0 forks). That is the entire mitigation, and it disappears the moment the repository is made
+public — which is the thing the audit was written to enable.
+
+### What to do, in order
+
+1. **Rotate the Neon password.** Neon console → project `Asian-taste-website` →
+   Roles → `neondb_owner` → Reset password. Then update the Fly secret:
+
+   ```bash
+   # Npgsql does NOT accept the postgresql:// URI Neon displays. Convert it to
+   # key=value form first — see .secrets.local.example for the exact shape.
+   fly secrets set --app asian-taste-api \
+     "ConnectionStrings__DefaultConnection=Host=ep-xxx-pooler.ap-southeast-2.aws.neon.tech;Database=neondb;Username=neondb_owner;Password=NEW_PASSWORD;SSL Mode=Require;Trust Server Certificate=true"
+   ```
+
+   The API restarts itself and runs its migration sequence at boot. Confirm with
+   `curl -s https://asian-taste-api.fly.dev/health/db`.
+
+   Use the `-pooler` host — serverless Postgres bills per connection and the API opens one
+   per request.
+
+2. **Rotate the Stripe test key** (test mode, no money at risk).
+
+3. **Nothing to do for the JWT key** — done above. Production was already using a real
+   secret, and now a missing one cannot pass silently.
