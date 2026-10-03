@@ -10,19 +10,35 @@ live. **v1 is card + Apple Pay, pickup only** — and the storefront now offers 
 pickup, so nothing can be ordered that the shop cannot serve (§13). The design set
 has been rebuilt into both front-ends (§11).
 
-On 2026-09-25 the order workflow was taken end to end — how the stages are named,
-what each screen says about payment and timing, and what data a screen may show —
-and the codebase was cleaned around it. **§13 is the record of what changed and
-which decisions it implements.** Two long-standing promises were kept on the way:
-the kitchen ticket now shows the real payment state and the time an order is wanted.
+Earlier sessions, kept because the reasoning still holds: **§13** (2026-09-25) took the
+order workflow end to end — how the stages are named, what each screen says about payment
+and timing — and **§17** (2026-10-01) gave the kitchen its own unit of work, so a ticket
+carries its dishes and ticking the last one finishes the order. §17 also records four
+defects that shipped green and were found by running the code against a real database.
 
-On 2026-10-01 the kitchen gained its own unit of work. **§17 is the record.** A
-ticket now carries its dishes and a cook ticks each one off as it leaves the pass;
-when the LAST dish on an order is ticked the order finishes itself and the customer
-is emailed "ready to collect" — once, and verified live. There is also a counter
-screen for face-to-face orders, with a compact tap-to-add dish grid. Four defects
-in that work shipped green and were found by running it against a real database;
-§17 lists all four, because they are the same kind of bug this repo keeps hitting.
+**2026-10-02, the last working session, §20–§28.** The four things reported at its start
+were all traced to real causes and fixed, and each turned up a bug nobody had asked about:
+
+- **The console's "Open" button** was not broken — the API 500'd on any order whose dishes
+  had no modifiers, because the query mapped onto an untyped row. **§20.**
+- **The counter screen's dish grid rendered nothing at all**, and the endpoint behind it
+  served 7 dishes of 82. Fixing that exposed the Menu screen showing the whole menu as
+  "off the menu". **§21.**
+- **Back of house and the Dashboard were the same screen twice**, neither complete. They
+  are now one board with the stage columns and the tap-to-cross-out dishes. **§22.**
+- **The UI quality loop was grading against a design set that does not exist** — 15 of its
+  23 colours were in neither app, and it demanded a typeface the code had retired. A judge
+  scoring correct code 4/10 reads as the code's fault, which is why this hid for so long.
+  **§23**, with a guard so it cannot recur.
+- **The counter can now add a dish to an existing order** (§24), taking an order **needs no
+  scrolling at all** (§27), and **the sidebar collapses** so that width goes to the dishes
+  and the bill (§28).
+
+Six defects were found by running the software rather than reading it, which is the only
+thing that has ever found bugs here. Two are worth naming because they were money:
+`GetOrderByIdAsync` never selected its payment columns, so **every** edited order was
+reported as never paid; and a bill line could have been re-priced on top of options it
+already had.
 
 Five items from §9 were closed on 2026-09-20 without needing you (refund
 recording, order-number search, the silently-ignored `SavePaymentMethod`, order
@@ -36,13 +52,16 @@ they come first — everything after them is a decision rather than a cleanup.**
 
 | # | Item | Effort | Why it matters |
 |---|---|---|---|
-| **T1** | **Rotate the Neon database password** | ~5 min | A fragment of the live password was sitting in an untracked file at the repo root (`hi.md`). It was never committed and the file is deleted — but `docs/SECRET-AUDIT.md` records the same credential as recoverable from git history. **Until it is rotated, treat the production database password as public.** Neon console → your project → Roles → reset password → update the Fly secret. Nothing in the app can do this for you. |
+| **T1a** | **Supply two real food photographs** | needs photos from you | Both storefront images are photographs of **a tablet screen** — `hero.jpg` is this app's own Orders page, `family.jpg` is the **Uber Eats merchant app showing "Asian Taste · Closed until 10:00AM"**. Their alt text describes food that is not there. They sit in the two most prominent slots on `/` and `/menu`. Issues **#7** and **#8** are both blocked on this, and **#8 (no dish or price above the fold on `/menu`) is fixed as part of the same job.** Details and a checklist in §25. |
+| **T1b** | **Rotate the Neon database password** | ~5 min | Still the one with real consequences. A fragment of the live password is recoverable from git history (`docs/SECRET-AUDIT.md`), and **`neonctl` cannot rotate it or even tell you whether it was** — its `roles` command is list/create/delete only. The role is unchanged since 2026-09-12, so there is no evidence of rotation. **The repository being private with 0 forks is currently the only thing limiting the exposure.** Exact steps in §26. |
+| ~~T1c~~ | ~~The committed JWT signing key~~ — **DONE 2026-10-02** | — | Was worse than the September audit described: the same public string was committed **twice**, once as a C# fallback in `Program.cs`, so a deployment with a missing `Jwt__SecretKey` would have silently signed admin tokens with a value in this repository. Production was never exposed. Now **three startup checks** refuse rather than degrade quietly; `appsettings.json` carries an empty value. Fixed in `d5031ca`, verified live by the deploy passing. See §26. |
 | ~~T2~~ | ~~Cancel the probe orders on the kitchen board~~ — **DONE 2026-10-02** | — | Nine synthetic orders were sitting as live tickets (**ids 2, 16-21, 23, 24** — "Probe Test", "Probe Fixed", "Close Probe", "Final Probe", "GST Probe", "Allergy Probe", "Gateway Probe"). All were cancelled on 2026-10-02, leaving only the owner's four real orders (8, 13, 14, 15). The original instruction listed only ids 16-21; the other three were found by querying for `customer_email like '%@example.com'` and were the same class of test data. |
 | **T3** | **Confirm the new hours are right** | ~1 min | I corrected the trading hours to what §10 says you published, and the app now REFUSES orders outside them. **If a refusal is ever wrong, tell me** — the rule is deliberately strict, so a wrong hour costs an order rather than sending food out at 3am. Current: Mon 10–2:30, Tue–Sun 10–4 and 4:30–9. See §15. |
 | **2** | Turn off Klarna, Zip and Link; turn on Google Pay | ~2 min in Stripe | **They would be offered to customers today.** Anything switched on in the dashboard appears at checkout with no review |
 | **3** | Buy a domain (cheap path in §3) | ~$15/yr | The only thing between you and Apple Pay. A `*.vercel.app` host cannot be registered |
 | **4** | Switch Stripe to live, using the checklist | ~15 min + ~50¢ | Prove it works with one real order, then refund it |
 | **6** | Decide admin-dashboard exposure | a decision | It is a public URL with a login page |
+| **9** | **Nothing verifies the admin app deployed** | ~30 min | The Deploy workflow polls **only the customer Vercel project**, and the admin app's production URL is not recorded anywhere in this repo. A broken admin build could reach production with every check green, and the console is the surface staff use every shift. Now tracked as **[issue #9](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues/9)**. Found in §22. |
 | **12** | Try Paseo from your phone | ~5 min | Free; your laptop is the sandbox |
 | **D1–D3, D5–D6** | Five decisions in §9 | a decision each | Backups, the order rate limit, refunds in the UI, SMS for the ready message, and card payment on the counter tablet. All have a working default, so nothing is blocked. **D4 (saved cards) was settled: removed** — see §13 |
 
