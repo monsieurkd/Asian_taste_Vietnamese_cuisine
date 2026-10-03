@@ -428,3 +428,57 @@ describe('loading an existing order onto the counter', () => {
     expect(trimmed[0].menuItemId).toBe(16);
   });
 });
+
+describe('re-pricing a line when its options are edited', () => {
+  // Editing a line's options must price from the DISH, not from the line's current total.
+  // Pricing on top of a total that already contains the old options would charge for them
+  // twice — the same money bug the phone-edit path had to avoid (§26).
+
+  it('records the dish price on a line when it is added', () => {
+    const t = addLine([], dish({ id: 5, price: 15.5 }), [modifier({ id: 1, priceAdjustment: 4 })]);
+    expect(t[0].basePrice).toBe(15.5);
+    expect(t[0].unitPrice).toBe(19.5);
+  });
+
+  it('re-prices from the base when an option is REMOVED', () => {
+    const line = addLine([], dish({ price: 15.5 }), [modifier({ id: 1, priceAdjustment: 4 })])[0];
+    const updated = { ...line, modifiers: [], unitPrice: pricedUnit(line.basePrice!, []) };
+    expect(updated.unitPrice).toBe(15.5);
+  });
+
+  it('re-prices from the base when an option is REPLACED, not compounded', () => {
+    // The regression this exists for: 15.50 + 4.00 = 19.50, then swapping to +3.00 must be
+    // 18.50 — NOT 19.50 + 3.00 = 22.50, which is what pricing off unitPrice would give.
+    const line = addLine([], dish({ price: 15.5 }), [modifier({ id: 1, priceAdjustment: 4 })])[0];
+    const updated = { ...line, unitPrice: pricedUnit(line.basePrice!, [modifier({ id: 2, priceAdjustment: 3 })]) };
+    expect(updated.unitPrice).toBe(18.5);
+    expect(updated.unitPrice).not.toBe(22.5);
+  });
+
+  it('derives a base price when loading an existing order that has modifiers', () => {
+    const t = loadOrder({
+      items: [
+        {
+          id: 1, menuItemId: 17, menuItemName: 'Pho', quantity: 1, unitPrice: 19.5,
+          modifiers: [{ modifierId: 65, modifierName: 'Extra protein', priceAdjustment: 4 }],
+        },
+      ],
+    });
+    // 19.50 charged, 4.00 of it the option -> the dish itself is 15.50.
+    expect(t[0].basePrice).toBe(15.5);
+    expect(t[0].unitPrice).toBe(19.5);
+  });
+
+  it('derives the same base for a loaded line with no modifiers', () => {
+    const t = loadOrder({ items: [{ id: 1, menuItemId: 16, menuItemName: 'Banh Mi', quantity: 1, unitPrice: 9 }] });
+    expect(t[0].basePrice).toBe(9);
+  });
+
+  it('rounds the derived base to cents', () => {
+    // A float artefact here becomes a wrong number on a bill the customer reads.
+    const t = loadOrder({
+      items: [{ id: 1, menuItemId: 1, menuItemName: 'X', quantity: 1, unitPrice: 20.15, modifiers: [{ modifierId: 1, modifierName: 'Y', priceAdjustment: 0.1 }] }],
+    });
+    expect(t[0].basePrice).toBe(20.05);
+  });
+});

@@ -2472,3 +2472,77 @@ re-render when the menu changes.
   the redesign does not change that assumption.
 - **No favourites/quick-add row** for the dishes a shop sells most. That was not asked for,
   and the rail plus one-tap add is the fast path this change was about.
+
+---
+
+## 28. The console rail collapses, and a bill line can be edited — 2026-10-02
+
+Three asks: make the sidebar collapsible, let a bill line be edited, and spend the reclaimed
+space on information rather than air.
+
+### The rail collapses to icons, and remembers
+
+The console rail (Board / Counter / Orders / Menu) toggles between **244px and 68px**, giving
+every screen back ~176px. Verified: at 1600px the main area grows **1356px → 1532px**, and the
+counter shows **5 dishes per row instead of 4** at the same tile size (156×77px, so no tap
+target shrank).
+
+Two details that are not obvious:
+
+- **The state is remembered per device** in `localStorage`. A shared counter tablet that has
+  been collapsed stays collapsed, without changing the office laptop.
+- **Collapsed labels are `display: none`, not width-zero.** A clipped label is still read by
+  a screen reader and still occupies layout on some engines; the accessible name comes from
+  each link's `title` instead, so a collapsed icon is announced as "Counter" and not as an
+  unlabelled link. The toggle is its own button rather than making the whole rail clickable —
+  a stray tap while carrying a tablet should not resize the screen.
+
+### A bill line can be edited in place
+
+Each line on the bill now has an **Edit** button that reopens the **same options panel** used
+when adding the dish, with the line's current choices already selected. Confirming replaces
+that line's options and note **in place** — its position and quantity are untouched.
+
+**One panel, two outcomes**, deliberately. Editing options and adding a dish differ only in
+where the result goes, so they share the whole dialog: the option groups, the required-choice
+refusal, the note field. A second edit dialog would be a second copy of those rules, and the
+two would drift the way the two boards did (§22).
+
+**The money bug this had to avoid.** A `TicketLineDraft` stored only `unitPrice` — the price
+*with* options applied. Re-pricing an edit from that would charge for the options the line
+already had, a second time. The draft now carries `basePrice`, and `loadOrder` derives it for
+an existing order by subtracting the modifiers already on the line.
+
+Verified live: a dish at **$8.50** with *Extra protein* (+$4.00) prices at **$12.50**; editing
+it to *Extra soup* (+$3.00) gives **$11.50**. Compounding would have produced $15.50. Six new
+tests pin this, including the exact regression.
+
+### The reclaimed width goes to the bill
+
+The bill column was a fixed 400px, so collapsing the rail widened the *menu* and left the bill
+where it was — wrong, because a big order is exactly what needs the room. It is now
+`minmax(380px, 27%)`, so it grows with the rail collapsed (**380px → 396px**) and fits **5 line
+rows before scrolling instead of 4**, and it returns to a fixed 400px below 1400px where a
+share would starve the dish grid.
+
+### Verified
+
+| | Result |
+|---|---|
+| Rail collapse | 244 → 68px; 4 icons kept; labels hidden but each link still named; **persists across a reload** |
+| Dishes per row | **4 → 5** at the same 156×77px tile |
+| Bill width | **380 → 396px** collapsed; 4 → 5 lines before scroll |
+| Editing a line | panel reopens with the current choice **pre-selected**; button reads "Update this item" |
+| Re-pricing | $8.50 + $4.00 = $12.50 → swapped to +$3.00 = **$11.50**, not $15.50 |
+| Whole flow | `maxScrollY = 0` at 1600×900 and 1024×768, Save visible throughout, order sent |
+| No 4xx/5xx | on the screen |
+
+188 frontend tests (+6) and 306 API tests pass, nothing skipped; both apps build and lint clean.
+
+### Not done here
+
+- **The rail does not collapse automatically on a narrow screen.** It is a per-device choice,
+  which is what was asked for; a media query would fight the remembered setting.
+- **A line's dish cannot be swapped** (pho → laksa) — only its options and note. That was the
+  agreed reading of "edit that specific item"; swapping the dish is a different feature.
+- **No keyboard shortcut for collapsing.** Unverified either way, and the button is reachable.

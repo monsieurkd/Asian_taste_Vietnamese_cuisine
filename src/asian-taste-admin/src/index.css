@@ -301,6 +301,78 @@
     grid-template-columns: 244px 1fr;
     background: var(--color-bg);
   }
+  /* Collapsed: the rail keeps its icons and gives up everything else. 244px -> 68px, so
+     every screen wins ~176px, which the counter spends on more dishes per row and more
+     bill lines on screen. Width transitions so the reflow is legible rather than a jump. */
+  .admin[data-rail='collapsed'] {
+    grid-template-columns: 68px 1fr;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .admin {
+      transition: grid-template-columns 0.16s ease;
+    }
+  }
+
+  .rail-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .rail-toggle {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid color-mix(in oklch, var(--color-surface) 24%, transparent);
+    border-radius: var(--radius-sm, 8px);
+    background: transparent;
+    color: var(--color-on-dark-dim);
+    cursor: pointer;
+  }
+  .rail-toggle:hover {
+    color: var(--color-surface);
+    border-color: color-mix(in oklch, var(--color-surface) 48%, transparent);
+  }
+  .rail-toggle svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  /* ─── collapsed state ────────────────────────────────────────────────────
+     Every rule below is scoped to the collapsed rail, so the expanded rail is unchanged. */
+  .admin[data-rail='collapsed'] .brand-text,
+  .admin[data-rail='collapsed'] .admin-nav a span,
+  .admin[data-rail='collapsed'] .admin-account .ac-text,
+  .admin[data-rail='collapsed'] .admin-account .ac-chev,
+  .admin[data-rail='collapsed'] .admin-back span,
+  .admin[data-rail='collapsed'] .live-dot {
+    /* `display: none` rather than a zero width: a clipped label is still read by a screen
+       reader as text, and still occupies layout on some engines. The accessible name comes
+       from the link's own `title` instead. */
+    display: none;
+  }
+  .admin[data-rail='collapsed'] .admin-rail {
+    padding: 18px 10px;
+    gap: 18px;
+    align-items: center;
+  }
+  .admin[data-rail='collapsed'] .rail-top {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .admin[data-rail='collapsed'] .admin-nav a {
+    justify-content: center;
+    padding: 11px 0;
+  }
+  .admin[data-rail='collapsed'] .admin-account-btn {
+    justify-content: center;
+    padding: 6px;
+  }
+  .admin[data-rail='collapsed'] .admin-back {
+    justify-content: center;
+  }
 
   .admin-rail {
     background: var(--color-fg);
@@ -1910,7 +1982,12 @@
 @layer components {
   .counter-page {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 400px;
+    /* The bill takes a share of the width rather than a fixed 400px, so the ~176px the
+       collapsed rail gives back goes where a big order needs it: a wider bill fits a dish
+       name, its options and five controls on one row, and fewer lines scroll out of view.
+       `minmax(380px, 27%)` keeps it usable when the rail is expanded and generous when it
+       is not; the menu keeps a minimum so a long dish name still has room. */
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 27%);
     grid-template-rows: auto minmax(0, 1fr);
     gap: 1.25rem 1.5rem;
     /* `stretch`, not `start`: the ticket must fill the row's height so its body can scroll
@@ -1926,6 +2003,13 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+  }
+  /* Below ~1400px there is not enough width to give the bill a share without starving the
+     dish grid, so it returns to a fixed column until the screen can afford it again. */
+  @media (max-width: 1400px) {
+    .counter-page {
+      grid-template-columns: minmax(0, 1fr) 400px;
+    }
   }
   @media (max-width: 1100px) {
     /* One column on a narrow tablet. The ticket comes FIRST, because at this width there
@@ -2058,7 +2142,11 @@
      as a thumb can reliably hit and no smaller. 44px is the floor. */
   .counter-dishes {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    /* `auto-fill` at 132px rather than 148px: the collapsed rail hands every screen ~176px,
+       and spending it here means roughly one more dish per row without shrinking the tap
+       target — `.dish-key` keeps its 56px minimum height. Wider than this and the grid
+       wastes the reclaimed space on twenty tiles that each hold one short dish name. */
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
     gap: 8px;
   }
   .dish-key {
@@ -2249,6 +2337,19 @@
   .cl-remove:hover {
     color: var(--color-deal);
     border-color: var(--color-deal);
+  }
+  /* Editing a line's options and note. Quieter than Remove and quieter than the quantity
+     stepper: it is the correction path, not the fast path, and the fast path on this row is
+     "+". Given a minimum width so the word is never clipped mid-shift. */
+  .cl-edit {
+    width: auto !important;
+    padding: 0 10px;
+    font-size: 12px !important;
+    color: var(--color-muted);
+  }
+  .cl-edit:hover {
+    color: var(--color-accent);
+    border-color: var(--color-accent-line);
   }
 
   .counter-fields {

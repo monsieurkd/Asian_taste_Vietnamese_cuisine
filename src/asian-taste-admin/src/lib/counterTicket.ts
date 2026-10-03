@@ -33,6 +33,15 @@ export interface TicketLineDraft {
   note: string
   /** Unit price WITH the modifiers applied. Display only. */
   unitPrice: number
+  /**
+   * The dish's price BEFORE modifiers.
+   *
+   * Kept so editing a line's options can re-price from the dish rather than from its
+   * current total: adding a modifier to a line priced with `unitPrice` would charge for
+   * every option it already had, again. Optional because a loaded order only stores the
+   * final unit price — see `loadOrder`.
+   */
+  basePrice?: number
 }
 
 /** A modifier priced onto a dish. */
@@ -95,6 +104,7 @@ export function addLine(
       modifiers: selected,
       note: note.trim(),
       unitPrice: pricedUnit(dish.price, selected),
+      basePrice: dish.price,
     },
   ]
 }
@@ -174,6 +184,9 @@ export function loadOrder(order: OrderToLoad): TicketLineDraft[] {
       // the note above. Recomputing it from a freshly-fetched dish would double-count the
       // options if the modifier prices have moved since the order was placed.
       unitPrice: item.unitPrice,
+      // Back out the options to get the dish's own price. Without this, editing the options
+      // on a loaded line would price them on top of a total that already contained them.
+      basePrice: Math.round((item.unitPrice - modifierTotal(modifiers)) * 100) / 100,
     }
   })
 }

@@ -15,6 +15,7 @@ import {
   clearTicket,
   hasOptions,
   loadOrder,
+  pricedUnit,
   removeLine,
   setQuantity,
   ticketItemCount,
@@ -76,6 +77,15 @@ export function CounterOrderPage() {
 
   /** The dish whose options are open, if any. */
   const [openDish, setOpenDish] = useState<MenuItemDetail | null>(null)
+  /**
+   * The ticket line being EDITED, or null when the panel is adding a new one.
+   *
+   * One panel, two outcomes. Editing a line and adding a dish differ only in where the
+   * result goes, so they share the whole dialog — the option groups, the required-choice
+   * refusal, the note field. A second edit dialog would be a second copy of those rules,
+   * and the two would drift the way the two boards did (§22).
+   */
+  const [editingLineKey, setEditingLineKey] = useState<string | null>(null)
   /** Chosen options for the dish being configured. */
   const [pending, setPending] = useState<Modifier[]>([])
   const [pendingNote, setPendingNote] = useState("")
@@ -292,8 +302,56 @@ export function CounterOrderPage() {
       return
     }
 
+    setEditingLineKey(null)
     setPending([])
     setPendingNote("")
+    setOpenDish(dish)
+  }
+
+  /**
+   * Edit a line that is already on the bill — its options and its note.
+   *
+   * The dish's own MenuItemDetail is looked up from the menu rather than reconstructed from
+   * the line, because the panel needs the option GROUPS to render the choices, and a ticket
+   * line only stores the choices that were picked. If the dish has left the menu the line is
+   * still editable for its NOTE — losing the ability to correct a note because a dish was
+   * retired would be a worse outcome than not offering the options.
+   */
+  const editLine = (lineKey: string) => {
+    const line = lines.find((l) => l.key === lineKey)
+    if (!line) return
+
+    const dish = available.find((d) => d.id === line.menuItemId)
+    if (!dish || !hasOptions(dish)) {
+      // No options to change: the quantity and note controls are already on the row, so
+      // opening a panel with nothing in it would be a dead end. Edit the note in place.
+      setEditingLineKey(lineKey)
+      setPending([])
+      setPendingNote(line.note)
+      setOpenDish(
+        dish ?? {
+          id: line.menuItemId,
+          name: line.name,
+          price: line.unitPrice,
+          basePrice: line.unitPrice,
+          categoryId: 0,
+          categoryName: "",
+          isActive: true,
+          isAvailable: true,
+          isPopular: false,
+          spicyLevel: 0,
+          isVegetarian: false,
+          isVegan: false,
+          isGlutenFree: false,
+          modifierGroups: [],
+        },
+      )
+      return
+    }
+
+    setEditingLineKey(lineKey)
+    setPending(line.modifiers)
+    setPendingNote(line.note)
     setOpenDish(dish)
   }
 
@@ -305,6 +363,31 @@ export function CounterOrderPage() {
       // Says WHICH group. "Choose an option" would leave the staff member scanning a
       // dialog while the customer waits.
       showAdminToast(`Choose ${missing}`)
+      return
+    }
+
+    if (editingLineKey !== null) {
+      // Replace the line's options and note IN PLACE, keeping its position and quantity.
+      // Removing and re-adding would lose the order the kitchen reads the ticket in, and
+      // a line with a different quantity would come back as one.
+      //
+      // Re-priced from the line's BASE price, not its current unit price: pricing on top of
+      // a total that already includes the old options would charge for them twice.
+      setLines((current) =>
+        current.map((l) =>
+          l.key === editingLineKey
+            ? {
+                ...l,
+                modifiers: pending,
+                note: pendingNote.trim(),
+                unitPrice: pricedUnit(l.basePrice ?? l.unitPrice, pending),
+              }
+            : l,
+        ),
+      )
+      setEditingLineKey(null)
+      setOpenDish(null)
+      showAdminToast(`${openDish.name} updated`)
       return
     }
 
@@ -542,6 +625,9 @@ export function CounterOrderPage() {
                         </p>
                       )}
 
+                      {/* Quantity and Remove stay on every line; Edit opens the options panel
+                          for THIS line. Ordered so the most-pressed control (one more) is a
+                          thumb-width from the right edge on a tablet. */}
                       <div className="cl-controls">
                         <button
                           type="button"
@@ -563,11 +649,19 @@ export function CounterOrderPage() {
                         </button>
                         <button
                           type="button"
+                          className="cl-edit"
+                          aria-label={`Edit options for ${line.name}`}
+                          onClick={() => editLine(line.key)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
                           className="cl-remove"
                           aria-label={`Remove ${line.name}`}
                           onClick={() => setLines((c) => removeLine(c, line.key))}
                         >
-                          Remove
+                          ✕
                         </button>
                       </div>
                     </li>
@@ -791,11 +885,18 @@ export function CounterOrderPage() {
                 Cancel
               </Button>
               <Button variant="primary" onClick={confirmDish}>
-                Add to order
+                {editingLineKey !== null ? "Update this item" : "Add to order"}
               </Button>
             </>
           }
         >
+          {/* Says which of the two things this panel is doing. The dialog is identical
+              otherwise, so without this line an edit looks like a second add. */}
+          {editingLineKey !== null && (
+            <p className="meta" style={{ marginTop: 0 }}>
+              Changing this item on the bill. Its quantity stays as it is.
+            </p>
+          )}
           {(openDish.modifierGroups ?? [])
             .filter((g) => (g.modifiers ?? []).length > 0)
             .map((group) => (

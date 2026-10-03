@@ -58,6 +58,24 @@ const NAV = [
 ]
 
 /**
+ * Where the rail's collapsed state is remembered.
+ *
+ * localStorage rather than a cookie or a server setting: this is a per-device preference on
+ * a shared tablet, and the person who collapsed it on the counter tablet wants it to stay
+ * collapsed there without affecting the office laptop.
+ */
+const RAIL_KEY = "admin_rail_collapsed"
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(RAIL_KEY) === "1"
+  } catch {
+    // Private mode or a blocked storage API — an uncollapsed rail is a fine fallback.
+    return false
+  }
+}
+
+/**
  * The staff console shell — rail on the left, content on the right.
  *
  * Below 900px the rail becomes a horizontal strip rather than a drawer: the
@@ -69,30 +87,65 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const { isConnected } = useOrderWebSocket()
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(readCollapsed)
+
+  const toggleRail = () => {
+    setCollapsed((v) => {
+      const next = !v
+      try {
+        localStorage.setItem(RAIL_KEY, next ? "1" : "0")
+      } catch {
+        // Not persisting is survivable; not collapsing is not.
+      }
+      return next
+    })
+  }
 
   const name = user?.username ?? "Staff"
 
   return (
-    <div className="admin">
+    <div className="admin" data-rail={collapsed ? "collapsed" : "expanded"}>
       <aside className="admin-rail">
-        <Link className="brand" to="/kitchen">
-          <span className="brand-mark">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" aria-hidden="true">
-              <path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z" />
-              <path d="M9 7.5c0-1.3 1.1-1.7 1.1-2.8M12.5 7.5c0-1.3 1.1-1.7 1.1-2.8" />
-            </svg>
-          </span>
-          <span className="brand-text">
-            <span className="brand-name">Asian Taste</span>
-            <span className="brand-tag">Staff console</span>
-          </span>
-        </Link>
+        <div className="rail-top">
+          <Link className="brand" to="/kitchen">
+            <span className="brand-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" aria-hidden="true">
+                <path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z" />
+                <path d="M9 7.5c0-1.3 1.1-1.7 1.1-2.8M12.5 7.5c0-1.3 1.1-1.7 1.1-2.8" />
+              </svg>
+            </span>
+            <span className="brand-text">
+              <span className="brand-name">Asian Taste</span>
+              <span className="brand-tag">Staff console</span>
+            </span>
+          </Link>
 
-        <nav className="admin-nav" aria-label="Staff sections">
+          {/* The collapse control. Its own button rather than making the whole rail
+              clickable, because the rail contains links and a stray tap while carrying a
+              tablet should not resize the screen. */}
+          <button
+            type="button"
+            className="rail-toggle"
+            aria-expanded={!collapsed}
+            aria-controls="admin-nav"
+            title={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
+            onClick={toggleRail}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d={collapsed ? "m10 6 6 6-6 6" : "m14 6-6 6 6 6"} />
+            </svg>
+            <span className="sr-only">{collapsed ? "Expand the sidebar" : "Collapse the sidebar"}</span>
+          </button>
+        </div>
+
+        <nav className="admin-nav" id="admin-nav" aria-label="Staff sections">
           {NAV.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
+              // The label is the accessible name even when it is not painted, so a
+              // collapsed icon is announced as "Counter" rather than as an unlabelled link.
+              title={item.label}
               aria-current={pathname.startsWith(item.to) ? "page" : undefined}
             >
               <Icon paths={item.icon} />
@@ -104,7 +157,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         <div className="admin-rail-foot">
           {/* The kitchen's only cue that live orders are arriving. Offline is a
               warning, not a silent decoration. */}
-          <span className={`live-dot ${isConnected ? "" : "is-off"}`}>
+          <span className={`live-dot ${isConnected ? "" : "is-off"}`} title={isConnected ? "Kitchen online" : "Reconnecting"}>
             {isConnected ? "Kitchen online" : "Reconnecting"}
           </span>
 
