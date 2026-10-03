@@ -6,7 +6,6 @@ import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { AdminLayout } from "@/components/AdminLayout"
 import { ToastHost } from "@/components/ui/Toast"
 import { LoginPage } from "@/pages/LoginPage"
-import { DashboardPage } from "@/pages/DashboardPage"
 import { OrdersPage } from "@/pages/OrdersPage"
 import { OrderDetailPage } from "@/pages/OrderDetailPage"
 import { MenuManagementPage } from "@/pages/MenuManagementPage"
@@ -52,8 +51,12 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/" element={<Navigate to="/kitchen" replace />} />
+            {/* /dashboard is the board. It used to be a second, incomplete copy of it —
+                the same orders with the same stat cards and none of the kitchen's actions
+                — so the route redirects rather than rendering a rival screen. Bookmarks
+                and the old rail entry keep working. */}
+            <Route path="/dashboard" element={<Navigate to="/kitchen" replace />} />
             <Route path="/orders" element={<OrdersPage />} />
             <Route path="/orders/:id" element={<OrderDetailPage />} />
             <Route path="/menu" element={<MenuManagementPage />} />
@@ -61,12 +64,12 @@ function App() {
                 list: it is used standing up, with a customer waiting, and sharing a
                 page with the table would put a search box in the way. */}
             <Route path="/counter" element={<CounterOrderPage />} />
-            {/* Back of house: the kitchen's own workspace for WORKING orders, as opposed to
-                /orders which is for FINDING one. Different question, different screen. */}
+            {/* The board: the one screen for WORKING orders, as opposed to /orders which is
+                for FINDING one. Different question, different screen. */}
             <Route path="/kitchen" element={<KitchenPage />} />
           </Route>
 
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/kitchen" replace />} />
         </Routes>
         <ToastHost />
       </BrowserRouter>

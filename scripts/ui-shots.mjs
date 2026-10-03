@@ -119,12 +119,52 @@ const AUTHED_SCREENS_NOT_CAPTURED = [
   'customer/account (redirects to /menu when signed out)',
   'customer/cart-filled (needs items in the cart)',
   'customer/confirmation (needs a real order number)',
-  'admin/dashboard, orders, menu, reports, settings (need an admin JWT)',
+  'admin/orders, menu, reports, settings (need an admin JWT)',
 ]
 
-// Admin screens behind auth need a token. Without credentials we capture only
-// the public login screen rather than screenshotting a redirect loop.
-const ADMIN_AUTHED_SHOTS = []
+/**
+ * Admin screens behind auth, captured by signing in first.
+ *
+ * Credentials come from the environment rather than the file: this script is committed, and
+ * a password in it would be a password in git history permanently. Without them the admin
+ * shots are simply skipped rather than silently producing a screenshot of the login page —
+ * which is what happens today if you forget, and it scores as a broken board.
+ *
+ *   ADMIN_USER=admin ADMIN_PASS=... npm run ui:shots -- --app=admin
+ *
+ * The dev default lives in `src/AsianTaste.API/Data/Migrations/03_create_admin_user.sql`.
+ * It is NOT the production password, and production deliberately rejects it (docs/TODO.md §18).
+ */
+const ADMIN_USER = process.env.ADMIN_USER
+const ADMIN_PASS = process.env.ADMIN_PASS
+
+async function signIn(page, base) {
+  await page.goto(`${base}/login`, { waitUntil: 'domcontentloaded' })
+  await page.locator('input').first().waitFor({ state: 'visible', timeout: 20_000 })
+  const fields = page.locator('input')
+  await fields.nth(0).fill(ADMIN_USER)
+  await fields.nth(1).fill(ADMIN_PASS)
+  await page.getByRole('button', { name: /sign in|log in|login/i }).first().click()
+  await page.waitForURL(/\/kitchen/, { timeout: 20_000 })
+}
+
+const ADMIN_AUTHED_SHOTS = [
+  {
+    name: 'board',
+    // The one working screen. It is the merge of the old /dashboard and /kitchen, so it is
+    // also the screen most likely to regress into showing half a job — which is the whole
+    // reason this shot exists.
+    path: '/kitchen',
+    authenticated: true,
+    wait: async (page) => {
+      // A ticket, not the column headers: the columns render before the orders arrive, so
+      // waiting on `.board` would capture an empty board and the judge would score it as
+      // "nothing to cook".
+      await page.locator('.board-ticket, .board-empty').first().waitFor({ state: 'visible', timeout: 20_000 })
+      await page.waitForTimeout(800)
+    },
+  },
+]
 
 const VIEWPORTS = [
   { width: 1280, height: 800, label: 'desktop' },
@@ -166,7 +206,12 @@ async function main() {
 
   for (const appName of apps) {
     const app = APPS[appName]
-    const shots = (SHOTS[appName] ?? []).filter((s) => !screenFilter || screenFilter.includes(s.name))
+    const shots = [
+      ...(SHOTS[appName] ?? []),
+      // Authed admin screens join the same list, so the filter, the viewports and the
+      // manifest all treat them identically. Skipped only when credentials are absent.
+      ...(appName === 'admin' && ADMIN_USER && ADMIN_PASS ? ADMIN_AUTHED_SHOTS : []),
+    ].filter((s) => !screenFilter || screenFilter.includes(s.name))
 
     if (shots.length === 0) {
       console.error(`ui-shots: no screens selected for ${appName}${screenFilter ? ` (--filter matched nothing)` : ''}`)
@@ -194,6 +239,7 @@ async function main() {
           // connection (WebSocket/React Query polling), so networkidle can hang
           // until timeout. The per-screen `wait` below is what proves the page
           // reached its real state.
+          if (screen.authenticated) await signIn(page, app.base)
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
           await screen.wait(page)
           await page.waitForTimeout(600) // let fonts + entry animations settle

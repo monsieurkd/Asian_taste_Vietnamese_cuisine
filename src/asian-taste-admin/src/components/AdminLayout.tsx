@@ -30,12 +30,6 @@ const ICONS = {
       <path d="M3.5 9h17M8 4.5v15" />
     </>
   ),
-  kitchen: (
-    <>
-      <path d="M4 20a8 8 0 0 1 16 0" />
-      <path d="M12 12v4M9.5 8.5c0-1.3 1.1-1.7 1.1-2.8M14 8.5c0-1.3 1.1-1.7 1.1-2.8" />
-    </>
-  ),
   out: (
     <>
       <path d="M14 4h5v16h-5" />
@@ -54,10 +48,10 @@ function Icon({ paths }: { paths: React.ReactNode }) {
 }
 
 const NAV = [
-  // Back of house first: it is where the kitchen spends its shift. The dashboard is the
-  // manager's overview, and burying the working screen under it would cost a tap every time.
-  { to: "/kitchen", label: "Back of house", icon: ICONS.kitchen },
-  { to: "/dashboard", label: "Dashboard", icon: ICONS.grid },
+  // The board is the one working screen and it carries the day's numbers too, so it is the
+  // first and the default entry. It replaced two entries — "Back of house" and "Dashboard" —
+  // that rendered the same orders with different halves of the job missing; see KitchenPage.
+  { to: "/kitchen", label: "Board", icon: ICONS.grid },
   { to: "/counter", label: "Counter", icon: ICONS.counter },
   { to: "/orders", label: "Orders", icon: ICONS.list },
   { to: "/menu", label: "Menu", icon: ICONS.menu },
@@ -81,7 +75,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="admin">
       <aside className="admin-rail">
-        <Link className="brand" to="/dashboard">
+        <Link className="brand" to="/kitchen">
           <span className="brand-mark">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" aria-hidden="true">
               <path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z" />

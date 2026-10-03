@@ -24,7 +24,9 @@ export function LoginPage() {
     clearError()
     try {
       await login({ username, password })
-      navigate("/dashboard")
+      // Straight to the board. This said /dashboard, which now redirects to the board —
+      // an extra navigation that shows the login screen's fade twice.
+      navigate("/kitchen")
     } catch {
       // The store holds the message; the form renders it below.
     }

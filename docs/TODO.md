@@ -1867,3 +1867,128 @@ order's existing contents, a re-price path that goes through `PUT /admin/orders/
 rather than `POST /admin/orders`, and a considered answer for the money when the total moves
 (the `OrderEditor` already models that problem — see `editMoney` — and the counter should not
 invent a second answer). Tracked on #5.
+
+---
+
+## 22. One board instead of two — 2026-10-02
+
+Issue #6. Back of house and the dashboard were **the same screen twice**, and neither was
+complete.
+
+### What was measured, before
+
+| | `/dashboard` | `/kitchen` |
+|---|---|---|
+| Stage columns | **3** | 0 |
+| Board tickets | 4 | 0 |
+| BOH cards | 0 | **4** |
+| Stat cards | 4 | 4 |
+| **Tap-to-cross-out dishes** | **8 controls** | 0 |
+| Cook-state buttons | 0 | 8 |
+| Filter chips | 0 | 5 |
+| Hold / History / kitchen note | no / no / no | **yes / yes / yes** |
+| Revenue today / Collected today | **yes / yes** | no |
+
+Both rendered the same four orders and the same four stat cards. The dashboard had the
+columns and the money but no Hold, no History and no per-dish notes; back of house had those
+but no columns, so a ticket awaiting acceptance sat beside one awaiting collection. A cook
+holding one order had two tabs open, and something was missing on whichever they were on.
+
+### What now exists
+
+**One screen at `/kitchen`**, and `/dashboard` **redirects** to it. The rail has one working
+entry ("Board") instead of two, the brand link and the post-login landing both point at it,
+and `DashboardPage.tsx` is deleted rather than left orphaned.
+
+What survived from each, and why:
+
+| From | Kept | Because |
+|---|---|---|
+| Dashboard | **Stage columns**, oldest first | The stage layout is how every product presents a board, and oldest-first answers "what now" — arrival order buries the ticket that has waited longest |
+| Dashboard | **Tap-to-cross-out dishes** | The industry norm, and the owner asked for it by name. It is the SAME `OrderItems` component the Orders table and the ticket page use, so a dish cannot be tickable here and not there |
+| Dashboard | **Today's numbers** | From the SERVER's summary, never by filtering the fetched page — that is how a busy day silently truncated the takings |
+| Back of house | **Hold** + resume, with a required reason | "Waiting on the spring rolls" is not a cancellation, and cancelling tells the customer their order is dead |
+| Back of house | **History** | "Who ticked this" is the question asked after a bag goes out wrong, and nothing else can answer it |
+| Back of house | **Per-dish kitchen notes** | The cook's note, kept separate from the customer's instruction |
+
+### The decision this needed, and what it costs
+
+The two screens disagreed on the unit of per-dish progress: back of house had **three states**
+(`Queued → Cooking → Done`, migration 17) and the dashboard had a **binary** `is_completed`.
+The owner chose **binary**, which is what "tap to cross out" means and what the industry does.
+
+**What is therefore dormant, and deliberately NOT deleted:**
+
+- `OrderService.SetCookStateAsync` and `PUT /admin/orders/{id}/items/{itemId}/cook-state`
+- Migration 17's `cook_state`, `started_at`, `cooked_by` columns and the rows already in them
+- ~15 passing tests pinning the three states, including the one that matters most — *a ticket
+  with every dish cooking is still not ready*
+
+The owner's call was to leave all of it in place and simply stop calling it from the board.
+That is the reversible choice: the columns hold real history, and a migration to drop them
+would be destructive and one-way. The five frontend helpers that drove the three-state UI
+(`nextCookState`, `cookActionLabel`, `cookStateLabel`, `groupForCooking`, `canAdvance`) are
+now referenced only by their own tests — left in place for the same reason, so restoring the
+middle state is a UI change rather than an archaeology exercise.
+
+**What is NOT lost, which is the important part:** the binary tap calls
+`OrderService.SetItemCompletedAsync`, and that is where the safety rules live — the last dish
+finishes the order, a tick never moves an order backwards, and the customer is told at most
+once, claimed against `orders.ready_notified_at`. All three still hold. What is gone is the
+ability to say "the pho is on", and the per-dish attribution.
+
+### Two bugs found while merging, both real
+
+1. **The connection pill contradicted itself.** `KitchenPage` rendered
+   `<StatusPill status={apiStatusValue("ready")} label={isConnected ? "Kitchen online" : "Reconnecting"} />`
+   — and `StatusPill` takes its COLOUR from `status` while only the WORD comes from `label`.
+   So a green "ready" dot displayed the word "Reconnecting". Now a plain `.live-dot`, which
+   is what the rail already used for the same fact. (This was inherited from the deleted
+   `DashboardPage`, not introduced here, but it was carried over.)
+
+2. **The board reserved a column for a stage that no longer exists.** `.board` was
+   `repeat(4, minmax(220px, 1fr))`, written when the board had a "Collected" column. With
+   three real stages the fourth track was empty and every column was squeezed into a quarter
+   of the width — **308px instead of 417px**, measured. `auto-fit` now follows the board's
+   actual stages instead of a number someone has to remember to change.
+
+3. **The per-dish note had no way in.** The merged ticket only rendered a note control for
+   dishes that ALREADY had a note, so the first note on a dish was unreachable. Every dish now
+   gets a row, reading "add a note" when empty.
+
+### Verified
+
+Through the real UI, against a real database, after the merge:
+
+- `/dashboard` → `/kitchen`; the rail has `/kitchen=Board`, `/counter`, `/orders`, `/menu`
+- Three columns (New / Cooking / Ready) with tickets in the right one; four stat cards
+- **Ticking the last dish finished the order** — it moved to Ready and the toast said
+  *"Every dish done — order is ready. Nobody to email, so call the number out"*
+- **Hold** moved a ticket off the line, the Held filter found it, it showed
+  *"Held by admin: waiting on the spring rolls"*, and resume put it back
+- **The cross-out** struck the dish through (`text-decoration-line: line-through`)
+- **A per-dish note** saved with its author, survived a reload, and cleared on empty
+- No 4xx or 5xx anywhere on the screen
+
+305 API tests and 164 frontend tests pass, nothing skipped; both apps build and lint clean.
+
+### A separate problem this surfaced: the UI rubric has drifted from the design set
+
+`scripts/ui-shots.mjs` now captures the board behind a real login (`ADMIN_USER`/`ADMIN_PASS`
+from the environment — never the file, because this script is committed). Running the repo's
+own judge on it produced scores of 4–7/10 with findings citing `Playfair Display`, `sidebar
+#1C1C1E`, `#F57C00`, `#E5E5E7` and shadcn `Badge`/`Tabs` primitives.
+
+**None of those exist in this codebase.** `docs/ui-rubric.md` still specifies the pre-rebuild
+design set — including `Playfair Display` as the display face, where `index.css` ships
+`Plus Jakarta Sans`. So the judge grades every screen against tokens the app does not use and
+penalises correct code: `.stat-card.is-accent` is called an invented surface when it is a
+deliberate, documented choice, and the revenue figure is marked wrong for not being Playfair
+when Playfair was removed.
+
+It is also not reproducible: the same 1280px screenshot scored 6 and then 7 in one run.
+
+**So those scores are not evidence about any change**, including this one — and the loop that
+exists to catch visual regressions currently cannot. Fixing it is its own piece of work
+(update the rubric to the shipped tokens, then make the scores stable), and it is now recorded
+here rather than acted on inside an unrelated change.

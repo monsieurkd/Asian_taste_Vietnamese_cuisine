@@ -696,19 +696,18 @@
     box-shadow: 0 1px 2px color-mix(in oklch, var(--color-fg) 9%, transparent);
   }
 
-  /* ─── kitchen status board ───────────────────────────────────────────── */
+  /* ─── the board ──────────────────────────────────────────────────────────── */
+  /* One column per OPEN stage. This was hardcoded to four, back when the board had a
+     "Collected" column — it has three now, so the fourth track was empty and every real
+     column was squeezed into a quarter of the width. `auto-fit` means the columns follow
+     the board's actual stages rather than a number someone has to remember to change. */
   .board {
     display: grid;
-    grid-template-columns: repeat(4, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 1.25rem;
     align-items: start;
   }
-  @media (max-width: 1200px) {
-    .board {
-      grid-template-columns: repeat(2, minmax(220px, 1fr));
-    }
-  }
-  @media (max-width: 700px) {
+  @media (max-width: 760px) {
     .board {
       grid-template-columns: 1fr;
     }
@@ -2773,6 +2772,45 @@
     min-height: 34px;
     padding: 6px 12px;
     font-size: 12.5px;
+  }
+
+  /* ─── the merged board ticket ────────────────────────────────────────────── */
+  /* A ticket now lives in a stage column AND carries the kitchen's actions, so it needs
+     the dashboard's urgency edge on a narrower card. `warning` is the gold band the
+     back-of-house cards used; `urgent` is the red one already defined for .ticket. */
+  .board-ticket.warn {
+    border-left: 3px solid var(--color-gold);
+  }
+  /* A held ticket is off the line: dimmed so a glance down the column skips it, and the
+     Hold control is what puts it back. Not hidden, because "where did that order go?"
+     is answered by seeing it greyed where it is. */
+  .board-ticket[data-held='true'] {
+    opacity: 0.7;
+    border-style: dashed;
+  }
+
+  /* The kitchen's per-dish notes, under the cross-out list rather than inside each row:
+     the dish row is the control a cook aims at, and a second button in it would halve the
+     target on the most-pressed control on the screen. */
+  .board-dish-notes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .board-dish-notes li {
+    font-size: 12.5px;
+  }
+  .board-dish-notes .btn-link {
+    text-align: left;
+    padding: 0;
+  }
+  /* The dish name is the target, so it must not look like the note. Without a note the
+     row reads "add a note" in muted type, which is the only cue that the row is a control. */
+  .board-dish-note-what {
+    font-weight: 600;
   }
 
   /* ─── the history ────────────────────────────────────────────────────────── */

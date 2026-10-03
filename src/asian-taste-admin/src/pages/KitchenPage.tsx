@@ -1,55 +1,90 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { kitchenApi, type CookState, type KitchenItem, type KitchenTicket } from "@/api/kitchenApi"
+import { ordersApi } from "@/api/orders"
+import { kitchenApi, type KitchenItem, type KitchenTicket } from "@/api/kitchenApi"
 import { AdminTop } from "@/components/AdminLayout"
-import { Button, Panel, PanelBody, Pill, SkeletonRows } from "@/components/ui/Primitives"
+import { Button, Panel, PanelBody, Pill } from "@/components/ui/Primitives"
 import { AdminModal } from "@/components/ui/AdminModal"
 import { showAdminToast } from "@/components/ui/AdminToast"
-import { StatusPill } from "@/components/ui/StatusPill"
+import { BoardTicket } from "@/components/orders/BoardTicket"
+import { apiStatusValue, isClosed, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
+import { readPayment } from "@/lib/payment"
+import { urgencyOf } from "@/lib/kitchenBoard"
 import { formatCurrency } from "@/lib/utils"
-import {
-  cookActionLabel,
-  cookStateLabel,
-  groupForCooking,
-  itemsOf,
-  nextCookState,
-  progressPhrase,
-  urgencyOf,
-  wantedLabel,
-} from "@/lib/kitchenBoard"
+import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
+import type { Order, OrderStatus } from "@/types"
 
 /**
- * Back of house — the kitchen's own workspace for managing an order.
+ * The board — the one screen for working orders, and today's numbers.
  *
- * This is NOT the orders list. That screen answers "find me order 42"; this one answers
- * "what do I cook next, and what is left on it". It is built for someone standing up with
- * food in front of them:
+ * THIS USED TO BE TWO SCREENS. `/dashboard` had the stage columns, the tap-to-cross-out
+ * dishes and the money; `/kitchen` had Hold, History and the per-dish notes. Both rendered
+ * the same orders, both rendered the same four stat cards, and neither was complete — so a
+ * cook holding one order had two tabs open and something missing on whichever they were
+ * looking at. That is the overlap the owner reported, and the fix is deletion, not addition.
  *
- *   * **Each dish is its own control, with three states.** A cook can say "the pho is on"
- *     rather than only "the pho is done", which is the difference between a board that
- *     reflects the kitchen and one that only records it afterwards.
- *   * **What is on the wok comes first**, because that is what burns. See
- *     `groupForCooking` for why the order within a group is not re-sorted.
- *   * **A ticket can be held, not just cancelled.** "Waiting on the spring rolls" and "the
- *     customer is late" are not cancellations, and cancelling tells the customer their
- *     order is dead.
- *   * **Every action is attributed.** The activity log names who did what, which is the
- *     question asked after something goes wrong and which nothing here could answer before.
+ * What survived from each:
  *
- * Age and lateness come from the SERVER (`ageMinutes`), never from the tablet's clock — a
+ *   * **The stage columns** (from the dashboard). Oldest at the top of each, because the
+ *     board's job is to answer "what now" and a list in arrival order buries the ticket that
+ *     has been waiting longest. A stage with nothing in it shows a quiet placeholder rather
+ *     than collapsing, so the shape of the board does not jump around during service.
+ *   * **The tap-to-cross-out dish list** (from the dashboard), which is now the industry
+ *     norm and what the owner asked for by name. It is the SAME `OrderItems` component the
+ *     Orders table and the ticket page use — tickable on all three or on none.
+ *   * **Hold, History and per-dish notes** (from back of house). "Waiting on the spring
+ *     rolls" is not a cancellation, and "who ticked this" is the question asked after a bag
+ *     goes out wrong.
+ *   * **Today's numbers** (from the dashboard), from the SERVER's summary. They were once
+ *     computed by filtering the last 100 fetched orders, which silently truncated the
+ *     figure on a busy day — a revenue number that is wrong at close is the one the owner
+ *     actually reads.
+ *
+ * Age and lateness come from the SERVER (`ageMinutes`), never from the tablet's clock: a
  * "this has been sitting 20 minutes" alarm is only useful if every screen in the room says
  * the same thing.
+ *
+ * The dish control is deliberately BINARY (done / not done) rather than back of house's
+ * three states. `docs/TODO.md` §22 records that decision, what it costs, and the fact that
+ * the three-state columns are left in the database rather than dropped.
  */
+
+/** The stages with a column, in the order the food moves. Collected has none: it has left. */
+const COLUMNS: Array<{ key: StatusKey; title: string; hint: string }> = OPEN_STATUSES.map((key) => ({
+  key,
+  title: STATUS_META[key].label,
+  hint:
+    key === "placed"
+      ? "Accept or reject"
+      : key === "confirmed"
+        ? "Accepted — on the wok"
+        : "Waiting to be collected",
+}))
+
+/** Filter chips. "On the line" is the default because it is the pass's normal view. */
+const FILTERS = [
+  { id: "live" as const, label: "On the line" },
+  { id: "late" as const, label: "Late" },
+  { id: "held" as const, label: "Held" },
+  { id: "all" as const, label: "Everything" },
+]
+
 export function KitchenPage() {
+  const { isConnected } = useOrderWebSocket()
   const queryClient = useQueryClient()
-  const [filter, setFilter] = useState<"live" | "cooking" | "late" | "held" | "all">("live")
+  const [filter, setFilter] = useState<"live" | "late" | "held" | "all">("live")
   const [holding, setHolding] = useState<KitchenTicket | null>(null)
   const [holdReason, setHoldReason] = useState("")
   const [noting, setNoting] = useState<{ ticket: KitchenTicket; item: KitchenItem } | null>(null)
   const [noteDraft, setNoteDraft] = useState("")
-  const [busyItemId, setBusyItemId] = useState<number | null>(null)
   const [historyFor, setHistoryFor] = useState<KitchenTicket | null>(null)
+  const [savingId, setSavingId] = useState<number | null>(null)
+  /** The single dish currently being ticked, so only its own row reads "saving". */
+  const [tickingItemId, setTickingItemId] = useState<number | null>(null)
 
+  // The board asks for the LINES, which is what both the cross-out list and the per-dish
+  // notes are rendered from. Fetching them per ticket on demand would be one request per
+  // press on the screen whose whole job is to be glanceable.
   const { data, isLoading } = useQuery({
     queryKey: ["kitchen", "board"],
     queryFn: () => kitchenApi.getBoard(false),
@@ -59,10 +94,14 @@ export function KitchenPage() {
     refetchInterval: 15_000,
   })
 
-  // Memoised so the identity is stable: `shown` depends on it, and a fresh empty array on
-  // every render would make that memo recompute for nothing.
+  const { data: summary } = useQuery({
+    queryKey: ["dashboard-summary"],
+    queryFn: () => ordersApi.getDashboardSummary(),
+    refetchInterval: 30_000,
+  })
+
   const tickets = useMemo(() => data?.tickets ?? [], [data])
-  const summary = data?.summary
+  const boardSummary = data?.summary
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["kitchen"] })
@@ -71,18 +110,39 @@ export function KitchenPage() {
   }
 
   /**
-   * Move a dish on one state.
+   * Advance one ticket a stage.
    *
-   * Optimistic, because this is pressed constantly and a round trip under the finger makes
-   * the pass feel broken. The rollback is the half that matters: if the server refuses, the
-   * board must not keep a claim the database denies.
+   * Guarded by `boardAction`/`canTransition` rather than by the button's wording, so a
+   * WebSocket frame carrying an older status cannot talk the board into an illegal move.
    */
   const advance = useMutation({
-    mutationFn: ({ orderId, itemId, state }: { orderId: number; itemId: number; state: CookState }) =>
-      kitchenApi.setCookState(orderId, itemId, state),
+    mutationFn: ({ id, status }: { id: number; status: StatusKey }) =>
+      ordersApi.updateOrderStatus(id, { status: apiStatusValue(status) as OrderStatus }),
+    onMutate: ({ id }) => setSavingId(id),
+    onSettled: () => setSavingId(null),
+    onSuccess: refresh,
+    onError: () => showAdminToast("Couldn't update that order — try again"),
+  })
 
-    onMutate: async ({ orderId, itemId, state }) => {
-      setBusyItemId(itemId)
+  /**
+   * Tick one dish off, from the board.
+   *
+   * Optimistic, and deliberately so: a cook presses this tens of times a shift, sometimes
+   * twice a second, and a round trip of "Saving…" under the finger makes the pass feel
+   * broken. The counts are patched locally too, so the ticket's progress moves with the tick
+   * rather than a moment later.
+   *
+   * The rollback matters more than the optimism. If the server refuses — the order was
+   * cancelled by somebody else, or the line moved — the locally-added tick is removed, so
+   * the board never keeps a claim the database does not agree with. A kitchen working from a
+   * tick that does not exist is how a dish gets forgotten.
+   */
+  const tick = useMutation({
+    mutationFn: ({ orderId, itemId, isCompleted }: { orderId: number; itemId: number; isCompleted: boolean }) =>
+      ordersApi.setItemCompleted(orderId, itemId, isCompleted),
+
+    onMutate: async ({ orderId, itemId, isCompleted }) => {
+      setTickingItemId(itemId)
       await queryClient.cancelQueries({ queryKey: ["kitchen", "board"] })
       const previous = queryClient.getQueryData(["kitchen", "board"])
 
@@ -90,16 +150,18 @@ export function KitchenPage() {
         if (!current) return current
         return {
           ...current,
-          tickets: current.tickets.map((t) =>
-            t.id !== orderId || !t.items
-              ? t
-              : {
-                  ...t,
-                  items: t.items.map((i) => (i.id === itemId ? { ...i, cookState: state } : i)),
-                  remainingLines: t.items.filter((i) => (i.id === itemId ? state : i.cookState) !== "Done").length,
-                  cookingLines: t.items.filter((i) => (i.id === itemId ? state : i.cookState) === "Cooking").length,
-                },
-          ),
+          tickets: current.tickets.map((t) => {
+            if (t.id !== orderId || !t.items) return t
+            const items = t.items.map((i) =>
+              i.id === itemId ? { ...i, isCompleted, cookState: isCompleted ? "Done" : "Queued" } : i,
+            )
+            return {
+              ...t,
+              items,
+              itemsDone: { done: items.filter((i) => i.isCompleted).length, total: items.length },
+              remainingLines: items.filter((i) => !i.isCompleted).length,
+            }
+          }),
         }
       })
 
@@ -125,7 +187,7 @@ export function KitchenPage() {
     },
 
     onSettled: () => {
-      setBusyItemId(null)
+      setTickingItemId(null)
       refresh()
     },
   })
@@ -153,13 +215,12 @@ export function KitchenPage() {
     onError: () => showAdminToast("Couldn't change the hold"),
   })
 
+  /** Which tickets each column shows, after the filter and the urgency sort. */
   const shown = useMemo(() => {
     const list = tickets.filter((t) => {
       switch (filter) {
         case "live":
           return !t.isHeld
-        case "cooking":
-          return !t.isHeld && t.cookingLines > 0
         case "late":
           return !t.isHeld && urgencyOf(t) === "late"
         case "held":
@@ -179,108 +240,157 @@ export function KitchenPage() {
     })
   }, [tickets, filter])
 
-  const FILTERS = [
-    { id: "live" as const, label: "On the line", count: summary?.liveOrders },
-    { id: "cooking" as const, label: "On the wok", count: summary?.dishesCooking },
-    { id: "late" as const, label: "Late", count: summary?.overdueOrders },
-    { id: "held" as const, label: "Held", count: summary?.heldOrders },
-    { id: "all" as const, label: "Everything", count: tickets.length },
-  ]
+  // The columns carry only the OPEN stages. Collected orders have left the board and land in
+  // the day's numbers instead of sitting in a column nobody has a reason to look at again.
+  const inColumn = (key: StatusKey) =>
+    shown
+      .filter((t) => statusKey(t.status) === key)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+
+  // "Collected today" and "Revenue today" come from the SERVER's summary, not from the
+  // fetched page. Filtering the fetched page is how a busy day silently truncated the
+  // takings and how yesterday's collection counted towards today.
+  const collectedToday = summary?.completedOrdersToday ?? boardSummary?.collectedToday ?? 0
+  const revenueToday = summary?.todayRevenue ?? 0
+
+  const filterCounts: Record<string, number> = {
+    live: tickets.filter((t) => !t.isHeld).length,
+    late: tickets.filter((t) => !t.isHeld && urgencyOf(t) === "late").length,
+    held: tickets.filter((t) => t.isHeld).length,
+    all: tickets.length,
+  }
+
+  /** A ready order whose money never arrived cannot go out. Counted for the stat card. */
+  const uncollectedMoney = useMemo(
+    () =>
+      tickets.filter((t) => {
+        const payment = readPayment(t.paymentStatus, t.paymentMethod)
+        return payment.attention && !isClosed(t.status)
+      }).length,
+    [tickets],
+  )
 
   return (
     <>
       <AdminTop
-        title="Back of house"
-        sub="Manage the orders on the line — start a dish, finish it, hold a ticket or write a note."
+        title="Board"
+        sub="Every order on the line, and today's numbers. Tick a dish to strike it through."
         actions={
-          <>
-            <Pill neutral>{summary?.dishesToCook ?? 0} dishes to cook</Pill>
-            <Pill neutral>{summary?.awaitingAcceptance ?? 0} to accept</Pill>
-          </>
+          // A connection cue, NOT a status pill. This passed `status="ready"` and only
+          // overrode the label, so a green "ready" dot rendered the word "Reconnecting" —
+          // the pill's colour came from the status while its text said the opposite. The
+          // board's ticket pills say where an ORDER is; this says whether the screen is
+          // live, which is a different question and gets a different control.
+          <span className={`live-dot ${isConnected ? "" : "is-off"}`}>
+            {isConnected ? "Live" : "Reconnecting"}
+          </span>
         }
       />
 
       <div className="admin-page">
-        <section className="stat-grid" data-od-id="boh-stats">
+        <section className="stat-grid" data-od-id="board-stats">
           <div className="stat-card is-accent">
             <p className="stat-k">On the line</p>
-            <p className="stat-v">{summary?.liveOrders ?? 0}</p>
-            <p className="stat-delta">{summary?.dishesToCook ?? 0} dishes still to cook</p>
-          </div>
-          <div className="stat-card">
-            <p className="stat-k">On the wok</p>
-            <p className="stat-v">{summary?.dishesCooking ?? 0}</p>
-            <p className="stat-delta">started, not finished</p>
+            <p className="stat-v">{boardSummary?.liveOrders ?? 0}</p>
+            <p className="stat-delta">{boardSummary?.dishesToCook ?? 0} dishes still to cook</p>
           </div>
           <div className="stat-card">
             <p className="stat-k">Late</p>
-            <p className="stat-v">{summary?.overdueOrders ?? 0}</p>
+            <p className="stat-v">{boardSummary?.overdueOrders ?? 0}</p>
             <p className="stat-delta down">past the promised time</p>
           </div>
           <div className="stat-card">
-            <p className="stat-k">Held</p>
-            <p className="stat-v">{summary?.heldOrders ?? 0}</p>
-            <p className="stat-delta">off the line, with a reason</p>
+            <p className="stat-k">Collected today</p>
+            <p className="stat-v">{collectedToday}</p>
+            <p className="stat-delta">
+              {boardSummary?.heldOrders ?? 0} held · {uncollectedMoney} unpaid
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-k">Revenue today</p>
+            <p className="stat-v">{formatCurrency(revenueToday)}</p>
+            <p className="stat-delta">GST inclusive · AUD</p>
           </div>
         </section>
 
-        <Panel data-od-id="boh-filters">
+        <Panel data-od-id="board-filters">
           <PanelBody>
-            <div className="seg-sm" role="group" aria-label="Filter the board">
-              {FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  aria-pressed={filter === f.id}
-                  onClick={() => setFilter(f.id)}
-                >
-                  {f.label}
-                  {typeof f.count === "number" && <span className="seg-count">{f.count}</span>}
-                </button>
-              ))}
+            <div className="filterbar">
+              <div className="seg-sm" role="group" aria-label="Filter the board">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-pressed={filter === f.id}
+                    onClick={() => setFilter(f.id)}
+                  >
+                    {f.label}
+                    <span className="seg-count">{filterCounts[f.id] ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+              <Pill neutral>{boardSummary?.awaitingAcceptance ?? 0} to accept</Pill>
             </div>
           </PanelBody>
         </Panel>
 
         {isLoading ? (
-          <SkeletonRows rows={4} />
-        ) : shown.length === 0 ? (
           <Panel>
             <PanelBody>
               <p className="meta" style={{ margin: 0 }}>
-                Nothing here. New orders appear the moment they are paid.
+                Loading the board…
               </p>
             </PanelBody>
           </Panel>
         ) : (
-          <div className="boh-grid">
-            {shown.map((ticket) => (
-              <KitchenTicketCard
-                key={ticket.id}
-                ticket={ticket}
-                busyItemId={busyItemId}
-                onAdvance={(item) => {
-                  const next = nextCookState(item.cookState)
-                  if (next) advance.mutate({ orderId: ticket.id, itemId: item.id, state: next })
-                }}
-                onNote={(item) => {
-                  setNoting({ ticket, item })
-                  setNoteDraft(item.kitchenNote ?? "")
-                }}
-                onHold={() => {
-                  setHolding(ticket)
-                  setHoldReason("")
-                }}
-                onResume={() => setHold.mutate({ orderId: ticket.id, held: false })}
-                onHistory={() => setHistoryFor(ticket)}
-              />
-            ))}
+          <div className="board" data-od-id="board-columns">
+            {COLUMNS.map((column) => {
+              const list = inColumn(column.key)
+              return (
+                <div className="col" key={column.key}>
+                  <div className="col-head">
+                    <h3>{column.title}</h3>
+                    <span className="count">{list.length}</span>
+                  </div>
+                  <p className="meta" style={{ margin: "-6px 0 12px" }}>
+                    {column.hint}
+                  </p>
+
+                  {list.length === 0 ? (
+                    <p className="board-empty">Nothing here.</p>
+                  ) : (
+                    list.map((ticket) => (
+                      <BoardTicket
+                        key={ticket.id}
+                        ticket={ticket}
+                        saving={savingId === ticket.id}
+                        tickingItemId={tickingItemId}
+                        onAdvance={(status) => advance.mutate({ id: ticket.id, status })}
+                        onTick={(itemId, isCompleted) =>
+                          tick.mutate({ orderId: ticket.id, itemId, isCompleted })
+                        }
+                        onHold={() => {
+                          setHolding(ticket)
+                          setHoldReason("")
+                        }}
+                        onResume={() => setHold.mutate({ orderId: ticket.id, held: false })}
+                        onNote={(item) => {
+                          setNoting({ ticket, item })
+                          setNoteDraft(item.kitchenNote ?? "")
+                        }}
+                        onHistory={() => setHistoryFor(ticket)}
+                      />
+                    ))
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
 
-      {/* The hold dialog. The reason is required, because a held ticket with no reason is
-          one the next person has to ask around about. */}
+      {/* The hold dialog. The reason is required, because a held ticket with no reason is one
+          the next person has to ask around about. */}
       {holding && (
         <AdminModal
           title={`Hold ${holding.orderNumber}?`}
@@ -294,9 +404,7 @@ export function KitchenPage() {
               <Button
                 variant="primary"
                 disabled={!holdReason.trim() || setHold.isPending}
-                onClick={() =>
-                  setHold.mutate({ orderId: holding.id, held: true, reason: holdReason.trim() })
-                }
+                onClick={() => setHold.mutate({ orderId: holding.id, held: true, reason: holdReason.trim() })}
               >
                 {setHold.isPending ? "Holding…" : "Hold it"}
               </Button>
@@ -304,8 +412,8 @@ export function KitchenPage() {
           }
         >
           <p style={{ margin: "0 0 12px" }}>
-            The order keeps its stage and its dishes — it simply stops being the next thing
-            the kitchen picks up, and comes back when you say so.
+            The order keeps its stage and its dishes — it simply stops being the next thing the
+            kitchen picks up, and comes back when you say so.
           </p>
           <label className="counter-note-field">
             <span>Why is it held? (the next person reads this)</span>
@@ -366,152 +474,8 @@ export function KitchenPage() {
         </AdminModal>
       )}
 
-      {historyFor && (
-        <TicketHistory ticket={historyFor} onClose={() => setHistoryFor(null)} />
-      )}
+      {historyFor && <TicketHistory ticket={historyFor} onClose={() => setHistoryFor(null)} />}
     </>
-  )
-}
-
-/**
- * One ticket, with its dishes as the controls.
- */
-function KitchenTicketCard({
-  ticket,
-  busyItemId,
-  onAdvance,
-  onNote,
-  onHold,
-  onResume,
-  onHistory,
-}: {
-  ticket: KitchenTicket
-  busyItemId: number | null
-  onAdvance: (item: KitchenItem) => void
-  onNote: (item: KitchenItem) => void
-  onHold: () => void
-  onResume: () => void
-  onHistory: () => void
-}) {
-  const urgency = urgencyOf(ticket)
-  const items = itemsOf(ticket)
-  const groups = groupForCooking(items)
-  const phrase = progressPhrase(ticket)
-
-  // Ordered for a cook: what is on the wok first. See groupForCooking.
-  const ordered = [...groups.cooking, ...groups.queued, ...groups.done]
-
-  return (
-    <article className={`boh-ticket ${urgency}`} data-held={ticket.isHeld}>
-      <header className="boh-top">
-        <div>
-          <span className="boh-id">{ticket.orderNumber}</span>
-          <span className="meta">
-            {ticket.ageMinutes} min ago · wanted {wantedLabel(ticket)}
-          </span>
-        </div>
-        <StatusPill status={ticket.status} />
-      </header>
-
-      {ticket.isHeld && (
-        <p className="boh-held" role="status">
-          <strong>Held{ ticket.heldBy ? ` by ${ticket.heldBy}` : ""}:</strong> {ticket.heldReason}
-        </p>
-      )}
-
-      {/* The allergy sits above everything it could be buried under. A cook picks what to
-          start from this card, and an allergy under the third dish is one they have already
-          started cooking without. */}
-      {ticket.allergyDeclaration && (
-        <p className="boh-allergy" role="alert">
-          <strong>Allergy:</strong> {ticket.allergyDeclaration}
-        </p>
-      )}
-
-      <p className="boh-who">
-        <strong>{ticket.customerName}</strong>
-        <span className="meta">
-          {ticket.orderType === "DineIn" ? "Dine in" : "Pickup"} · {formatCurrency(ticket.total)}
-        </span>
-      </p>
-
-      {ticket.notes && <p className="boh-note">{ticket.notes}</p>}
-
-      {phrase && <p className="boh-progress">{phrase}</p>}
-
-      <ul className="boh-items">
-        {ordered.map((item) => {
-          const next = nextCookState(item.cookState)
-          const label = cookActionLabel(item.cookState)
-          const busy = busyItemId === item.id
-
-          return (
-            <li key={item.id} className="boh-item" data-state={item.cookState}>
-              <div className="boh-item-main">
-                <span className="boh-item-name">
-                  <strong>{item.quantity}×</strong> {item.menuItemName}
-                </span>
-                <span className={`boh-state boh-state-${item.cookState.toLowerCase()}`}>
-                  {cookStateLabel(item.cookState)}
-                </span>
-              </div>
-
-              {item.modifiers && <p className="boh-item-detail">{item.modifiers}</p>}
-              {item.specialInstructions && (
-                <p className="boh-item-detail">{item.specialInstructions}</p>
-              )}
-              {item.kitchenNote && (
-                <p className="boh-item-kitchen">
-                  {item.kitchenNote}
-                  {item.noteBy && <span className="meta"> — {item.noteBy}</span>}
-                </p>
-              )}
-
-              <div className="boh-item-actions">
-                {next && label ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={busy || ticket.isHeld}
-                    onClick={() => onAdvance(item)}
-                  >
-                    {busy ? "Saving…" : label}
-                  </button>
-                ) : (
-                  <span className="meta">
-                    {item.cookedBy ? `Done by ${item.cookedBy}` : "Done"}
-                  </span>
-                )}
-                <button type="button" className="btn-link" onClick={() => onNote(item)}>
-                  {item.kitchenNote ? "Edit note" : "Add note"}
-                </button>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-
-      {items.length === 0 && (
-        <p className="items-empty" role="status">
-          This order has no items recorded.
-        </p>
-      )}
-
-      <footer className="boh-foot">
-        {ticket.isHeld ? (
-          <Button variant="ghost" onClick={onResume}>
-            Back on the line
-          </Button>
-        ) : (
-          <Button variant="ghost" onClick={onHold}>
-            Hold
-          </Button>
-        )}
-        <button type="button" className="btn-link" onClick={onHistory}>
-          History
-        </button>
-      </footer>
-    </article>
   )
 }
 
@@ -542,7 +506,7 @@ function TicketHistory({ ticket, onClose }: { ticket: KitchenTicket; onClose: ()
         <p className="meta">Loading…</p>
       ) : events.length === 0 ? (
         <p className="meta">
-          Nothing recorded yet. Actions taken from this screen — starting a dish, holding the
+          Nothing recorded yet. Actions taken from this screen — ticking a dish, holding the
           ticket, writing a note — appear here with who did them.
         </p>
       ) : (
@@ -561,3 +525,5 @@ function TicketHistory({ ticket, onClose }: { ticket: KitchenTicket; onClose: ()
     </AdminModal>
   )
 }
+
+export type { Order }
