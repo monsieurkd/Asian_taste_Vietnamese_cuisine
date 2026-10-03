@@ -96,14 +96,41 @@ export function CounterOrderPage() {
   const available = useMemo(() => dishes.filter((d) => d.isAvailable), [dishes])
 
   /** Grouped by category, so the grid can be read the way the printed menu is. */
-  const byCategory = useMemo(() => {
-    const groups = new Map<string, MenuItemDetail[]>()
-    for (const dish of available) {
-      const key = dish.categoryName || "Other"
-      groups.set(key, [...(groups.get(key) ?? []), dish])
-    }
-    return [...groups.entries()]
-  }, [available])
+  /**
+   * Which category the dish grid is showing.
+   *
+   * The grid used to render ALL 14 categories stacked, which made the menu column about
+   * 4,900px tall — 82 dishes end to end. That was the real reason an order needed scrolling
+   * to complete: the running ticket sits beside that column, so it could not stick, and the
+   * Save button lived 4,000px below the fold.
+   *
+   * One category at a time makes the menu roughly a screen tall, which is what lets the
+   * ticket be pinned and the whole flow work without the page moving.
+   *
+   * Stored as a CHOICE (`null` = "not chosen yet") rather than as a resolved category, and
+   * combined with the menu below. An effect syncing it to the first category was the
+   * obvious alternative and is worse: it sets state during render for a value that is
+   * purely derived, and it re-runs whenever the menu changes.
+   */
+  const [chosenCategory, setChosenCategory] = useState<string | null>(null)
+
+  /** Dishes in the active category, and the rail's own order, which follows the menu. */
+  const categories = useMemo(() => [...new Set(available.map((d) => d.categoryName || "Other"))], [available])
+
+  /**
+   * The category actually on screen.
+   *
+   * The first category until something is chosen, and recovered to the first if the chosen
+   * one disappears mid-shift (a dish retired leaves a category with no dishes, and the grid
+   * would otherwise render an empty page with no way back).
+   */
+  const activeCategory =
+    chosenCategory && categories.includes(chosenCategory) ? chosenCategory : (categories[0] ?? null)
+
+  const dishesInView = useMemo(() => {
+    if (activeCategory === null) return []
+    return available.filter((d) => (d.categoryName || "Other") === activeCategory)
+  }, [available, activeCategory])
 
   const total = ticketTotal(lines)
 
@@ -409,41 +436,65 @@ export function CounterOrderPage() {
           </PanelBody>
         </Panel>
 
-        {/* The dish grid. Left, because it is what gets tapped. */}
-        <section className="counter-grid" data-od-id="counter-dishes" aria-label="Menu">
-          {isLoading ? (
-            <SkeletonRows rows={6} />
-          ) : (
-            byCategory.map(([category, group]) => (
-              <div key={category} className="counter-group">
-                <h3 className="counter-group-head">{category}</h3>
-                <div className="counter-dishes">
-                  {group.map((dish) => {
-                    // One shared rule, so the flag on the button and the panel it opens
-                    // cannot disagree. See hasOptions.
-                    const opensPanel = hasOptions(dish)
+        {/* The menu. A category rail on the left of the dishes, because with 14 categories
+            the rail is what makes the menu a screen tall instead of five. It is the shape
+            every till uses for a menu this size, and it means the running ticket beside it
+            can stay pinned. */}
+        <section className="counter-menu" data-od-id="counter-dishes" aria-label="Menu">
+          <nav className="counter-rail" aria-label="Menu categories">
+            {categories.map((category) => {
+              const on = category === activeCategory
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  className="cat-key"
+                  aria-pressed={on}
+                  onClick={() => setChosenCategory(category)}
+                >
+                  <span>{category}</span>
+                  <span className="cat-count">
+                    {available.filter((d) => (d.categoryName || "Other") === category).length}
+                  </span>
+                </button>
+              )
+            })}
+          </nav>
 
-                    return (
-                      <button
-                        key={dish.id}
-                        type="button"
-                        className="dish-key"
-                        onClick={() => choose(dish)}
-                      >
-                        <span className="dk-name">{dish.name}</span>
-                        <span className="dk-price">{formatCurrency(dish.price)}</span>
-                        {opensPanel && (
-                          <span className="dk-flag" aria-label="has options">
-                            ⋯
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
+          <div className="counter-dishes-wrap">
+            {isLoading ? (
+              <SkeletonRows rows={6} />
+            ) : dishesInView.length === 0 ? (
+              <p className="meta" style={{ margin: 0 }}>
+                Nothing in this category right now.
+              </p>
+            ) : (
+              <div className="counter-dishes" data-od-id="counter-dish-grid">
+                {dishesInView.map((dish) => {
+                  // One shared rule, so the flag on the button and the panel it opens
+                  // cannot disagree. See hasOptions.
+                  const opensPanel = hasOptions(dish)
+
+                  return (
+                    <button
+                      key={dish.id}
+                      type="button"
+                      className="dish-key"
+                      onClick={() => choose(dish)}
+                    >
+                      <span className="dk-name">{dish.name}</span>
+                      <span className="dk-price">{formatCurrency(dish.price)}</span>
+                      {opensPanel && (
+                        <span className="dk-flag" aria-label="has options">
+                          ⋯
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
-            ))
-          )}
+            )}
+          </div>
         </section>
 
         {/* The running ticket. Right, and sticky, because the total is quoted aloud. */}
@@ -462,12 +513,17 @@ export function CounterOrderPage() {
               )}
             </PanelHead>
             <PanelBody>
-              {lines.length === 0 ? (
-                <p className="meta" style={{ margin: 0 }}>
-                  Tap a dish to start. The total appears here as you go.
-                </p>
-              ) : (
-                <ul className="counter-lines">
+              {/* The lines get their own scroll region. A big order — and a busy table's
+                  order is big — would otherwise push the fields, the total and the Save
+                  button off the bottom of the panel, which is the scrolling this screen
+                  was rebuilt to remove. */}
+              <div className="ticket-scroll">
+                {lines.length === 0 ? (
+                  <p className="meta" style={{ margin: 0 }}>
+                    Tap a dish to start. The total appears here as you go.
+                  </p>
+                ) : (
+                  <ul className="counter-lines">
                   {lines.map((line) => (
                     <li key={line.key} className="counter-line">
                       <div className="cl-top">
@@ -517,11 +573,16 @@ export function CounterOrderPage() {
                     </li>
                   ))}
                 </ul>
-              )}
+                )}
 
-              {/* Who it is for. A name is optional on purpose — a customer who will not
-                  give one still gets fed, and the kitchen calls out "counter" instead. */}
-              <div className="counter-fields">
+                {/* Who it is for. A name is optional on purpose — a customer who will not
+                    give one still gets fed, and the kitchen calls out "counter" instead.
+
+                    These sit INSIDE the scroll region with the lines: a six-line order plus
+                    four fields is taller than a tablet, and something has to give. The
+                    fields can scroll; the total and the save button cannot — see the pinned
+                    footer below the scroll. */}
+                <div className="counter-fields">
                 <label>
                   <span>Name (optional)</span>
                   <input
@@ -621,26 +682,34 @@ export function CounterOrderPage() {
                     </span>
                   </label>
                 )}
+                </div>
               </div>
 
-              <div className="counter-total">
-                <span>{isAddingToOrder ? "Order will be" : "Total"}</span>
-                <strong>{formatCurrency(total)}</strong>
-              </div>
+              {/* ── The pinned footer ─────────────────────────────────────────────
+                  The total and the save action, OUTSIDE the scroll region. These are the
+                  two things a staff member must be able to see and press at any moment,
+                  whatever the order looks like, and they are what made this screen need
+                  scrolling before: with 82 dishes stacked above them, the Save button
+                  measured 4,000px below the fold. */}
+              <div className="ticket-foot">
+                <div className="counter-total">
+                  <span>{isAddingToOrder ? "Order will be" : "Total"}</span>
+                  <strong>{formatCurrency(total)}</strong>
+                </div>
 
-              {/* ── What the change does to the money ─────────────────────────────
-                  Only when adding to an order, and only from `editMoney` — the same tested
-                  rule the phone-edit screen uses. Raising the total of a card order that
-                  was ALREADY CHARGED leaves money nothing here will collect; lowering it
-                  leaves money owed back. Both are conversations to have with the customer
-                  standing in front of you, so this says which one BEFORE the save.
+                {/* ── What the change does to the money ───────────────────────────
+                    Only when adding to an order, and only from `editMoney` — the same tested
+                    rule the phone-edit screen uses. Raising the total of a card order that
+                    was ALREADY CHARGED leaves money nothing here will collect; lowering it
+                    leaves money owed back. Both are conversations to have with the customer
+                    standing in front of you, so this says which one BEFORE the save.
 
-                  The three cases are distinct and the panel must not collapse them:
-                  money owed back, money still to collect on a charge, and an order that
-                  was NEVER charged — where the whole new total is to collect and quoting
-                  "nothing has changed" would be plainly wrong. */}
-              {money && isAddingToOrder && loadedFrom && (
-                <div className="counter-money" role="status" data-od-id="counter-money">
+                    The three cases are distinct and the panel must not collapse them:
+                    money owed back, money still to collect on a charge, and an order that
+                    was NEVER charged — where the whole new total is to collect and quoting
+                    "nothing has changed" would be plainly wrong. */}
+                {money && isAddingToOrder && loadedFrom && (
+                  <div className="counter-money" role="status" data-od-id="counter-money">
                   <p className="meta" style={{ margin: 0 }}>
                     Was {formatCurrency(loadedFrom.total)} · now{" "}
                     <strong>{formatCurrency(money.newTotal)}</strong>
@@ -672,38 +741,40 @@ export function CounterOrderPage() {
                     </p>
                   )}
                 </div>
-              )}
+                )}
 
-              <p className="meta" style={{ margin: "0 0 12px" }}>
-                GST included. Priced by the server when the order is sent.
-              </p>
+                <p className="meta" style={{ margin: "0 0 12px" }}>
+                  GST included. Priced by the server when the order is sent.
+                </p>
 
-              <Button
-                variant="primary"
-                onClick={() => submit.mutate()}
-                disabled={!canSend}
-                style={{ width: "100%" }}
-              >
-                {submit.isPending
-                  ? "Saving…"
-                  : lines.length === 0
-                    ? "Add a dish first"
-                    : isAddingToOrder
-                      ? "Save changes to the order"
-                      : "Send to the kitchen"}
-              </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => submit.mutate()}
+                  disabled={!canSend}
+                  style={{ width: "100%" }}
+                >
+                  {submit.isPending
+                    ? "Saving…"
+                    : lines.length === 0
+                      ? "Add a dish first"
+                      : isAddingToOrder
+                        ? "Save changes to the order"
+                        : "Send to the kitchen"}
+                </Button>
+
+                {/* The last order sent. Kept INSIDE the pinned footer because the number is
+                    read out loud to the customer, and it must stay on screen while the next
+                    ticket is being built — it used to sit under the ticket and scroll away. */}
+                {lastOrder && (
+                  <div className="counter-last" role="status" style={{ marginTop: 12 }}>
+                    <strong>{lastOrder.orderNumber}</strong>{" "}
+                    {lastOrder.updated ? "updated" : "sent to the kitchen"}
+                    <span className="meta">{lastOrder.note}</span>
+                  </div>
+                )}
+              </div>
             </PanelBody>
           </Panel>
-
-          {/* The last order sent. Kept on screen because the number is read out loud, and
-              because a staff member needs to see that the previous one actually went. */}
-          {lastOrder && (
-            <div className="counter-last" role="status">
-              <strong>{lastOrder.orderNumber}</strong>{" "}
-              {lastOrder.updated ? "updated" : "sent to the kitchen"}
-              <span className="meta">{lastOrder.note}</span>
-            </div>
-          )}
         </aside>
       </div>
 

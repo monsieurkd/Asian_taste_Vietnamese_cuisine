@@ -497,6 +497,19 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    /* Capped at the viewport so a page can fill it exactly and scroll a pane inside itself
+       rather than the whole document. `min-height: 0` lets a flex child shrink below its
+       content — without it the counter's fixed-height pane would push the page taller. */
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* The counter owns its own scrolling, so it must not also be scrolled by its parent.
+     Other pages keep the document scroll and are unaffected: `.admin-page` is only
+     unpinned for this one. */
+  .admin-main:has(.counter-page) > .admin-page.counter-page {
+    min-height: 0;
+    overflow: hidden;
   }
   .admin-top {
     display: flex;
@@ -1897,20 +1910,133 @@
 @layer components {
   .counter-page {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 380px;
-    gap: 1.5rem;
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 1.25rem 1.5rem;
+    /* `stretch`, not `start`: the ticket must fill the row's height so its body can scroll
+       and its footer can pin. With `start` the row sized itself to the ticket's content
+       (318px in a 900px viewport), which left the scroll region 90px tall and squeezed the
+       order lines into a letterbox. */
+    align-items: stretch;
+    /* The page itself does NOT scroll: the menu column and the ticket each scroll
+       internally. That is what removes "scroll all the way down to make an order" — the
+       total and the Save button stay put while the dish list moves under them.
+       `flex: 1` and `min-height: 0` are what let this fill the parent `.admin-page` flex
+       column instead of collapsing to its content height. */
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
   @media (max-width: 1100px) {
-    /* One column on a narrow tablet, ticket first: at that width the ticket is what
-       the staff member keeps glancing at, and pushing it below a long menu is how
-       the running total stops being visible when it is needed. */
+    /* One column on a narrow tablet. The ticket comes FIRST, because at this width there
+       is not room for it beside the menu and it is the thing the staff member keeps
+       glancing at — pushing it below a menu is how the running total stops being visible
+       when it is needed, which was the original complaint.
+       The page scrolls here: two stacked panes cannot both be viewport-height on a screen
+       this size, and nesting two scroll regions inside one another is a trap on a tablet. */
     .counter-page {
       grid-template-columns: 1fr;
+      height: auto;
+      overflow: visible;
     }
     .counter-ticket {
       order: -1;
+      height: auto;
     }
+    .counter-menu {
+      /* At this width the rail becomes a horizontal strip above the dishes, so the menu
+         does not need to be a fixed-height pane. */
+      grid-template-columns: 1fr;
+      overflow: visible;
+    }
+    .counter-rail {
+      flex-direction: row;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 6px;
+    }
+    .counter-dishes-wrap {
+      overflow: visible;
+    }
+  }
+
+  /* ─── the menu: a category rail beside the dishes ─────────────────────────── */
+  /* The menu used to be all 14 categories stacked, which made this column ~4,900px and
+     was the root cause of the scrolling: the ticket sat beside it and could not pin. One
+     category at a time is what makes the menu a screen tall. */
+  .counter-page > [data-od-id='counter-mode'] {
+    /* The mode row spans both columns: it is full-width chrome above the working area,
+       not a member of the menu column. */
+    grid-column: 1 / -1;
+  }
+  .counter-menu {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 1.25rem;
+    min-height: 0;
+    overflow: hidden;
+  }
+  @media (max-width: 640px) {
+    .counter-menu {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .counter-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: 4px;
+  }
+
+  .cat-key {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    /* 44px is the thumb floor from the design set; a category is tapped far more often
+       than it is read. */
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm, 8px);
+    background: transparent;
+    color: var(--color-fg);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .cat-key:hover {
+    background-color: var(--color-fg-soft);
+  }
+  .cat-key[aria-pressed='true'] {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-surface);
+  }
+  .cat-count {
+    font-size: 11.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background-color: var(--color-fg-soft);
+    color: var(--color-muted);
+  }
+  .cat-key[aria-pressed='true'] .cat-count {
+    background-color: color-mix(in oklch, var(--color-surface) 22%, transparent);
+    color: var(--color-surface);
+  }
+
+  .counter-dishes-wrap {
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: 4px;
   }
 
   .counter-grid {
@@ -1987,12 +2113,63 @@
   }
 
   .counter-ticket {
-    position: sticky;
-    /* Below the sticky console header, so the ticket does not slide under it. */
-    top: 84px;
+    /* Fills the viewport-height grid row, so the panel inside can scroll its body and pin
+       its footer. This replaces `position: sticky`, which could not work here: the ticket
+       sat beside a ~4,900px menu column, so it only "stuck" once the page had already been
+       scrolled to the bottom — measured at 4,025px. */
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    min-height: 0;
+    height: 100%;
+  }
+  /* The panel is the flex column that owns the scroll region and the footer. */
+  .counter-ticket .panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+  }
+  .counter-ticket .panel-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+  @media (max-width: 1100px) {
+    /* Stacked layout: the page scrolls, so the ticket takes its natural height and no
+       inner scroll regions exist — two nested scrollers on a tablet is a trap. */
+    .counter-ticket,
+    .counter-ticket .panel,
+    .counter-ticket .panel-body {
+      height: auto;
+    }
+    .counter-ticket .panel-body {
+      overflow: visible;
+    }
+    .ticket-scroll {
+      overflow: visible;
+    }
+  }
+
+  /* The lines and the fields scroll; the total and Save do not. */
+  .ticket-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  /* ─── the pinned footer of the ticket ─────────────────────────────────────── */
+  /* Always visible, so the total can be quoted and the order sent without the page
+     moving. This is the half of the fix that removes the scrolling. */
+  .ticket-foot {
+    flex: none;
+    border-top: 1px solid var(--color-border);
+    padding-top: 2px;
+  }
+  .ticket-foot .counter-total {
+    margin-top: 10px;
   }
 
   .counter-lines {

@@ -2384,3 +2384,91 @@ public — which is the thing the audit was written to enable.
 
 3. **Nothing to do for the JWT key** — done above. Production was already using a real
    secret, and now a missing one cannot pass silently.
+
+---
+
+## 27. The counter screen took 4,000px of scrolling to take an order — 2026-10-02
+
+Reported directly: *"I have to scroll all the way down to make an order."* Measured, it was
+worse than that sounds.
+
+### What was wrong
+
+The menu column rendered **all 82 dishes in 14 stacked groups** — a column about **4,900px**
+tall. The running ticket sat beside it with `position: sticky`, which could not work: a
+sticky element is pinned within its containing block, so a 647px ticket beside a 4,900px
+column only sticks once the page has *already* been scrolled to the bottom.
+
+Measured on the live screen at 1600×900:
+
+| | Before |
+|---|---|
+| Page height | **4,925px** |
+| Ticket top | 4,247px |
+| **Save button top** | **4,821px** |
+| **Scroll needed to reach it** | **4,070px** |
+| Ticket actually stuck at | 4,025px — i.e. never, until you were already there |
+
+A tablet below 1100px went single-column and put the ticket *above* the menu, so it worked
+there. The desktop layout — the one on the counter — was the broken one.
+
+**So this was not a styling wobble: the screen's primary action was four screens down.**
+
+### The fix, in two halves
+
+**1. A category rail.** One category at a time instead of all 14 stacked. This is the shape
+every till uses for a menu this size, and it is what makes the menu roughly a screen tall
+instead of five. Defaults to the first category; recovers to the first if the chosen one
+empties mid-shift.
+
+**2. A pinned ticket.** The page no longer scrolls at all. The ticket fills the viewport
+height with its own internal scroll for the order lines and the fields, and a **pinned
+footer** holding the total and the Save button — the two things that must never move.
+
+The subtle part, and the first two attempts got it wrong: `align-items: start` on the grid
+sized the row to the *ticket's content* (318px in a 900px viewport), which left the scroll
+region 90px tall and squeezed the order lines into a letterbox. It needs `stretch`, plus
+`flex: 1; min-height: 0` to fill the parent `.admin-page` flex column, plus `.admin-main`
+capped at `100dvh` so a page can fill the viewport exactly rather than growing past it.
+None of that is visible in a screenshot — it only shows up as a scroll region that is the
+wrong height, which is why it was measured rather than eyeballed.
+
+### Verified: an order now needs zero scrolling
+
+The test is the honest one — record `window.scrollY` before every interaction of a real
+order and assert it never changes.
+
+| Viewport | Max scrollY during a full order | Save button visible |
+|---|---|---|
+| 1600×900 desktop | **0** | every step |
+| 1024×768 iPad landscape | **0** | every step |
+
+`pageNeedsScroll` is now **false** at 1280, 1440, 1600 and 1024×768 — the page does not
+scroll at all. At 820×1180 portrait it still scrolls (two stacked panes cannot both be
+viewport-height on a small screen) but the total and Save stay visible throughout.
+
+**The long order, which is the case that would break a pinned footer:** with 10 lines on the
+ticket, `pageScrollY` stays 0, the ticket scrolls **internally** (a 394px window over 1,361px
+of content), and both the total and the Save button remain visible. That is the whole design
+in one measurement.
+
+Also re-verified after the restructure: the add-to-order mode still loads an existing order
+with its money panel, and the dish options modal still opens. No 4xx or 5xx on the screen.
+182 frontend tests pass and eslint is clean.
+
+### One thing the linter caught, worth recording
+
+The first version synced the active category in a `useEffect`, and `react-hooks/set-state-in-effect`
+rejected it. The rule is right and the fix is better than the original: the active category is
+purely **derived** (the chosen one, or the first), so it is computed during render and stored
+as a *choice* (`null` = not chosen yet). No effect, no state to keep in sync, and no
+re-render when the menu changes.
+
+### Not done here
+
+- **No search across dishes.** With 14 categories a rail is enough; if the menu grows, a
+  search box is the next step.
+- **The keyboard flow is unverified.** The screen is designed for a tablet at a counter, and
+  the redesign does not change that assumption.
+- **No favourites/quick-add row** for the dishes a shop sells most. That was not asked for,
+  and the rail plus one-tap add is the fast path this change was about.
