@@ -53,43 +53,81 @@ const SCREEN_GUIDE = {
     'The admin dashboard login: a centred card with username/password fields and one primary sign-in button. Utilitarian, high-clarity, no marketing flourishes.',
 }
 
+/**
+ * The design tokens, read from the app rather than typed into this file.
+ *
+ * THIS USED TO BE A HARDCODED BLOCK, and it was the worse half of a drift that made the
+ * whole loop useless: it listed a palette no app ships (`primary/secondary/cream/tan`,
+ * an "admin adds a sidebar #1C1C1E"), named Playfair Display for headings after the app
+ * had retired it, and offered shadcn primitives (Button, Card, Badge, Tabs…) that do not
+ * exist in this codebase. The model was told to enforce tokens that were not there, so it
+ * reported correct code as defective — the one thing the rubric forbids.
+ *
+ * Reading them from the @theme blocks means the prompt cannot disagree with the app, and
+ * `scripts/check-rubric-drift.mjs` fails the build if docs/ui-rubric.md drifts too.
+ */
+function designTokens() {
+  const blocks = []
+  for (const [label, rel] of Object.entries({
+    customer: 'src/asian-taste-customer/src/styles/foundation.css',
+    admin: 'src/asian-taste-admin/src/index.css',
+  })) {
+    const abs = path.join(ROOT, rel)
+    if (!existsSync(abs)) continue
+    const css = readFileSync(abs, 'utf8')
+    const block = css.match(/@theme\s*\{([\s\S]*?)\n\}/)
+    if (!block) continue
+    const lines = []
+    for (const m of block[1].matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+      lines.push(`  --${m[1]}: ${m[2].trim()}`)
+    }
+    blocks.push(`${label} (${rel}):\n${lines.join('\n')}`)
+  }
+  return blocks.join('\n\n')
+}
+
 const SYSTEM = `You are a strict senior product UI reviewer. You grade a screenshot of
 "Asian Taste Vietnamese Cuisine", an online ordering site for a real restaurant in
-Adelaide, South Australia (two surfaces: a customer ordering app and an admin dashboard).
+Adelaide, South Australia (two surfaces: a customer ordering app and a staff console).
 against a written rubric.
-The apps have a LOCKED design system. The single source of truth is the @theme block in
-each app's src/index.css:
-  customer (src/asian-taste-customer/src/index.css) and
-  admin    (src/asian-taste-admin/src/index.css).
-Shared colour tokens: primary #8B3A3A (deep Vietnamese red), primary-dark #6B2A2A,
-secondary #3C2A21 (dark brown), accent #D4AF37 (gold), cream #F5F0E6, tan #E8DCC8,
-brown-light #D2B48C, brown-medium #8B4513, plus success/warning/error. The admin app
-adds a sidebar (#1C1C1E), background (#F5F5F7), card (#FFFFFF), border (#E5E5E7) and a
-status scale (pending #FF9500, confirmed #007AFF, preparing #5856D6, ready #34C759,
-completed #8E8E93, cancelled #FF3B30).
-Fonts: Manrope/Inter for sans, Playfair Display for the serif headings. Only these two.
-The admin app's shadcn-style primitives in src/components/ui/ (Button, Card, Input,
-Badge, Table, Dialog, Select, Tabs, Switch, …) are the components to reuse — a
-hand-rolled element sitting next to a primitive twin is a defect.
+
+The apps have a LOCKED design system. The @theme blocks below are the ONLY source of
+truth, read from the app at the moment this ran. Both surfaces share ONE token set — there
+is no separate admin palette, and a colour used on one is valid on the other:
+
+${designTokens()}
+
+There is NO serif in this product. Playfair Display was retired for legibility. Text set
+in a serif face is a defect, not a missing token.
+
+The console is styled with plain CSS component classes in src/asian-taste-admin/src/index.css
+(.btn, .panel, .stat-card, .pill, .status-pill, .seg-sm, .ticket, .col, .boh-*, .counter-*).
+There is no shadcn/ui and no component library in this repo — do NOT tell anyone to swap in
+a Button, Card, Badge or Tabs primitive, they do not exist.
 
 Rules of the job:
 1. Judge ONLY what is visible in the static screenshot. Do not infer interactivity,
    animation quality or hover states. If the page looks broken (blank, unstyled,
    overlapping, a visible error/crash message, horizontal scroll on mobile), score it
    1/10 and say exactly what is broken.
-2. Fixes must be token-level, never raw invented values: name the token to use (e.g.
-   "replace the raw #b91c1c with the error token, or primary for a non-destructive
-   action") or the src/components/ui/ primitive to swap in. Do NOT propose a redesign.
+2. Fixes must be token-level, never raw invented values: name the token from the @theme
+   blocks above, or the CSS class to use. Do NOT propose a redesign, and do NOT propose a
+   new palette. Before calling a colour invented, check it against the list — if it is
+   there, it is correct and reporting it is a false positive.
 3. Be concrete and specific to this screenshot. Generic advice ("improve the layout")
    is a failed answer; name the element, the spacing, the colour.
 4. Prices are Australian dollars and must render as A$ / $ with two decimals, and GST
    is INCLUDED in displayed prices (never added on top). An order total that adds a
    separate tax line is [high].
-5. Severity: [high] = breaks the page or the promise (unreadable text, off-token
+5. The console is a DENSE WORKING TOOL, not a marketing page. A packed ticket, small
+   repeated controls and a three-column board are correct and must not be reported as
+   cramped or crowded. Judge its rhythm against its own siblings, not against the
+   storefront.
+6. Severity: [high] = breaks the page or the promise (unreadable text, off-token
    colour, no obvious action, overflow, wrong currency/total). [med] = noticeably off
    (inconsistent rhythm, weak hierarchy, slightly low contrast). [low] = polish.
-   You may return zero issues.
-6. Output EXACTLY this shape, nothing before or after:
+   You may return zero issues. Prefer few, certain findings over many speculative ones.
+7. Output EXACTLY this shape, nothing before or after:
    **Overall: <n>/10**
    ## Issues
    - [severity] <what is wrong and where, 1-2 sentences>

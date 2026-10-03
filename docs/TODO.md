@@ -1992,3 +1992,96 @@ It is also not reproducible: the same 1280px screenshot scored 6 and then 7 in o
 exists to catch visual regressions currently cannot. Fixing it is its own piece of work
 (update the rubric to the shipped tokens, then make the scores stable), and it is now recorded
 here rather than acted on inside an unrelated change.
+
+---
+
+## 23. The UI quality loop was grading against a design set that does not exist — 2026-10-02
+
+Not an issue from the original list. Found while verifying §22, and it is the one that
+mattered most: **every UI change was being judged by a tool measuring the wrong thing.**
+
+### What was wrong
+
+`docs/ui-rubric.md` is the **executable spec** for the vision judge — `ui-judge.mjs` reads
+the file and sends it as the grading contract. It had drifted from the app far enough to
+invert its own purpose. Measured mechanically:
+
+| | |
+|---|---|
+| Colours the rubric told the judge to enforce | **23** |
+| Of those, present in either app | **8** |
+| **Not in the app at all** | **15** — `#007AFF #1C1C1E #2C2C2E #34C759 #5856D6 #6B2A2A #8B4513 #8E8E93 #C62828 #D2B48C #E5E5E7 #F57C00 #F5F5F7 #FF3B30 #FF9500` |
+| Display face the rubric demanded | **Playfair Display** |
+| Display face the app ships | **Plus Jakarta Sans** |
+| Serif in the app | **None** — `foundation.css`: *"Playfair Display was retired for legibility — do not reintroduce a serif on headings"* |
+| shadcn primitives the judge was told to recommend | `Button, Card, Input, Badge, Table, Dialog, Select, Tabs, Switch` — **none exist in this repo** |
+
+So the judge penalised correct code for using the right tokens — the one behaviour the
+rubric explicitly forbids ("never prescribe a redesign… name the token") — and it could not
+comply, because the tokens it was handed were fiction. Its "admin-only palette" (`sidebar
+#1C1C1E`, `background #F5F5F7`, an iOS status ramp) **does not exist**: both apps share one
+identical 24-token set, verified.
+
+### The second half, which was worse
+
+The stale palette was **also hardcoded in `SYSTEM` inside `scripts/ui-judge.mjs`**, so even
+fixing the rubric file would have left the model being told the wrong tokens by its system
+prompt. Two sources of truth, both wrong, in different files.
+
+Now the prompt **reads the `@theme` blocks at run time**, so it cannot disagree with the app.
+
+### Also: the scores were not reproducible
+
+Same screenshot, unchanged code, three consecutive runs before the fix: **4/10, 4/10, 4/10**,
+then **3/10** (severities shifted 3 med → 2 med). After: **five consecutive runs at
+4/10 with identical severity counts, then 6/10 after the rubric correction** — the movement
+attributable to the prompt, not to noise.
+
+### What was verified, and how
+
+**Re-judged a screen whose code was never touched** (`customer/menu`), which is the only way
+to show the tool moved rather than the code. The desktop shot went from **1 high / 3 med /
+4/10** to **0 high**, and the remaining findings became specific and correct — naming
+`--color-fg`, `--color-gold` and `.btn-outline-light`, and citing the rubric's own
+known-false-positives table by issue number.
+
+Two findings from that pass were **real**, and are now issues:
+
+- **[#7](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues/7)** — both
+  storefront photos are stored landscape but carry an EXIF rotation flag, so Chrome reports
+  the hero as `1200x1600` (portrait) and `object-fit: cover` crops it to half inside a 16:10
+  frame. Measured, not inferred.
+- **[#8](https://github.com/monsieurkd/Asian_taste_Vietnamese_cuisine/issues/8)** — **no dish
+  card or price is visible above the fold on `/menu`** at either viewport (first dish card at
+  861px in an 800px viewport; 1161px in an 844px one). On the page whose whole job is
+  browsing dishes.
+
+**A caution worth keeping.** The judge reported #7 as *"a blue-tinted photo of a window with
+a SAP watermark"* — there is no watermark, both files are genuine iPhone photos, and the real
+cause is EXIF rotation. **It was right about where to look and wrong about why.** Acting on
+its stated reason would have sent someone hunting for a watermark that does not exist. That,
+and the four other findings checked against the DOM and rejected, are now recorded in the
+rubric's false-positive table — including the two that this session produced.
+
+### The guard, so it cannot rot again
+
+`scripts/check-rubric-drift.mjs` parses both `@theme` blocks and the rubric, and fails when
+the rubric names a colour or font no app ships, when an app ships a token the rubric omits,
+or when the two apps disagree. It runs **inside `check-ci-integrity.sh`** (not skipped in
+`--static-only` mode, unlike the size tripwire — this is cheap and it is exactly the check
+whose absence caused the problem), so a design-language change and the rubric move together
+or CI goes red.
+
+Both halves of the drift were **proved to fail the guard** by reinstating them: the old
+`sidebar #1C1C1E` token, and Playfair Display as the display face. Each produced a specific
+error naming the consequence.
+
+### What is still not true of this loop
+
+- **It cannot judge layout or density.** The console is a dense working tool by design, and
+  the board's three columns are the product. Those are recorded product decisions (§17, §22),
+  and the rubric now tells the judge to report only token and consistency defects there.
+- **One run is one opinion.** With the prompt fixed the scores were stable across five runs,
+  but a single judge call is still a single sample; treat a `[high]` as a pointer to go and
+  look, never as a verdict.
+- **The admin app is still not captured in CI** — see §22 on the missing deploy verification.

@@ -98,6 +98,7 @@ declare -a REQUIRED=(
   "scripts/check-test-wiring.sh"
   "scripts/check-test-health.sh"
   "scripts/check-ci-integrity.sh"
+  "scripts/check-rubric-drift.mjs"
   "scripts/ui-shots.mjs"
   "scripts/ui-judge.mjs"
   "docs/ui-rubric.md"
@@ -111,6 +112,37 @@ for p in "${REQUIRED[@]}"; do
     fail "required guardrail artefact is missing: $p — the guardrail set has been weakened"
   fi
 done
+
+# ---------------------------------------------------------------------------
+# 0b. The UI rubric must still describe the tokens the apps ship.
+#
+# docs/ui-rubric.md is the EXECUTABLE SPEC for the vision judge, and it had drifted far
+# enough that the judge penalised correct code — it named 15 colours no app ships and
+# demanded Playfair Display, which foundation.css retires for legibility. A judge scoring
+# a good screen 4/10 reads as the screen's fault, so the drift was invisible.
+#
+# This runs inside the integrity guard rather than CI directly, because the thing being
+# protected is a guardrail: if the rubric and the design set can diverge without a red
+# build, the loop converges on the wrong thing. Skipped in --static-only mode is NOT an
+# option — unlike the size tripwire this is cheap, and it is exactly the check whose
+# absence caused the problem.
+# ---------------------------------------------------------------------------
+hdr "The UI rubric matches the shipped design tokens"
+if [ -f scripts/check-rubric-drift.mjs ]; then
+  if command -v node >/dev/null 2>&1; then
+    drift_out="$(node scripts/check-rubric-drift.mjs 2>&1)"
+    if [ $? -eq 0 ]; then
+      printf '%s\n' "$drift_out" | sed 's/^/  /'
+    else
+      printf '%s\n' "$drift_out" | sed 's/^/  /'
+      fail "docs/ui-rubric.md has drifted from the tokens the apps ship — the vision judge will grade correct code as defective"
+    fi
+  else
+    note "node not found — skipped the rubric drift check"
+  fi
+else
+  fail "scripts/check-rubric-drift.mjs is missing — the UI rubric can drift from the design set unnoticed"
+fi
 
 # ---------------------------------------------------------------------------
 # 1. The guardrail scripts must be executable and syntactically valid.

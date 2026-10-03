@@ -19,7 +19,8 @@ Each guardrail targets one of those failure modes.
 |---|---|---|
 | `scripts/check-test-wiring.sh` | Can every tracked test file actually **run**? | A test file has no runner, imports an undeclared dependency, or its project is missing from the solution |
 | `scripts/check-test-health.sh` | Did the suite really run, and did it **mean** something? | Any test is skipped, a test file has zero assertions, 0 tests ran, tests failed, or the count dropped below `.test-baseline` |
-| `scripts/check-ci-integrity.sh` | Are the guardrails still **armed**, and is the change reviewable? | A guardrail step is wrapped in `continue-on-error`, a guardrail script is deleted, the workflow stops triggering, or the diff exceeds the size thresholds |
+| `scripts/check-ci-integrity.sh` | Are the guardrails still **armed**, and is the change reviewable? | A guardrail step is wrapped in `continue-on-error`, a guardrail script is deleted, the workflow stops triggering, the diff exceeds the size thresholds, **or `docs/ui-rubric.md` no longer matches the tokens the apps ship** |
+| `scripts/check-rubric-drift.mjs` | Does the UI rubric still describe the **shipped** design set? | The rubric names a colour or font no app ships, an app ships a token the rubric omits, or the two apps disagree on a token. Run directly or via `check-ci-integrity.sh`, which invokes it. |
 
 Run all three locally:
 
