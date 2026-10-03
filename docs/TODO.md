@@ -52,7 +52,7 @@ they come first — everything after them is a decision rather than a cleanup.**
 
 | # | Item | Effort | Why it matters |
 |---|---|---|---|
-| **T1a** | **Supply two real food photographs** | needs photos from you | Both storefront images are photographs of **a tablet screen** — `hero.jpg` is this app's own Orders page, `family.jpg` is the **Uber Eats merchant app showing "Asian Taste · Closed until 10:00AM"**. Their alt text describes food that is not there. They sit in the two most prominent slots on `/` and `/menu`. Issues **#7** and **#8** are both blocked on this, and **#8 (no dish or price above the fold on `/menu`) is fixed as part of the same job.** Details and a checklist in §25. |
+| **T1a** | **Pick the two storefront photographs** | **your eye, ~2 min** — 10 candidates described below | Both deployed photos are pictures of **a tablet screen** — `hero.jpg` is this app's own Orders page, `family.jpg` is the **Uber Eats merchant app showing "Asian Taste · Closed until 10:00AM"** — and their alt text describes food that is not there. **I was wrong that this needed photos from you**: ten real dish photographs already exist in `docs/DESIGN/mockups/src/assets/dishes/`, seven of them landscape and framing correctly with no rotation fix. They are staged in `/tmp/photo-review` (opened in Finder). **What I cannot check is whether they are this restaurant's food** — they carry no EXIF at all, unlike the current iPhone captures. Six rated appetising: `pho-beef-noodle-soup`, `combination-noodle-bowl-salad`, `pad-thai`, `spring-rolls`, `chicken-egg-noodle-soup`, `tender-beef-pepper-soy`. Pick two and I will wire them in, fix the alt text, and do #8's layout in the same pass. Details in §25 and §29. |
 | **T1b** | **Rotate the Neon database password** | ~5 min | Still the one with real consequences. A fragment of the live password is recoverable from git history (`docs/SECRET-AUDIT.md`), and **`neonctl` cannot rotate it or even tell you whether it was** — its `roles` command is list/create/delete only. The role is unchanged since 2026-09-12, so there is no evidence of rotation. **The repository being private with 0 forks is currently the only thing limiting the exposure.** Exact steps in §26. |
 | ~~T1c~~ | ~~The committed JWT signing key~~ — **DONE 2026-10-02** | — | Was worse than the September audit described: the same public string was committed **twice**, once as a C# fallback in `Program.cs`, so a deployment with a missing `Jwt__SecretKey` would have silently signed admin tokens with a value in this repository. Production was never exposed. Now **three startup checks** refuse rather than degrade quietly; `appsettings.json` carries an empty value. Fixed in `d5031ca`, verified live by the deploy passing. See §26. |
 | ~~T2~~ | ~~Cancel the probe orders on the kitchen board~~ — **DONE 2026-10-02** | — | Nine synthetic orders were sitting as live tickets (**ids 2, 16-21, 23, 24** — "Probe Test", "Probe Fixed", "Close Probe", "Final Probe", "GST Probe", "Allergy Probe", "Gateway Probe"). All were cancelled on 2026-10-02, leaving only the owner's four real orders (8, 13, 14, 15). The original instruction listed only ids 16-21; the other three were found by querying for `customer_email like '%@example.com'` and were the same class of test data. |
@@ -2565,3 +2565,59 @@ share would starve the dish grid.
 - **A line's dish cannot be swapped** (pho → laksa) — only its options and note. That was the
   agreed reading of "edit that specific item"; swapping the dish is a different feature.
 - **No keyboard shortcut for collapsing.** Unverified either way, and the button is reachable.
+
+---
+
+## 29. I claimed T1a was blocked on the owner. It was not — 2026-10-02
+
+T1a said the storefront needed two real food photographs **from you**. That was recorded
+without checking whether any already existed, and they did: ten of them, in this repository.
+
+### What is actually there
+
+`docs/DESIGN/mockups/src/assets/dishes/` — ten dish photographs from the design set:
+
+| File | Size | Ratio | Frames 16:10? | Vision model's read |
+|---|---|---|---|---|
+| `pho-beef-noodle-soup.jpg` | 550×440 | 1.250 | yes | **GOOD** — rare beef pho, herbs, clean dark table |
+| `combination-noodle-bowl-salad.jpg` | 550×440 | 1.250 | yes | **GOOD** — vibrant, herbs, peanuts, dipping sauce |
+| `pad-thai.jpg` | 550×440 | 1.250 | yes | **GOOD** — chicken pad Thai, lime, peanuts |
+| `spring-rolls.jpg` | 550×440 | 1.250 | yes | **GOOD** — two golden rolls, clean white plate |
+| `chicken-egg-noodle-soup.jpg` | 550×440 | 1.250 | yes | **GOOD** — poached pork, broccoli, fried garlic |
+| `tender-beef-pepper-soy.jpg` | 550×440 | 1.250 | yes | **GOOD** — stir-fried beef, rice, pickles |
+| `crispy-roasted-pork-noodle-bowl-salad.jpg` | 550×453 | 1.214 | yes | WEAK — flat lighting, visually muddled |
+| `crispy-skin-chicken.jpg` | 550×493 | 1.115 | borderline | WEAK — takeaway container, messy sauce |
+| `dimsim-3.jpg` | 550×699 | 0.786 | no — portrait | WEAK — harsh light, oily sheen, sparse plating |
+| `rice-paper-rolls.jpg` | 550×768 | 0.716 | no — portrait | WEAK — cloudy wrappers, messy sauce rim |
+
+**Every one carries `Orientation: 1`** — so unlike `hero.jpg` and `family.jpg` (which are
+`Orientation: 6` and render portrait in a landscape frame), these need no rotation work. All
+ten were checked for text, watermarks, logos, screens and people: **none present**.
+
+### What I could NOT check, which is why this is still your call
+
+**These files have no EXIF data at all** — no camera, no artist, no copyright, no date.
+The current photos are iPhone 12 Pro Max captures with full EXIF, so I can at least see they
+were taken on a phone at the restaurant. For these ten I cannot establish *when or where*
+they were taken, and they are of unidentifiable dishes from a design mockup folder.
+
+I can verify they are **appetising and well-framed**. I cannot verify they are **Asian Taste's
+food**, and putting another restaurant's photograph on your storefront would be a different
+kind of wrong from the current one. So: staged, described, and waiting for your eye rather
+than deployed on my judgement.
+
+`docs/DESIGN/INVENTORY.md` **D-11** already flags that an earlier hero was *"a random Unsplash
+photo of a different restaurant"* — so this exact mistake has been made in this project once.
+
+### Staged for review
+
+All ten copied to `/tmp/photo-review` and the folder opened, so this is a look rather than a
+read. Nothing has been deployed.
+
+### The lesson, which is the same one this file keeps recording
+
+I wrote "the first three are mine to have left behind" at the top of this document, then added
+a fourth item blaming you for something I had not investigated. **Before recording that a task
+needs the owner, check whether the inputs already exist.** Three of the nine defects found this
+session were found by running the software rather than reasoning about it; this one was found
+by running `find`.
