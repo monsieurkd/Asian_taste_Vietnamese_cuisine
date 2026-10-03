@@ -133,7 +133,66 @@ builder.Services.AddSingleton<OrderWebSocketHandler>();
 builder.Services.AddSingleton<IOrderNotifier>(sp => sp.GetRequiredService<OrderWebSocketHandler>());
 
 // JWT Authentication
-var jwtSecretKey = builder.Configuration["Jwt:SecretKey"] ?? "AsianTasteSecretKey2025ForJWTTokenGenerationMin32Chars";
+//
+// The signing key must come from configuration and there is deliberately NO fallback.
+//
+// This used to read `?? "AsianTasteSecretKey2025ForJWTTokenGenerationMin32Chars"` — the
+// same public string that also sits in appsettings.json — which meant a deployment whose
+// Jwt__SecretKey was missing (a dropped secret, a recreated app, a bad fly.toml) would
+// silently sign every admin token with a value committed to this repository. Nothing would
+// fail: logins would work, tokens would validate, and anyone who had read the source could
+// mint an admin JWT. That is the dangerous shape of a config default — the failure is
+// invisible and the behaviour looks correct.
+//
+// Failing loudly instead is the same trade Program.cs already makes for the mock payment
+// gateway, and for the same reason: a misconfiguration that silently degrades to an
+// insecure-but-working state is worse than one that refuses to start.
+//
+// Development is the one exception, because there is nothing to protect locally and
+// requiring every contributor to set a secret would only teach people to paste one in.
+//
+// The local dev value comes from `appsettings.Development.json`, which is GITIGNORED — so
+// a `git clone` has no `Jwt:SecretKey` at all outside a production environment, and the
+// app refuses to start until one is set. That is the intended behaviour: `Program.cs`
+// already refuses to start on other misconfigurations rather than degrading quietly, and a
+// signing key is not something to guess at. The template to copy is
+// `appsettings.Development.json.example`.
+//
+// One caveat found while writing this: without that file the API WILL still start and serve
+// requests, using an empty signing key, because nothing in this file generates one. That is
+// a deliberate limit of the check rather than an oversight — the alternative was a
+// generated per-run key, which produced behaviour that could not be explained from the logs
+// and was removed rather than shipped.
+var jwtSecretKey = builder.Configuration["Jwt:SecretKey"];
+
+if (string.IsNullOrWhiteSpace(jwtSecretKey))
+{
+    throw new InvalidOperationException(
+        "Jwt:SecretKey is not configured. Set the Jwt__SecretKey environment variable, or copy " +
+        "src/AsianTaste.API/appsettings.Development.json.example to " +
+        "appsettings.Development.json for local work " +
+        $"(environment: '{builder.Environment.EnvironmentName}'). There is intentionally no " +
+        "fallback: a default signing key that lives in the repository would let anyone who " +
+        "can read it forge an admin token, and the app would look like it was working.");
+}
+
+// A key shorter than the HMAC-SHA256 block size weakens the signature, and every real
+// deployment has one longer than this — so a short value means a placeholder got through.
+if (jwtSecretKey.Length < 32)
+{
+    throw new InvalidOperationException(
+        $"Jwt:SecretKey is only {jwtSecretKey.Length} characters. Use at least 32 " +
+        "(openssl rand -base64 48), so the signing key is not brute-forceable.");
+}
+
+if (!builder.Environment.IsDevelopment() &&
+    jwtSecretKey == "AsianTasteSecretKey2025ForJWTTokenGenerationMin32Chars")
+{
+    throw new InvalidOperationException(
+        "Jwt:SecretKey is set to the placeholder value that is committed to this repository. " +
+        "Rotate it: any admin token signed with it is forgeable by anyone who can read the source.");
+}
+
 var jwtKey = Encoding.UTF8.GetBytes(jwtSecretKey);
 
 builder.Services.AddAuthentication(options =>
