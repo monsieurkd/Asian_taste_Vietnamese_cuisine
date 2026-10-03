@@ -26,6 +26,16 @@ export interface EditMoney {
   overpaid: number
   /** Whether an order that was never settled still needs collecting. */
   collectAtCounter: boolean
+  /**
+   * Which conversation the operator is about to have.
+   *
+   * Named as a case rather than left to the caller to infer from the numbers, because the
+   * caller got it wrong: a screen that tested only `shortfall === 0 && overpaid === 0` read
+   * an UNPAID order whose total rose from $9 to $22 as "the total has not changed" — both
+   * of those are 0 when nothing was ever charged. The distinction is not derivable from the
+   * amounts alone, so it is decided once, here, and tested.
+   */
+  case: 'paid-more' | 'paid-less' | 'nothing-taken' | 'unchanged'
 }
 
 export function editMoney(
@@ -41,13 +51,22 @@ export function editMoney(
   if (!settled) {
     // Never charged online. The card may have declined, or the customer chose to pay at
     // the counter — either way the counter has to collect the NEW figure.
-    return { newTotal, shortfall: 0, overpaid: 0, collectAtCounter: newTotal > 0 };
+    return {
+      newTotal,
+      shortfall: 0,
+      overpaid: 0,
+      collectAtCounter: newTotal > 0,
+      // `nothing-taken` even when the total happens to be unchanged: the operator still has
+      // to collect it, which is not the same as "nothing to do".
+      case: newTotal > 0 ? 'nothing-taken' : 'unchanged',
+    };
   }
 
-  return {
-    newTotal,
-    shortfall: newTotal > paid ? newTotal - paid : 0,
-    overpaid: newTotal < paid ? paid - newTotal : 0,
-    collectAtCounter: newTotal > paid,
-  };
+  if (newTotal > paid) {
+    return { newTotal, shortfall: newTotal - paid, overpaid: 0, collectAtCounter: true, case: 'paid-more' };
+  }
+  if (newTotal < paid) {
+    return { newTotal, shortfall: 0, overpaid: paid - newTotal, collectAtCounter: false, case: 'paid-less' };
+  }
+  return { newTotal, shortfall: 0, overpaid: 0, collectAtCounter: false, case: 'unchanged' };
 }

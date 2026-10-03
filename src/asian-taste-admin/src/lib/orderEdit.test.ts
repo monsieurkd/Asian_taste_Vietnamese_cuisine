@@ -100,3 +100,56 @@ describe('editMoney — arithmetic', () => {
     expect(editMoney([], 17, 'Succeeded', 17).newTotal).toBe(0);
   });
 });
+
+describe('the case the operator is about to have', () => {
+  // `case` exists because a caller inferred it from the amounts and got it wrong: a screen
+  // testing only `shortfall === 0 && overpaid === 0` read an UNPAID order whose total rose
+  // from $9 to $22 as "the total has not changed". Both are 0 when nothing was charged, so
+  // the distinction is not derivable from the numbers and is decided here instead.
+
+  const lines = (p: number) => [{ unitPrice: p, quantity: 1 }];
+
+  it('names a card order whose total rose as paid-more', () => {
+    const m = editMoney(lines(22), 9, 'Succeeded', 9);
+    expect(m.case).toBe('paid-more');
+    expect(m.shortfall).toBe(13);
+  });
+
+  it('names a card order whose total fell as paid-less', () => {
+    const m = editMoney(lines(5), 9, 'Succeeded', 9);
+    expect(m.case).toBe('paid-less');
+    expect(m.overpaid).toBe(4);
+  });
+
+  it('names an UNPAID order whose total rose as nothing-taken, not unchanged', () => {
+    // The regression. $9 -> $22 with no charge: shortfall and overpaid are BOTH 0, which is
+    // exactly the shape of "nothing happened" — and it is nothing of the sort.
+    const m = editMoney(lines(22), 9, 'Pending', null);
+    expect(m.case).toBe('nothing-taken');
+    expect(m.collectAtCounter).toBe(true);
+    expect(m.shortfall).toBe(0);
+    expect(m.overpaid).toBe(0);
+  });
+
+  it('names an unchanged paid order as unchanged', () => {
+    expect(editMoney(lines(9), 9, 'Succeeded', 9).case).toBe('unchanged');
+  });
+
+  it('treats a declined card as nothing-taken, not as a paid order', () => {
+    const m = editMoney(lines(22), 9, 'Failed', null);
+    expect(m.case).toBe('nothing-taken');
+  });
+
+  it('is case-insensitive about the payment status', () => {
+    expect(editMoney(lines(22), 9, 'succeeded', 9).case).toBe('paid-more');
+    expect(editMoney(lines(22), 9, 'SUCCEEDED', 9).case).toBe('paid-more');
+  });
+
+  it('falls back to the order total when no paid amount was recorded', () => {
+    // An older order with a Succeeded status and no paid_amount: the total it was charged
+    // is the only figure available.
+    const m = editMoney(lines(20), 9, 'Succeeded', null);
+    expect(m.case).toBe('paid-more');
+    expect(m.shortfall).toBe(11);
+  });
+});

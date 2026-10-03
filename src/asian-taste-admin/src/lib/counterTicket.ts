@@ -114,6 +114,71 @@ export function clearTicket(): TicketLineDraft[] {
 }
 
 /**
+ * An order that already exists, reduced to what the counter needs to load it.
+ *
+ * Structurally a subset of the detail DTO, so no conversion is needed at the call site.
+ */
+export interface OrderToLoad {
+  items: Array<{
+    id: number
+    menuItemId: number
+    menuItemName: string
+    quantity: number
+    unitPrice: number
+    specialInstructions?: string | null
+    modifiers?: Array<{ modifierId: number; modifierName: string; priceAdjustment: number }> | null
+  }>
+}
+
+/**
+ * Turn an EXISTING order into a ticket the counter screen can carry on editing.
+ *
+ * This is what makes "add a dish to an order" the same screen as "take a new order". Once
+ * the order is a ticket, every rule already written for a new order applies unchanged —
+ * the dish grid, the options panel, required-choice refusal, quantities — and the only
+ * difference is which endpoint the save button calls.
+ *
+ * Two deliberate choices:
+ *
+ *   * **The order's OWN unit prices are kept, not re-read from the menu.** The customer
+ *     was quoted this figure. Re-pricing the existing lines on load would show a total the
+ *     customer never agreed to, before a single dish had been added — and the server
+ *     re-prices on save anyway, where a change is announced rather than sprung.
+ *   * **The line keys are derived from the order item id.** They must be unique and stable
+ *     across a re-render; the item id already is both, so generating fresh ones would only
+ *     add a way for two loads of the same order to disagree.
+ *
+ * Modifiers are reconstructed from the stored rows: the id and the price adjustment are
+ * what the request needs, and the name is what the line renders. If a modifier has since
+ * been retired from the menu it still loads, because it is already on the order.
+ */
+export function loadOrder(order: OrderToLoad): TicketLineDraft[] {
+  return (order.items ?? []).map((item) => {
+    const modifiers: Modifier[] = (item.modifiers ?? []).map((m) => ({
+      id: m.modifierId,
+      modifierGroupId: 0,
+      name: m.modifierName,
+      priceAdjustment: m.priceAdjustment,
+      displayOrder: 0,
+      isDefault: false,
+    }))
+
+    return {
+      key: `order-item-${item.id}`,
+      menuItemId: item.menuItemId,
+      name: item.menuItemName,
+      quantity: item.quantity,
+      modifiers,
+      note: item.specialInstructions ?? "",
+      // The STORED unit price, which already includes whatever the modifiers cost — see
+      // the note above. Recomputing it from a freshly-fetched dish would double-count the
+      // options if the modifier prices have moved since the order was placed.
+      unitPrice: item.unitPrice,
+    }
+  })
+}
+
+/**
  * The request body for the counter order.
  *
  * Deliberately carries no prices and no line keys: the server prices from the menu, and a

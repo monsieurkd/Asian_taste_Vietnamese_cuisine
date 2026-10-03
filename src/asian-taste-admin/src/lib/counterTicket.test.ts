@@ -4,6 +4,7 @@ import {
   addLine,
   clearTicket,
   hasOptions,
+  loadOrder,
   modifierTotal,
   pricedUnit,
   removeLine,
@@ -292,5 +293,138 @@ describe('hasOptions — the rule behind the panel', () => {
       modifierGroups: [group({ id: 9, name: 'Spice level', modifiers: [] }), group({ id: 11, modifiers: [modifier()] })],
     });
     expect(hasOptions(mixed)).toBe(true);
+  });
+});
+
+describe('loading an existing order onto the counter', () => {
+  // "Add a dish to an order" is the same screen as "take an order": once an existing order
+  // is a ticket, the dish grid, the options panel and the quantity rules all apply
+  // unchanged, and only the save endpoint differs. This is the conversion that makes that
+  // true, so a mistake here is a wrong bill for a customer who is standing there.
+
+  it('turns each order line into a ticket line', () => {
+    const ticket = loadOrder({
+      items: [
+        { id: 7, menuItemId: 17, menuItemName: 'Pho Bo', quantity: 2, unitPrice: 15.5 },
+      ],
+    });
+    expect(ticket).toHaveLength(1);
+    expect(ticket[0]).toMatchObject({ menuItemId: 17, name: 'Pho Bo', quantity: 2, unitPrice: 15.5 });
+    expect(ticket[0].note).toBe('');
+    expect(ticket[0].modifiers).toEqual([]);
+  });
+
+  it('keeps the STORED unit price rather than recomputing it', () => {
+    // The customer was quoted this figure. Re-pricing on load would show a total nobody
+    // agreed to before a single dish had been added.
+    const ticket = loadOrder({
+      items: [{ id: 1, menuItemId: 5, menuItemName: 'Laksa', quantity: 1, unitPrice: 12.34 }],
+    });
+    expect(ticket[0].unitPrice).toBe(12.34);
+  });
+
+  it('rebuilds modifiers so the line can be re-priced and re-sent', () => {
+    const ticket = loadOrder({
+      items: [
+        {
+          id: 3,
+          menuItemId: 9,
+          menuItemName: 'Pho',
+          quantity: 1,
+          unitPrice: 19.5,
+          modifiers: [
+            { modifierId: 65, modifierName: 'Extra protein', priceAdjustment: 4 },
+            { modifierId: 66, modifierName: 'Extra soup', priceAdjustment: 3 },
+          ],
+        },
+      ],
+    });
+    expect(ticket[0].modifiers.map((m) => m.id)).toEqual([65, 66]);
+    expect(ticket[0].modifiers.map((m) => m.name)).toEqual(['Extra protein', 'Extra soup']);
+    expect(modifierTotal(ticket[0].modifiers)).toBe(7);
+  });
+
+  it('carries the customer instruction across', () => {
+    const ticket = loadOrder({
+      items: [
+        { id: 1, menuItemId: 1, menuItemName: 'Banh Mi', quantity: 1, unitPrice: 9, specialInstructions: 'no coriander' },
+      ],
+    });
+    expect(ticket[0].note).toBe('no coriander');
+  });
+
+  it('gives every line a unique, stable key', () => {
+    const order = {
+      items: [
+        { id: 11, menuItemId: 1, menuItemName: 'A', quantity: 1, unitPrice: 5 },
+        { id: 12, menuItemId: 2, menuItemName: 'B', quantity: 1, unitPrice: 6 },
+      ],
+    };
+    const first = loadOrder(order).map((l) => l.key);
+    const second = loadOrder(order).map((l) => l.key);
+    expect(new Set(first).size).toBe(2);
+    // Stable across loads, so a re-render does not reset quantities the operator typed.
+    expect(first).toEqual(second);
+  });
+
+  it('handles an order with no lines', () => {
+    expect(loadOrder({ items: [] })).toEqual([]);
+  });
+
+  it('handles a null modifiers array, which the API sends for an unmodified dish', () => {
+    const ticket = loadOrder({
+      items: [{ id: 1, menuItemId: 1, menuItemName: 'A', quantity: 1, unitPrice: 5, modifiers: null }],
+    });
+    expect(ticket[0].modifiers).toEqual([]);
+  });
+
+  it('round-trips: an order loaded and sent back unchanged keeps its dishes and quantities', () => {
+    // The cheapest possible guard against loading something that cannot be saved again.
+    const order = {
+      items: [
+        { id: 1, menuItemId: 17, menuItemName: 'Pho', quantity: 2, unitPrice: 15.5, modifiers: [{ modifierId: 65, modifierName: 'Extra protein', priceAdjustment: 4 }] },
+        { id: 2, menuItemId: 16, menuItemName: 'Banh Mi', quantity: 1, unitPrice: 9 },
+      ],
+    };
+    const ticket = loadOrder(order);
+    const request = toRequest(ticket, {});
+    expect(request.items).toEqual([
+      { menuItemId: 17, quantity: 2, specialInstructions: undefined, modifierIds: [65] },
+      { menuItemId: 16, quantity: 1, specialInstructions: undefined, modifierIds: [] },
+    ]);
+  });
+
+  it('adds a dish to a loaded order without disturbing the lines already on it', () => {
+    const ticket = loadOrder({
+      items: [{ id: 1, menuItemId: 17, menuItemName: 'Pho', quantity: 1, unitPrice: 15.5 }],
+    });
+    const grown = addLine(ticket, dish({ id: 30, name: 'Spring roll', price: 6 }));
+
+    expect(grown).toHaveLength(2);
+    expect(grown[0]).toMatchObject({ menuItemId: 17, quantity: 1 });
+    expect(grown[1]).toMatchObject({ menuItemId: 30, name: 'Spring roll', quantity: 1 });
+    expect(ticketTotal(grown)).toBe(21.5);
+  });
+
+  it('bumps an existing line when the dish is already on the order', () => {
+    // Adding "one more pho" must read as two pho to the kitchen, not two lines of pho.
+    const ticket = loadOrder({
+      items: [{ id: 1, menuItemId: 17, menuItemName: 'Pho Bo', quantity: 1, unitPrice: 15.5 }],
+    });
+    const grown = addLine(ticket, dish({ id: 17, name: 'Pho Bo', price: 15.5 }));
+    expect(grown).toHaveLength(1);
+    expect(grown[0].quantity).toBe(2);
+  });
+
+  it('removing a line from a loaded order leaves the rest intact', () => {
+    const ticket = loadOrder({
+      items: [
+        { id: 1, menuItemId: 17, menuItemName: 'Pho', quantity: 1, unitPrice: 15.5 },
+        { id: 2, menuItemId: 16, menuItemName: 'Banh Mi', quantity: 1, unitPrice: 9 },
+      ],
+    });
+    const trimmed = removeLine(ticket, ticket[0].key);
+    expect(trimmed).toHaveLength(1);
+    expect(trimmed[0].menuItemId).toBe(16);
   });
 });

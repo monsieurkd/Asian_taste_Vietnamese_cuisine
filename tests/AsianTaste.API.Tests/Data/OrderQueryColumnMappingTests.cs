@@ -202,6 +202,45 @@ public class OrderQueryColumnMappingTests
     }
 
     [Fact]
+    public void GetOrderByIdAsync_selects_the_payment_columns_its_callers_read()
+    {
+        // ISSUE FOUND 2026-10-02, and it is the same shape as the rest of this file.
+        //
+        // This query omitted payment_status and paid_amount while the Order entity has
+        // both, so `order.PaymentStatus` was ALWAYS the enum's default and
+        // `order.PaidAmount` was always null. Nothing errored — the properties simply
+        // read as "nobody has paid", which is a plausible value.
+        //
+        // The consequence was concrete: OrderService.UpdateOrderItemsAsync uses those
+        // fields to tell the operator what an edit did to the money, so BuildPaymentNote
+        // took its "never paid online" branch for EVERY order — including a card order
+        // that had been charged. A staff member adding a dish to a paid order was told to
+        // collect the whole new total, which is money the customer had already handed
+        // over. It was found by adding a dish to a paid counter order and reading the
+        // confirmation.
+        //
+        // GetOrderByIdAsync is the one that matters here: four of its five callers only
+        // read `Status`, and this is the only caller that reads money.
+        var body = MethodBody(OrderRepositorySource(), "GetOrderByIdAsync(");
+
+        foreach (var (column, property) in new[]
+                 {
+                     ("payment_status::text", "PaymentStatus"),
+                     ("paid_amount", "PaidAmount"),
+                     ("paid_at", "PaidAt"),
+                 })
+        {
+            var pattern = $@"\b{Regex.Escape(column)}\s+as\s+{property}\b";
+            Assert.True(
+                Regex.IsMatch(body, pattern, RegexOptions.IgnoreCase),
+                $"GetOrderByIdAsync does not select '{column} as {property}'. The Order entity has that " +
+                $"property, so it silently keeps its DEFAULT instead of erroring — and " +
+                $"UpdateOrderItemsAsync reads it to describe what an edit did to the money, which " +
+                $"means every order is reported as never paid.");
+        }
+    }
+
+    [Fact]
     public void The_admin_ticket_aliases_the_columns_it_shows()
     {
         // The kitchen's ticket. This query aliased NOTHING, and every property it

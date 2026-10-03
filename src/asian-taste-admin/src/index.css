@@ -2146,6 +2146,66 @@
     font-family: var(--font-display);
   }
 
+  /* ─── adding to an order: the money, and finding the order ───────────────── */
+  /* What the change does to a total that may already have been charged. Given the
+     warning treatment when money is owed, because "collect $9.50" is the sentence the
+     staff member has to act on while the customer is standing there. */
+  .counter-money {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm, 8px);
+    padding: 10px 11px;
+    margin-bottom: 12px;
+    background-color: var(--color-fg-soft);
+    font-size: 13px;
+  }
+  .counter-money .pay-warning {
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  /* The matches for a docket number. Rows rather than a table: a staff member reads
+     three of these and taps one, and a table's columns would be chrome around four
+     values on a screen where the keyboard is already up. */
+  .order-picks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .order-pick {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    min-height: 44px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm, 8px);
+    background-color: var(--color-surface);
+    color: var(--color-fg);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .order-pick:hover {
+    border-color: var(--color-accent-line);
+    background-color: var(--color-accent-soft);
+  }
+  .order-pick:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .order-pick strong {
+    font-variant-numeric: tabular-nums;
+  }
+  /* The status and the counts are secondary; the docket number and the name are what the
+     staff member is actually matching against. */
+  .order-pick .meta:last-child {
+    margin-left: auto;
+  }
+
   .counter-last {
     display: flex;
     flex-direction: column;

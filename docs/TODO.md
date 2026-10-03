@@ -2085,3 +2085,104 @@ error naming the consequence.
   but a single judge call is still a single sample; treat a `[high]` as a pointer to go and
   look, never as a verdict.
 - **The admin app is still not captured in CI** — see §22 on the missing deploy verification.
+
+---
+
+## 24. Adding a dish to an existing order — 2026-10-02
+
+Issue #5 part (c), the last piece of the original request. **Not a new screen: a second
+mode on the counter screen.**
+
+### What it does
+
+`/counter` now has a toggle — **New order** or **Add to an order**. The second mode takes a
+docket number, lists the open orders that match, and loads one into the ticket. From there
+everything already written for a new order applies unchanged: the dish grid, the options
+panel, the required-choice refusal, quantities, the running total. Only the save button
+differs.
+
+**Why one screen and not two.** A separate "edit order" screen would be a second copy of the
+dish grid, the options panel and every ticket rule, and the two would drift — which is the
+same reasoning that put `OrderItems` in one place (§17) and merged the two boards (§22).
+The `loadOrder` rule converts an existing order into a ticket draft, and that single
+conversion is what makes the two modes one screen.
+
+### The money, which is why this took a decision
+
+Adding a dish to an order whose card was **already charged** raises the total, and nothing
+in this app collects the difference. The counter now says so **before** the save:
+
+```
+Was $39.00 · now $52.00
+$13.00 more to collect — the card was already charged $39.00.
+```
+
+This is `lib/orderEdit.ts`'s `editMoney` — the SAME tested rule the phone-edit screen
+uses — not a second implementation. The counter adds a case the phone path never had to
+show, because a walk-in order is often **unpaid**:
+
+```
+Was $9.00 · now $22.00
+Nothing was taken for this order — collect the full $22.00.
+```
+
+The save path is `PUT /admin/orders/{id}/items`, the same endpoint the phone-edit path uses,
+so the pricing rules and the money reporting are one implementation.
+
+### Three bugs found by building it
+
+**1. `GetOrderByIdAsync` never selected the payment columns** — the same shape as §17 and §20.
+
+The query omitted `payment_status`, `paid_amount` and `paid_at` while the `Order` entity has
+all three, so `order.PaymentStatus` was always the enum's default and `order.PaidAmount`
+always null — values that read as *"nobody has paid"* rather than erroring.
+`UpdateOrderItemsAsync` reads them to describe what an edit did to the money, so
+`BuildPaymentNote` took its **"This order was never paid online"** branch for **every**
+order, including a card order that had been charged.
+
+The consequence in money: adding a dish to a paid order told the operator to collect the
+**whole new total** from a customer who had already handed most of it over. Before the fix
+the endpoint returned *"never paid online — collect the new total"*; after it returns
+*"The card was charged 15.50. Collect the remaining 9.00 at the counter."*
+
+Only one of the five callers reads payment fields — the other four use `Status` — so the
+blast radius was narrow and this went unnoticed until a screen finally displayed the note.
+Pinned by `GetOrderByIdAsync_selects_the_payment_columns_its_callers_read`, proved to fail on
+the old source.
+
+**2. My own money panel claimed "the total has not changed" for an unpaid order whose total
+rose from $9 to $22.** `editMoney` returns `shortfall: 0` and `overpaid: 0` when nothing was
+ever charged — correctly, there is no difference — and the panel tested only those two, so
+both were zero and it printed "unchanged". The distinction is **not derivable from the
+amounts**, so `editMoney` now names the case (`paid-more` / `paid-less` / `nothing-taken` /
+`unchanged`) and decides it in one tested place. Seven tests, including the exact regression.
+
+**3. The `lastOrder` confirmation read "updated" for a new order** after I made the wording
+mode-dependent. Now carried on the value rather than inferred from the mode at render time.
+
+### Verified
+
+Against a real database and through the real UI, on orders built for the purpose:
+
+| Case | Before the change | After |
+|---|---|---|
+| Load a paid order with 2× pho + a modifier | — | lines restored, total `$39.00` matching the docket, modifier preserved |
+| Add a banh mi to it ($39 → $52) | — | panel warns **"$13.00 more to collect"**; server says **"The card was charged 39.00. Collect the remaining 13.00"** |
+| Load an unpaid order ($9) | — | **"Nothing was taken for this order — collect the full $9.00"** |
+| Add a dish to it ($9 → $22) | — | **"collect the full $22.00"**, not "unchanged" |
+| Save either | — | mode resets to New order, ticket clears, toast names the new total |
+| Modifier round-trip | — | still 1 modifier on the pho row after the save |
+
+No 4xx or 5xx on the screen. 306 API tests (+1) and 182 frontend tests (+18) pass, nothing
+skipped; both apps build and lint clean.
+
+### What this does NOT do
+
+- **No editing of the customer's name, phone or pickup time** at the counter. The phone-edit
+  path accepts a new pickup time; the counter does not offer one, because a walk-in is
+  standing in front of you and the time is now. Adding it would mean re-validating trading
+  hours on a path that deliberately bypasses that gate (§17).
+- **No removing an order's identity.** A counter order has no `customers` row (§17), and
+  adding to one does not create one.
+- **The mode does not survive a refresh.** Deliberate: a half-loaded ticket that reappears
+  after a reload is a ticket somebody might think they already saved.

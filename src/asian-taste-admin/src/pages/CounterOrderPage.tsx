@@ -1,17 +1,20 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { menuAdminApi, type MenuItemDetail, type Modifier } from "@/api/menuApi"
-import { counterOrderApi } from "@/api/counterOrderApi"
+import { counterOrderApi, type CounterOrderCandidate } from "@/api/counterOrderApi"
+import { ordersApi } from "@/api/orders"
 import { AdminTop } from "@/components/AdminLayout"
 import { Button, Panel, PanelBody, PanelHead, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { AdminModal } from "@/components/ui/AdminModal"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { formatCurrency } from "@/lib/utils"
+import { editMoney } from "@/lib/orderEdit"
 import {
   MAX_QUANTITY,
   addLine,
   clearTicket,
   hasOptions,
+  loadOrder,
   removeLine,
   setQuantity,
   ticketItemCount,
@@ -52,13 +55,32 @@ export function CounterOrderPage() {
   const [allergy, setAllergy] = useState("")
   const [markedPaid, setMarkedPaid] = useState(true)
 
+  /**
+   * Whether this is a NEW order or an addition to one that exists.
+   *
+   * The two are the same screen on purpose. Once an existing order is loaded into the
+   * ticket, every rule already written here applies unchanged — the dish grid, the options
+   * panel, the required-choice refusal, quantities — and only the save button differs. A
+   * separate "edit" screen would be a second copy of all of it, which is how the two would
+   * drift apart.
+   */
+  const [mode, setMode] = useState<"new" | "existing">("new")
+  /** The order being added to, once one has been chosen. */
+  const [target, setTarget] = useState<CounterOrderCandidate | null>(null)
+  /** What the order looked like when it was loaded, so the money can be told apart from it. */
+  const [loadedFrom, setLoadedFrom] = useState<{ total: number; paymentStatus?: string | null; paidAmount?: number | null } | null>(null)
+  /** The search term for finding an order to add to. */
+  const [lookup, setLookup] = useState("")
+  /** The reason for the change, recorded on the order. */
+  const [reason, setReason] = useState("")
+
   /** The dish whose options are open, if any. */
   const [openDish, setOpenDish] = useState<MenuItemDetail | null>(null)
   /** Chosen options for the dish being configured. */
   const [pending, setPending] = useState<Modifier[]>([])
   const [pendingNote, setPendingNote] = useState("")
   /** What the last successful order was, for a confirmation the staff member can read out. */
-  const [lastOrder, setLastOrder] = useState<{ orderNumber: string; note: string } | null>(null)
+  const [lastOrder, setLastOrder] = useState<{ orderNumber: string; note: string; updated?: boolean } | null>(null)
 
   const { data: dishes = [], isLoading } = useQuery({
     queryKey: ["counter-menu"],
@@ -85,34 +107,150 @@ export function CounterOrderPage() {
 
   const total = ticketTotal(lines)
 
+  /**
+   * The money consequence of the change, when adding to an order that already exists.
+   *
+   * This is `editMoney` — the SAME tested rule the phone-edit screen uses — rather than a
+   * second implementation for the counter. The case it exists for is an order whose card
+   * was already charged: raising the total leaves money that nothing in this app will
+   * collect, and lowering it leaves money owed back. Both are conversations to have with
+   * the customer in front of you, so the screen says which one it is BEFORE saving, not
+   * after.
+   *
+   * Null in "new order" mode: there is no previous total to compare against, and the
+   * counter order carries its own paid/owing checkbox.
+   */
+  const money = useMemo(() => {
+    if (mode !== "existing" || !loadedFrom) return null
+    return editMoney(lines, loadedFrom.total, loadedFrom.paymentStatus, loadedFrom.paidAmount)
+  }, [mode, loadedFrom, lines])
+
+  /** Orders matching what the staff member typed, so they can pick the right one. */
+  const { data: candidates = [], isFetching: searching } = useQuery({
+    queryKey: ["counter-order-lookup", lookup],
+    queryFn: () => counterOrderApi.findExisting(lookup),
+    // Only while looking: a background refetch of a search nobody is waiting on would be
+    // requests per keystroke for no benefit.
+    enabled: mode === "existing" && lookup.trim().length >= 3 && !target,
+    staleTime: 10_000,
+  })
+
+  /**
+   * Load an order into the ticket.
+   *
+   * The whole order is fetched (not the row from the search) because the ticket needs the
+   * lines, and its stored prices are what the customer was quoted. `loadedFrom` keeps the
+   * payment facts, which the money panel compares against.
+   */
+  const load = useMutation({
+    mutationFn: (id: number) => ordersApi.getOrderDetail(id),
+    onSuccess: (order) => {
+      setLines(loadOrder(order))
+      setTarget({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        status: order.status,
+        total: order.total,
+        itemsDone: order.itemsDone,
+        createdAt: order.createdAt,
+      })
+      setLoadedFrom({
+        total: order.total,
+        paymentStatus: order.paymentStatus,
+        paidAmount: order.paidAmount ?? null,
+      })
+      setReason("")
+      setLookup("")
+      showAdminToast(`${order.orderNumber} loaded — add what they want`)
+    },
+    onError: () => showAdminToast("Couldn't load that order — try again"),
+  })
+
+  const clearTarget = () => {
+    setTarget(null)
+    setLoadedFrom(null)
+    setLines(clearTicket())
+    setReason("")
+    setMode("new")
+  }
+
+  const isAddingToOrder = mode === "existing" && !!target
+
+  /**
+   * Save. Two different endpoints, one button.
+   *
+   * A new order POSTs and starts at Confirmed — taking it IS the acceptance. An addition
+   * REPLACES the existing order's lines through the same endpoint the phone-edit path
+   * uses, so the pricing rules and the money reporting are one implementation rather than
+   * two that can disagree.
+   */
   const submit = useMutation({
-    mutationFn: () => counterOrderApi.create(toRequest(lines, {
-      customerName: customerName.trim() || undefined,
-      orderType,
-      tableNumber: tableNumber.trim() || undefined,
-      notes: notes.trim() || undefined,
-      allergyDeclaration: allergy.trim() || undefined,
-      markedPaid,
-    }) as Parameters<typeof counterOrderApi.create>[0]),
+    mutationFn: async () => {
+      if (isAddingToOrder && target) {
+        return counterOrderApi.replaceItems(target.id, {
+          items: toRequest(lines, {}).items.map((i) => ({
+            menuItemId: i.menuItemId,
+            quantity: i.quantity,
+            specialInstructions: i.specialInstructions,
+            modifierIds: i.modifierIds ?? [],
+          })),
+          reason: reason.trim() || undefined,
+        })
+      }
+      return counterOrderApi.create(
+        toRequest(lines, {
+          customerName: customerName.trim() || undefined,
+          orderType,
+          tableNumber: tableNumber.trim() || undefined,
+          notes: notes.trim() || undefined,
+          allergyDeclaration: allergy.trim() || undefined,
+          markedPaid,
+        }) as Parameters<typeof counterOrderApi.create>[0],
+      )
+    },
 
     onSuccess: (result) => {
+      if (isAddingToOrder) {
+        // The edit response carries the recomputed total and a sentence about the money.
+        // Reading THEM out is the point: the staff member quotes a figure, and the note
+        // says whether there is anything left to collect.
+        const edit = result as { orderNumber: string; total: number; paymentNote?: string }
+        setLastOrder({
+          orderNumber: edit.orderNumber,
+          note: edit.paymentNote ?? `Now ${formatCurrency(edit.total)}.`,
+          updated: true,
+        })
+        setTarget(null)
+        setLoadedFrom(null)
+        setLines(clearTicket())
+        setReason("")
+        setMode("new")
+        showAdminToast(
+          `${edit.orderNumber} updated — now ${formatCurrency(edit.total)}`,
+        )
+        return
+      }
+
+      const created = result as { orderNumber: string; counterNote: string }
       // The ticket clears and the number is kept on screen. Both matter: a staff member
       // reads the number out to the customer, and a ticket that stayed behind would be
       // sent twice by the next tap.
-      setLastOrder({ orderNumber: result.orderNumber, note: result.counterNote })
+      setLastOrder({ orderNumber: created.orderNumber, note: created.counterNote })
       setLines(clearTicket())
       setCustomerName("")
       setTableNumber("")
       setNotes("")
       setAllergy("")
       setMarkedPaid(true)
-      showAdminToast(`${result.orderNumber} sent to the kitchen`)
+      showAdminToast(`${created.orderNumber} sent to the kitchen`)
     },
     onError: (error: unknown) => {
       // The message names the dish when one has left the menu, which is the case a staff
       // member can actually act on.
       const detail = (error as { response?: { data?: { error?: string } } })?.response?.data?.error
-      showAdminToast(detail ?? "Couldn't send that order — try again")
+      showAdminToast(detail ?? "Couldn't save that — try again")
     },
   })
 
@@ -152,8 +290,12 @@ export function CounterOrderPage() {
   return (
     <>
       <AdminTop
-        title="Counter order"
-        sub="Take an order for someone standing with you. No payment is taken here."
+        title={isAddingToOrder ? `Add to ${target!.orderNumber}` : "Counter order"}
+        sub={
+          isAddingToOrder
+            ? "Add what they asked for. The order is re-priced when you save."
+            : "Take an order for someone standing with you. No payment is taken here."
+        }
         actions={
           <>
             <Pill neutral>{ticketItemCount(lines)} items</Pill>
@@ -163,6 +305,110 @@ export function CounterOrderPage() {
       />
 
       <div className="admin-page counter-page" data-od-id="counter">
+        {/* ── New order, or adding to one that exists ────────────────────────────
+            One screen, two modes. The alternative — a separate edit screen — would be a
+            second copy of the dish grid, the options panel and the ticket rules, and the
+            two would drift. */}
+        <Panel data-od-id="counter-mode">
+          <PanelBody>
+            <div className="filterbar">
+              <div className="seg-sm" role="group" aria-label="What are you doing?">
+                <button
+                  type="button"
+                  aria-pressed={mode === "new"}
+                  onClick={() => {
+                    setMode("new")
+                    setTarget(null)
+                    setLoadedFrom(null)
+                    setLines(clearTicket())
+                  }}
+                >
+                  New order
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={mode === "existing"}
+                  onClick={() => {
+                    setMode("existing")
+                    setLines(clearTicket())
+                    setTarget(null)
+                    setLoadedFrom(null)
+                  }}
+                >
+                  Add to an order
+                </button>
+              </div>
+
+              {isAddingToOrder ? (
+                <span className="head-who">
+                  <span>
+                    <strong>{target!.orderNumber}</strong>
+                    <span className="meta">
+                      {target!.customerName} · {formatCurrency(target!.total)} on the docket
+                    </span>
+                  </span>
+                  <button type="button" className="btn-link" onClick={clearTarget}>
+                    Start a new order instead
+                  </button>
+                </span>
+              ) : mode === "existing" ? (
+                <div className="search">
+                  <label className="sr-only" htmlFor="order-lookup">
+                    Find an order
+                  </label>
+                  <input
+                    id="order-lookup"
+                    className="input"
+                    type="search"
+                    placeholder="Docket number, e.g. AT-031407 or 5…"
+                    value={lookup}
+                    autoFocus
+                    onChange={(e) => setLookup(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <p className="meta" style={{ margin: 0 }}>
+                  Taking a new order for someone at the counter.
+                </p>
+              )}
+            </div>
+
+            {/* The matches. Shown rather than auto-loaded, because a partial docket number
+                read out loud usually matches more than one order. */}
+            {mode === "existing" && !isAddingToOrder && lookup.trim().length >= 3 && (
+              <div style={{ marginTop: 12 }}>
+                {searching ? (
+                  <p className="meta" style={{ margin: 0 }}>Searching…</p>
+                ) : candidates.length === 0 ? (
+                  <p className="meta" style={{ margin: 0 }}>
+                    No order matches “{lookup.trim()}”. Check the docket, or start a new order.
+                  </p>
+                ) : (
+                  <ul className="order-picks">
+                    {candidates.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          className="order-pick"
+                          disabled={load.isPending}
+                          onClick={() => load.mutate(c.id)}
+                        >
+                          <strong>{c.orderNumber}</strong>
+                          <span>{c.customerName}</span>
+                          <span className="meta">
+                            {c.itemsDone?.total ?? 0} items · {formatCurrency(c.total)}
+                          </span>
+                          <span className="meta">{c.status}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </PanelBody>
+        </Panel>
+
         {/* The dish grid. Left, because it is what gets tapped. */}
         <section className="counter-grid" data-od-id="counter-dishes" aria-label="Menu">
           {isLoading ? (
@@ -336,29 +582,98 @@ export function CounterOrderPage() {
                   />
                 </label>
 
+                {/* Adding to an order asks WHY, because the kitchen may already be cooking
+                    the version without this dish. A note is encouraged on the phone path
+                    for the same reason: an edited ticket that does not say why is how the
+                    kitchen ends up working from a printout that no longer matches. */}
+                {isAddingToOrder && (
+                  <label>
+                    <span>Why the change? (recorded on the order)</span>
+                    <input
+                      className="input"
+                      value={reason}
+                      placeholder="Customer came back for more"
+                      maxLength={500}
+                      onChange={(e) => setReason(e.target.value)}
+                    />
+                  </label>
+                )}
+
                 {/* The money. This app takes NO payment — it records what already
-                    happened, so the board and the day's takings agree with the till. */}
-                <label className="counter-paid">
-                  <input
-                    type="checkbox"
-                    checked={markedPaid}
-                    onChange={(e) => setMarkedPaid(e.target.checked)}
-                  />
-                  <span>
-                    <strong>Money taken</strong>
-                    <span className="meta">
-                      {markedPaid
-                        ? `Recorded as paid — ${formatCurrency(total)}.`
-                        : `Recorded as owing — collect ${formatCurrency(total)} at handover.`}
+                    happened, so the board and the day's takings agree with the till.
+                    There is nothing to record when ADDING to an order: its payment state
+                    is already on the order, and the money panel above says what the change
+                    does to it. */}
+                {!isAddingToOrder && (
+                  <label className="counter-paid">
+                    <input
+                      type="checkbox"
+                      checked={markedPaid}
+                      onChange={(e) => setMarkedPaid(e.target.checked)}
+                    />
+                    <span>
+                      <strong>Money taken</strong>
+                      <span className="meta">
+                        {markedPaid
+                          ? `Recorded as paid — ${formatCurrency(total)}.`
+                          : `Recorded as owing — collect ${formatCurrency(total)} at handover.`}
+                      </span>
                     </span>
-                  </span>
-                </label>
+                  </label>
+                )}
               </div>
 
               <div className="counter-total">
-                <span>Total</span>
+                <span>{isAddingToOrder ? "Order will be" : "Total"}</span>
                 <strong>{formatCurrency(total)}</strong>
               </div>
+
+              {/* ── What the change does to the money ─────────────────────────────
+                  Only when adding to an order, and only from `editMoney` — the same tested
+                  rule the phone-edit screen uses. Raising the total of a card order that
+                  was ALREADY CHARGED leaves money nothing here will collect; lowering it
+                  leaves money owed back. Both are conversations to have with the customer
+                  standing in front of you, so this says which one BEFORE the save.
+
+                  The three cases are distinct and the panel must not collapse them:
+                  money owed back, money still to collect on a charge, and an order that
+                  was NEVER charged — where the whole new total is to collect and quoting
+                  "nothing has changed" would be plainly wrong. */}
+              {money && isAddingToOrder && loadedFrom && (
+                <div className="counter-money" role="status" data-od-id="counter-money">
+                  <p className="meta" style={{ margin: 0 }}>
+                    Was {formatCurrency(loadedFrom.total)} · now{" "}
+                    <strong>{formatCurrency(money.newTotal)}</strong>
+                  </p>
+                  {money.case === 'paid-more' && (
+                    <p className="pay-warning" style={{ margin: "6px 0 0" }}>
+                      {formatCurrency(money.shortfall)} more to collect — the card was already
+                      charged {formatCurrency(loadedFrom.paidAmount ?? loadedFrom.total)}.
+                    </p>
+                  )}
+                  {money.case === 'paid-less' && (
+                    <p className="meta" style={{ margin: "6px 0 0" }}>
+                      {formatCurrency(money.overpaid)} less than was charged — refund the
+                      difference from the ticket.
+                    </p>
+                  )}
+                  {/* Never settled: the card declined, or the customer is paying at the
+                      counter. Either way the figure to collect is the NEW total — nothing
+                      was handed over, so there is no difference to quote. */}
+                  {money.case === 'nothing-taken' && (
+                    <p className="pay-warning" style={{ margin: "6px 0 0" }}>
+                      Nothing was taken for this order — collect the full{" "}
+                      {formatCurrency(money.newTotal)}.
+                    </p>
+                  )}
+                  {money.case === 'unchanged' && (
+                    <p className="meta" style={{ margin: "6px 0 0" }}>
+                      The total has not changed.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <p className="meta" style={{ margin: "0 0 12px" }}>
                 GST included. Priced by the server when the order is sent.
               </p>
@@ -369,7 +684,13 @@ export function CounterOrderPage() {
                 disabled={!canSend}
                 style={{ width: "100%" }}
               >
-                {submit.isPending ? "Sending…" : lines.length === 0 ? "Add a dish first" : "Send to the kitchen"}
+                {submit.isPending
+                  ? "Saving…"
+                  : lines.length === 0
+                    ? "Add a dish first"
+                    : isAddingToOrder
+                      ? "Save changes to the order"
+                      : "Send to the kitchen"}
               </Button>
             </PanelBody>
           </Panel>
@@ -378,7 +699,8 @@ export function CounterOrderPage() {
               because a staff member needs to see that the previous one actually went. */}
           {lastOrder && (
             <div className="counter-last" role="status">
-              <strong>{lastOrder.orderNumber}</strong> sent to the kitchen
+              <strong>{lastOrder.orderNumber}</strong>{" "}
+              {lastOrder.updated ? "updated" : "sent to the kitchen"}
               <span className="meta">{lastOrder.note}</span>
             </div>
           )}

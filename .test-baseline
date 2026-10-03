@@ -30,7 +30,7 @@
 # The same change ADDED tests for the order flow itself (admin column mapping, the
 # real payment state, the pickup estimate, modifier mapping, the local day boundary)
 # and those more than replaced the deleted coverage in the areas that matter.
-296 -> 305
+296 -> 306
 
 # Raised 170 -> 174 on 2026-09-25, in the same commit as four tests for a defect
 # found in production by the deployment probe: StripePaymentVerificationTests pins
@@ -89,3 +89,16 @@
 # correct — every column was aliased exactly as they demand. What was wrong was the TYPE of
 # the row, which reading SQL cannot reveal. A guard that cannot fail on its own defect is
 # worse than none, because it reads as coverage.
+
+# Raised 305 -> 306 while building "add a dish to an existing order" on the counter screen.
+# The test pins that GetOrderByIdAsync SELECTS payment_status/paid_amount/paid_at.
+#
+# It omitted all three while the Order entity has them, so order.PaymentStatus was always
+# the enum default and order.PaidAmount was always null — properties that read as a
+# plausible value ("nobody has paid") rather than erroring. OrderService.UpdateOrderItemsAsync
+# uses those fields to describe what an edit did to the money, so BuildPaymentNote took its
+# "never paid online" branch for EVERY order, including a card order that had been charged:
+# a staff member adding a dish to a paid order was told to collect the whole new total.
+#
+# Found by adding a dish to a paid counter order and reading the confirmation. Same family
+# as §17 and §20 — a column not selected, behaving silently wrong.
