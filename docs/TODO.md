@@ -2186,3 +2186,93 @@ skipped; both apps build and lint clean.
   adding to one does not create one.
 - **The mode does not survive a refresh.** Deliberate: a half-loaded ticket that reappears
   after a reload is a ticket somebody might think they already saved.
+
+---
+
+## 25. The two storefront photographs are not food — 2026-10-02
+
+Raised as issues #7 and #8. **Nothing was changed; both are deferred pending real photos.**
+This section exists because the original diagnosis on #7 was wrong and the corrected version
+is what the next person needs.
+
+### What I said at first, and why it was wrong
+
+Issue #7 originally read *"both storefront photos are stored landscape but carry an EXIF
+rotation flag, so `object-fit: cover` crops them to half"*, and the proposed fix was to
+re-encode them with the orientation baked in.
+
+**Wrong in two ways.** Both files carry `Orientation: 6` and Chrome renders **both as
+1200×1600 portrait** — so the pixels were already displayed the right way up, and
+re-encoding would have changed nothing visible. Verified by decoding the originals and a
+re-encoded copy in the browser: identical `1200x1600`, ratio 0.750.
+
+### What is actually true
+
+The photos are genuinely **portrait**, and the page places them in a **landscape 16:10**
+frame, so `object-fit: cover` keeps one horizontal band:
+
+| | Photo (as displayed) | Frame | Survives |
+|---|---|---|---|
+| `hero.jpg` | 1200×1600 (0.750) | 16:10 (1.600) | **47%** — 53% of the height cut |
+| `family.jpg` | 1050×1400 (0.750) | 16:10 (1.600) | **47%** |
+
+That is what the vision judge meant by *"a blue-tinted photo of a window with lens flare"* —
+it was looking at a slice out of the middle of a photograph of a **tablet screen**, and named
+the glare on the glass.
+
+### The actual problem, which is not a crop
+
+**Neither photograph is food**, and one is a competitor's app:
+
+- **`hero.jpg`** — a hand holding a tablet showing **this application's own admin Orders
+  screen**: status bar *5:47*, a *Closed* button, *Orders* in large bold text,
+  *Preparing 0 / No orders / Ready 0 / No orders*.
+- **`family.jpg`** — a hand holding a tablet showing the **Uber Eats merchant app**:
+  sidebar *Orders, Order History, Scheduled Orders, Menu, Inbox, Settings, Help*, and bottom
+  left ***"Asian Taste — Closed until 10:00AM"***.
+
+Both sit in the storefront's most prominent slots — `/` and `/menu`, two usages each — with
+alt text describing food that is not in the frame:
+
+| File | Alt text says | Shows |
+|---|---|---|
+| `hero.jpg` | "A spread of fresh Vietnamese dishes from the Asian Taste kitchen" | A tablet running the admin Orders screen, 0 orders |
+| `family.jpg` | "The Asian Taste family preparing dishes in the kitchen" | A tablet running Uber Eats, shop marked closed |
+
+So the screen-reader description is inaccurate too, not only the picture. **This matters more
+than the crop**: a correctly-framed photograph of a closed Uber Eats screen is not better than
+a clean layout with no photo.
+
+### The decision, and why it is the owner's
+
+Three options were put to the owner:
+
+1. **Replace both with real food photography** — the right answer, and the only one that makes
+   the storefront sell food. Needs photos from the owner.
+2. **Remove the image blocks** until there are photos — a layout change, and a storefront
+   without a hero loses its appetite anchor. Reversible the moment photos exist.
+3. **Re-crop the existing photos to landscape** — fixes the 53% cut and leaves the substance,
+   because they are still photographs of a tablet.
+
+**Chosen: (1), supplying real photos.** #7 and #8 are therefore both **deferred**, and
+deliberately not worked around in the meantime.
+
+### #8 depends on the same decision, which is why it went with it
+
+#8 measured that **no dish card and no price is visible above the fold on `/menu`** at either
+viewport — first dish card at **861px** in an 800px viewport on desktop, **1161px** in an 844px
+one on mobile, and 0 prices visible. The hero is a large part of that cost, so its height and
+the photo that fills it are **one decision**. Changing the hero's height now would be work
+redone when the replacement photo arrives.
+
+The measurement stands as evidence on #8; only the fix waits.
+
+### What to do when the photos arrive
+
+- **They must be landscape-composed**, or the CSS frame must change to suit portrait. A
+  portrait image in a 16:10 box loses 53% of its height — whatever goes in these slots should
+  be shot for the slot, not cropped into it.
+- **Fix the alt text with the images.** Both descriptions are currently fiction, and they are
+  what a screen reader reads out.
+- **Then re-measure `/menu`'s fold** and decide the hero's height against real content, which
+  is the work #8 is actually about.
