@@ -86,22 +86,30 @@ public class OrderServiceEditTests
             },
         };
 
+        var emails = new StubEmailQueue();
+        var notifier = new StubNotifier();
+
         var service = new OrderService(
             orders,
             new StubCustomerRepository(),
             new StubEmailService(),
-            new StubEmailQueue(),
+            emails,
             new StubSettingsRepository(windows ?? OpenAllDay),
             new StubPaymentGateway(),
-            new StubNotifier(),
+            notifier,
             new TradingHours(new FixedClock(Adelaide(12))),
             menuRepo,
             NullLogger<OrderService>.Instance);
 
-        return new Harness(service, orders, menuRepo);
+        return new Harness(service, orders, menuRepo, emails, notifier);
     }
 
-    private sealed record Harness(OrderService Service, RecordingOrderRepository Orders, StubMenuRepository Menu);
+    private sealed record Harness(
+        OrderService Service,
+        RecordingOrderRepository Orders,
+        StubMenuRepository Menu,
+        StubEmailQueue Emails,
+        StubNotifier Notifier);
 
     private static UpdateOrderItemsDto Edit(params (int DishId, int Qty)[] items) => new()
     {
@@ -321,6 +329,52 @@ public class OrderServiceEditTests
         Assert.Null(h.Orders.RequestedTimeWritten);
     }
 
+    [Fact]
+    public async Task Moving_the_time_tells_the_other_screens()
+    {
+        // A second open board must not keep showing the old time until its next refetch.
+        var h = CreateHarness();
+
+        await h.Service.SetOrderPickupTimeAsync(
+            1,
+            new SetPickupTimeDto { PickupTime = new PickupTimeDto { Type = "SCHEDULED", ScheduledTime = Adelaide(15).UtcDateTime } },
+            "Mai");
+
+        Assert.Contains(h.Notifier.StatusUpdates, m => m.OrderId == 1);
+    }
+
+    [Fact]
+    public async Task Moving_the_time_tells_the_customer()
+    {
+        var h = CreateHarness();
+
+        await h.Service.SetOrderPickupTimeAsync(
+            1,
+            new SetPickupTimeDto { PickupTime = new PickupTimeDto { Type = "SCHEDULED", ScheduledTime = Adelaide(15).UtcDateTime } },
+            "Mai");
+
+        var job = Assert.Single(h.Emails.StatusUpdates);
+        Assert.Equal("PickupTimeChanged", job.Status);
+        Assert.Equal("AT-TEST-0001", job.OrderNumber);
+    }
+
+    [Fact]
+    public async Task A_counter_order_with_no_address_still_tells_the_screens()
+    {
+        // The walk-in was told face-to-face, so there is nobody to email — but the boards
+        // still have to move the ticket, so the push must not be skipped with the email.
+        var h = CreateHarness();
+        h.Orders.OrderToReturn.CustomerEmail = string.Empty;
+
+        await h.Service.SetOrderPickupTimeAsync(
+            1,
+            new SetPickupTimeDto { PickupTime = new PickupTimeDto { Type = "ASAP" } },
+            "Mai");
+
+        Assert.Contains(h.Notifier.StatusUpdates, m => m.OrderId == 1);
+        Assert.Empty(h.Emails.StatusUpdates);
+    }
+
     // ── Collaborators ───────────────────────────────────────────────────────
 
     private sealed class RecordingOrderRepository : IOrderRepository
@@ -470,9 +524,15 @@ public class OrderServiceEditTests
 
     private sealed class StubEmailQueue : IOrderEmailQueue
     {
+        public List<OrderStatusUpdateEmailJob> StatusUpdates { get; } = [];
+
         public ValueTask EnqueueAsync(OrderConfirmationEmailJob job, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
 
-        public ValueTask EnqueueStatusUpdateAsync(OrderStatusUpdateEmailJob job, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask EnqueueStatusUpdateAsync(OrderStatusUpdateEmailJob job, CancellationToken cancellationToken = default)
+        {
+            StatusUpdates.Add(job);
+            return ValueTask.CompletedTask;
+        }
 
         public async IAsyncEnumerable<OrderEmailJob> ReadAllAsync(
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -484,8 +544,16 @@ public class OrderServiceEditTests
 
     private sealed class StubNotifier : IOrderNotifier
     {
+        public List<(int OrderId, string Status)> StatusUpdates { get; } = [];
+
         public Task BroadcastNewOrderAsync(object orderData) => Task.CompletedTask;
-        public Task BroadcastStatusUpdateAsync(int orderId, string status, string? reason = null) => Task.CompletedTask;
+
+        public Task BroadcastStatusUpdateAsync(int orderId, string status, string? reason = null)
+        {
+            StatusUpdates.Add((orderId, status));
+            return Task.CompletedTask;
+        }
+
         public Task BroadcastDashboardUpdateAsync(object statsData) => Task.CompletedTask;
     }
 }

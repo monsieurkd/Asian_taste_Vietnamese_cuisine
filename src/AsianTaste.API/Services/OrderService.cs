@@ -822,6 +822,8 @@ public class OrderService
             "Order {OrderNumber} pickup time moved to {RequestedTime:o} by {Actor}",
             order.OrderNumber, requestedTime, actor ?? "system");
 
+        await NotifyPickupTimeMovedAsync(order, requestedTime, settings, cancellationToken);
+
         return new PickupTimeResponseDto
         {
             OrderId = orderId,
@@ -829,6 +831,66 @@ public class OrderService
             RequestedTime = requestedTime,
             IsScheduled = isScheduled,
         };
+    }
+
+    /// <summary>
+    /// Tells the room, and then the guest, that a promised time moved.
+    /// </summary>
+    /// <remarks>
+    /// Two audiences, one event. The boards hear it through the same <c>status_update</c>
+    /// push every other change uses, so a second open console repaints without waiting for
+    /// its next refetch. The customer hears it by email, through the same queue the
+    /// "order is ready" message uses — the channel decision for §31/P2.
+    ///
+    /// Both are best-effort and isolated from each other: the time IS moved, and a failed
+    /// push or a failed email must not fail the move, because the staff member can resend
+    /// or ring the guest. A counter order has no address, so there is genuinely nobody to
+    /// email — the walk-in was told face-to-face.
+    /// </remarks>
+    private async Task NotifyPickupTimeMovedAsync(
+        Order order,
+        DateTime requestedTime,
+        OrderServiceRestaurantSettings settings,
+        CancellationToken cancellationToken)
+    {
+        // The boards. `status_update` is reused deliberately: the console already treats it
+        // as "this order changed, refetch", and a new message type would need a new client
+        // branch to carry no extra meaning.
+        try
+        {
+            await _orderNotifier.BroadcastStatusUpdateAsync(order.Id, order.Status.ToString());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to broadcast the pickup-time change for order {OrderNumber}", order.OrderNumber);
+        }
+
+        if (string.IsNullOrWhiteSpace(order.CustomerEmail))
+        {
+            _logger.LogInformation(
+                "Order {OrderNumber} pickup time moved but has no customer email; nobody to tell.",
+                order.OrderNumber);
+            return;
+        }
+
+        try
+        {
+            var when = DescribeLocal(settings.Timezone, requestedTime);
+            var noun = order.OrderType == Models.Enums.OrderType.DineIn ? "serve" : "pickup";
+            await _emailQueue.EnqueueStatusUpdateAsync(
+                new OrderStatusUpdateEmailJob(
+                    order.Id,
+                    order.CustomerEmail,
+                    order.CustomerName,
+                    order.OrderNumber,
+                    "PickupTimeChanged",
+                    $"{order.CustomerName}, your {noun} time for order {order.OrderNumber} has moved to {when}."),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not queue the pickup-time email for order {OrderNumber}", order.OrderNumber);
+        }
     }
 
     /// <summary>Everything that has happened to an order, newest first.</summary>
@@ -1264,9 +1326,11 @@ public class OrderService
             CustomerPhone = request.CustomerPhone?.Trim() ?? string.Empty,
             CustomerEmail = string.Empty,
             OrderType = request.OrderType,
-            // ASAP, always: the person is standing at the counter. There is no scheduled
-            // counter order to express, so one is not offered.
-            PickupTime = new PickupTimeDto { Type = "ASAP" },
+            // ASAP unless the staff member set a promise on the ticket. A walk-in is served
+            // now; a pre-order for later carries its own time, set by the same tap-to-edit
+            // the board uses. The trading-hours gate is still skipped on this path on
+            // purpose — see the note on CreateCounterOrderDto.
+            PickupTime = request.PickupTime ?? new PickupTimeDto { Type = "ASAP" },
             SpecialInstructions = notes,
             AllergyDeclaration = request.AllergyDeclaration,
             Items = request.Items.Select(i => new CheckoutOrderItemDto

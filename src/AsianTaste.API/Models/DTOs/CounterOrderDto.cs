@@ -70,6 +70,19 @@ public class CreateCounterOrderDto
     public string? AllergyDeclaration { get; set; }
 
     /// <summary>
+    /// When the order is promised. Blank/ASAP means the customer is waiting now.
+    /// </summary>
+    /// <remarks>
+    /// Optional and defaulting to ASAP, so the ordinary walk-in is unchanged. A scheduled
+    /// time is expressed rarely — a pre-order for later or tomorrow — and is set by the
+    /// same tap-to-edit the console uses for every other promise. The trading-hours gate is
+    /// still deliberately NOT applied here: a staff member holding a tablet is proof the
+    /// shop is open, and refusing them a counter order is the behaviour this path exists to
+    /// avoid (see the note on this class).
+    /// </remarks>
+    public PickupTimeDto? PickupTime { get; set; }
+
+    /// <summary>
     /// How the money was taken. <c>Succeeded</c> records it as paid; anything else leaves
     /// the order owing, which the console shows and the counter settles.
     /// </summary>
