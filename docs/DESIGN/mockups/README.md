@@ -19,6 +19,16 @@ from it and are not committed yet. Everything in this folder maps to the
 "must draw" checklist further down — see `HANDOFF.md` §8 for the screen →
 requirement table.
 
+## Published on the admin domain
+
+The staff-console set in [`admin-console/`](admin-console/) is served read-only
+by the admin app at **`/design/admin-console/index.html`**. It is copied
+verbatim into `src/asian-taste-admin/public/design/admin-console/` so Vercel
+ships it — the deploy build only packages `src/asian-taste-admin/`, so the
+`docs/` copy alone is never reachable on the web. When the set changes, copy it
+across again; the `design/` path is excluded from the SPA rewrite in
+`src/asian-taste-admin/vercel.json`. The console's Overview screen links here.
+
 ## Where to put your Open Design mockups
 
 **`docs/DESIGN/mockups/`** — exports go here, in the repo, versioned with the

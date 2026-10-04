@@ -760,6 +760,21 @@
     width: 15px;
     height: 15px;
   }
+  .ov-ref {
+    margin: 18px 0 0;
+    font-size: 13px;
+    color: var(--color-muted);
+  }
+  .ov-ref a {
+    color: var(--color-fg);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: var(--color-border);
+  }
+  .ov-ref a:hover {
+    text-decoration-color: currentColor;
+  }
   .flow {
     display: flex;
     flex-wrap: wrap;

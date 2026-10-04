@@ -219,6 +219,11 @@ export function OverviewPage() {
                 </Link>
               ))}
             </div>
+
+            <p className="ov-ref">
+              Design review —{" "}
+              <a href="/design/admin-console/index.html">open the ratified design set</a>.
+            </p>
           </PanelBody>
         </Panel>
       </div>

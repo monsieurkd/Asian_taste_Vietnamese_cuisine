@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Orders · Asian Taste staff console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,500;0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+<div class="admin" data-rail="expanded" id="admin">
+
+  <aside class="admin-rail">
+    <div class="rail-top">
+      <a class="brand" href="index.html">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z" />
+            <path d="M9 7.5c0-1.3 1.1-1.7 1.1-2.8M12.5 7.5c0-1.3 1.1-1.7 1.1-2.8" />
+          </svg>
+        </span>
+        <span class="brand-text"><span class="brand-name">Asian Taste</span><span class="brand-tag">Staff console</span></span>
+      </a>
+      <button type="button" class="rail-toggle" id="railToggle" aria-expanded="true" aria-controls="adminNav" title="Collapse the sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="railChevron" d="m14 6-6 6 6 6" /></svg>
+        <span class="sr-only">Collapse the sidebar</span>
+      </button>
+    </div>
+
+    <nav class="admin-nav" id="adminNav" aria-label="Staff sections">
+      <a href="index.html" title="Overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5" /><path d="M6 10v9h12v-9" /></svg><span>Overview</span>
+      </a>
+      <a href="kitchen-board.html" title="Board">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></svg><span>Board</span>
+      </a>
+      <a href="counter-order-pos.html" title="Counter">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M3.5 9h17M8 4.5v15" /></svg><span>Counter</span>
+      </a>
+      <a href="orders.html" title="Orders" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="6" r="1" /><circle cx="4" cy="12" r="1" /><circle cx="4" cy="18" r="1" /></svg><span>Orders</span>
+      </a>
+      <a href="menu.html" title="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM11 4h7.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H11" /></svg><span>Menu</span>
+      </a>
+    </nav>
+
+    <div class="admin-rail-foot">
+      <span class="live-dot" id="liveDot" title="Kitchen online">Kitchen online</span>
+      <div class="admin-account">
+        <button type="button" class="admin-account-btn" id="accountBtn" aria-expanded="false" aria-haspopup="menu">
+          <span class="avatar" aria-hidden="true">LT</span>
+          <span class="ac-text"><strong>Linh Tran</strong><span class="ac-role">Manager</span></span>
+          <span class="ac-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9.5 6 5.5 6-5.5" /></svg></span>
+        </button>
+        <div class="admin-account-menu" id="accountMenu" role="menu" hidden>
+          <a role="menuitem" class="is-danger" href="login.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5" /><path d="M4 12h10M11 8l4 4-4 4" /></svg>
+            Sign out
+          </a>
+        </div>
+      </div>
+      <a class="admin-back" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5" /><path d="M4 12h10M11 8l4 4-4 4" /></svg>
+        <span>Back to site</span>
+      </a>
+    </div>
+  </aside>
+
+  <div class="admin-main">
+    <header class="admin-top">
+      <div>
+        <h1>Orders</h1>
+        <p class="sub">Search, filter and open any order from today's service.</p>
+      </div>
+      <div class="admin-top-actions">
+        <span class="admin-clock" id="adminClock" title="The shop clock — Australia/Adelaide">Adelaide —</span>
+      </div>
+    </header>
+
+    <div class="admin-page page-wide" data-od-id="orders">
+
+      <section class="panel" data-od-id="orders-filters">
+        <div class="panel-body">
+          <div class="filterbar">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" /></svg>
+              <label class="sr-only" for="order-search">Search orders</label>
+              <input id="order-search" class="input" type="search" placeholder="Search by order number, customer or phone…" autocomplete="off" />
+            </div>
+            <div class="seg-sm" id="statusFilters" role="group" aria-label="Filter by status"></div>
+          </div>
+          <p class="meta" id="ordersCount" aria-live="polite" style="margin:12px 0 0"></p>
+        </div>
+      </section>
+
+      <section class="panel" data-od-id="orders-table">
+        <div class="table-wrap">
+          <table class="dtable">
+            <caption class="sr-only">Orders for today</caption>
+            <thead>
+              <tr>
+                <th scope="col">Order</th>
+                <th scope="col">Customer</th>
+                <th scope="col">Wanted</th>
+                <th scope="col">Placed</th>
+                <th scope="col">Status</th>
+                <th scope="col">Items</th>
+                <th scope="col" class="num-col">Total</th>
+                <th scope="col"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody id="ordersBody"></tbody>
+          </table>
+        </div>
+        <div class="panel-foot row-between">
+          <span class="meta" id="ordersFoot">Showing today's most recent orders.</span>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var AUD = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
+  function money(n) { return AUD.format(n || 0); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  /* ─── Adelaide time (shared with the board + counter) ─── */
+  var TZ = "Australia/Adelaide";
+  var TZ_TIME = new Intl.DateTimeFormat("en-AU", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+  var TZ_PARTS = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  function fmtTime(ms) { return TZ_TIME.format(new Date(ms)).replace(/[\u202f\u00a0]/g, " "); }
+  function tzParts(ms) { var o = {}; TZ_PARTS.formatToParts(new Date(ms)).forEach(function (p) { o[p.type] = p.value; }); return o; }
+  function pad(n, len) { n = String(n); while (n.length < len) n = "0" + n; return n; }
+
+  var TYPE_CODE = { DineIn: "00", Takeaway: "01", Delivery: "02" };
+  function orderCode(t) {
+    var d = tzParts(t.createdMs);
+    return pad(d.day, 2) + "." + pad(d.month, 2) + "." + (TYPE_CODE[t.orderType] || "01") + "." + pad(t.seq, 3);
+  }
+
+  /* ─── status vocabulary (shared/lib/orderStatus) ─── */
+  var STATUS_META = {
+    placed: { label: "New", cls: "status-placed" },
+    confirmed: { label: "Cooking", cls: "status-confirmed" },
+    ready: { label: "Ready", cls: "status-ready" },
+    collected: { label: "Collected", cls: "status-collected" },
+    cancelled: { label: "Cancelled", cls: "status-cancelled" }
+  };
+  var LOOKUP = { pending: "placed", placed: "placed", new: "placed", confirmed: "confirmed", preparing: "confirmed", ready: "ready", collected: "collected", completed: "collected", cancelled: "cancelled", canceled: "cancelled" };
+  function statusKey(s) { return LOOKUP[String(s || "").trim().toLowerCase()] || "placed"; }
+  var STATUS_FILTERS = [
+    { id: "all", label: "All statuses" },
+    { id: "placed", label: "New" },
+    { id: "confirmed", label: "Cooking" },
+    { id: "ready", label: "Ready" },
+    { id: "collected", label: "Collected" },
+    { id: "cancelled", label: "Cancelled" }
+  ];
+
+  function readPayment(status, method) {
+    var s = String(status || "").toLowerCase(), m = String(method || "").toLowerCase();
+    if (s === "succeeded") return { label: m === "cash" ? "Paid at counter" : "Paid online", attention: false };
+    if (s === "failed") return { label: "Declined", attention: true };
+    if (s === "processing" || s === "requiresaction") return { label: "Payment unfinished", attention: true };
+    if (m === "cash") return { label: "Pay at counter", attention: false };
+    return { label: "Payment not taken", attention: true };
+  }
+
+  function progressOf(t) {
+    var items = t.items || [];
+    return { done: items.filter(function (i) { return i.isCompleted; }).length, total: items.length };
+  }
+  function progressLabel(t) {
+    var p = progressOf(t);
+    if (!p.total) return "";
+    return p.done + " of " + p.total + " dishes done";
+  }
+  function itemCount(t) { return (t.items || []).reduce(function (s, i) { return s + i.quantity; }, 0); }
+  function wantedFor(t) {
+    if (!t.wantedAt || t.wantedAt - t.createdMs <= 5 * 60000) return "ASAP";
+    return fmtTime(t.wantedAt);
+  }
+  function minutesAgo(ms) { return Math.max(0, Math.round((Date.now() - ms) / 60000)); }
+  function typeLabel(t) {
+    if (t.orderType === "DineIn") return t.tableNumber ? "Dine in · Table " + t.tableNumber : "Dine in";
+    return { Takeaway: "Takeaway", Delivery: "Delivery" }[t.orderType] || "Takeaway";
+  }
+  function lineDetail(l) {
+    var parts = [];
+    if (l.modifiers) parts.push(l.modifiers);
+    if (l.specialInstructions) parts.push(l.specialInstructions);
+    return parts.join(" · ");
+  }
+
+  /* ─── shared store (the board owns it; the counter posts to the inbox) ─── */
+  var STORE_KEY = "asiantaste.admin.board.v1";
+  function readStore() { try { var r = localStorage.getItem(STORE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
+
+  function loadOrders() {
+    var store = readStore();
+    if (!store || (!(store.orders || []).length && !(store.history || []).length)) return null;
+    var live = (store.orders || []).map(function (t) { return t; });
+    var hist = (store.history || []).slice();
+    return live.concat(hist);
+  }
+
+  /* A fallback so the screen is meaningful before the board has ever run. */
+  function sampleOrders() {
+    var now = Date.now();
+    function it(id, name, qty, o) {
+      o = o || {};
+      return { id: id, name: name, quantity: qty, modifiers: o.mods || null, specialInstructions: o.special || null, isCompleted: !!o.done };
+    }
+    var P = { "Pad Thai": 16, "Honey Chicken": 18, "Cold rolls (serve of 4)": 8.5, "Pho - Beef noodle soup (Combo)": 16.5, "Steamed rice": 2, "Spring roll (serve of 3)": 5.8, "Salt & Pepper Squid / Fish": 18.5, "Crispy Pork (Roasted Pork) Banh Mi": 8.5 };
+    function mk(id, seq, type, table, name, phone, status, ageMin, wantedMin, pay, method, items, notes) {
+      var total = items.reduce(function (s, i) { return s + (P[i.name] || 0) * i.quantity; }, 0);
+      return { id: id, seq: seq, orderType: type, tableNumber: table, customerName: name, customerPhone: phone,
+        status: status, createdMs: now - ageMin * 60000, wantedAt: now - ageMin * 60000 + wantedMin * 60000,
+        paymentStatus: pay, paymentMethod: method, items: items, total: Math.round(total * 100) / 100, notes: notes || null };
+    }
+    return [
+      mk(52, 52, "Takeaway", null, "Helen Nguyen", "0402 776 118", "Pending", 3, 45, "succeeded", "card", [it(122, "Pad Thai", 4), it(123, "Spring roll (serve of 3)", 2)], "Birthday — keep the sauce separate"),
+      mk(51, 51, "Delivery", null, "Aisha Rahman", "0431 220 884", "Pending", 1, 45, "succeeded", "card", [it(120, "Salt & Pepper Squid / Fish", 1), it(121, "Steamed rice", 1)], "Leave at the door"),
+      mk(50, 50, "Takeaway", null, "Daniel Okafor", "0412 555 019", "Confirmed", 2, 20, "succeeded", "card", [it(118, "Pho - Beef noodle soup (Combo)", 2, { special: "No onion" }), it(119, "Cold rolls (serve of 4)", 1)]),
+      mk(49, 49, "DineIn", "3", "Marisol Reyes", "0400 118 273", "Pending", 5, 20, null, "cash", [it(116, "Pad Thai", 1, { mods: "Extra protein" }), it(117, "Honey Chicken", 2)], "Extra napkins please"),
+      mk(48, 48, "DineIn", "2", "Grace Lim", "0410 998 320", "Ready", 6, 20, "succeeded", "card", [it(113, "Salt & Pepper Squid / Fish", 1, { done: true }), it(114, "Steamed rice", 2, { done: true })]),
+      mk(47, 47, "Takeaway", null, "Noah Bennett", "0488 210 664", "Ready", 8, 20, "succeeded", "card", [it(111, "Pad Thai", 1, { mods: "Extra protein", done: true }), it(112, "Crispy Pork (Roasted Pork) Banh Mi", 1, { done: true })]),
+      mk(46, 46, "DineIn", "6", "Priya Nair", "0421 664 007", "Confirmed", 9, 20, "succeeded", "card", [it(109, "Cold rolls (serve of 4)", 3, { done: true }), it(110, "Pad Thai", 1, { special: "No coriander" })]),
+      mk(43, 43, "Takeaway", null, "Marcus Lee", "0466 330 512", "Confirmed", 28, 20, "failed", "card", [it(101, "Honey Chicken", 1), it(102, "Spring roll (serve of 3)", 2)])
+    ];
+  }
+
+  /* ─── state + elements ─── */
+  var state = { query: "", status: "all", openRowId: null, orders: [] };
+  var bodyEl = document.getElementById("ordersBody");
+  var countEl = document.getElementById("ordersCount");
+  var footEl = document.getElementById("ordersFoot");
+  var filtersEl = document.getElementById("statusFilters");
+  var searchEl = document.getElementById("order-search");
+  var toastEl = document.getElementById("toast");
+  var toastTimer = null;
+  function toast(m) { toastEl.textContent = m; toastEl.classList.add("is-open"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove("is-open"); }, 2400); }
+
+  function statusPill(status) {
+    var key = statusKey(status);
+    var meta = STATUS_META[key];
+    return '<span class="status-pill ' + meta.cls + '"><span class="sdot" aria-hidden="true"></span>' + esc(meta.label) + "</span>";
+  }
+
+  function itemsPanelHTML(t) {
+    var p = progressOf(t);
+    var pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
+    if (!p.total) return '<p class="items-empty" role="status">This order has no items recorded.</p>';
+    var label = progressLabel(t);
+    var allDone = p.done === p.total;
+    var lines = t.items.map(function (l) {
+      var detail = lineDetail(l);
+      return '<li class="ticket-line-static" data-done="' + !!l.isCompleted + '">' +
+        '<span class="ticket-line-check' + (l.isCompleted ? " is-done" : "") + '" aria-hidden="true">' +
+          (l.isCompleted ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>' : "") +
+        "</span>" +
+        '<span class="ticket-line-body"><span class="ticket-line-name"><strong>' + l.quantity + "×</strong> " + esc(l.name) + "</span>" +
+        (detail ? '<span class="ticket-line-detail">' + esc(detail) + "</span>" : "") + "</span>" +
+        '<span class="sr-only">' + (l.isCompleted ? "Done" : "Not done yet") + "</span></li>";
+    }).join("");
+    return '<div class="order-items">' +
+      '<div class="ticket-progress"><span class="ticket-progress-label">' + esc(label) + "</span>" +
+      '<span class="ticket-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + p.total + '" aria-valuenow="' + p.done + '" aria-label="' + p.done + " of " + p.total + ' dishes done"><span style="width:' + pct + '%"></span></span></div>' +
+      '<ul class="ticket-line-list">' + lines + "</ul>" +
+      (allDone ? '<p class="ticket-alldone" role="status">Every dish is done.</p>' : "") +
+      "</div>";
+  }
+
+  function filtered() {
+    var q = state.query.trim().toLowerCase();
+    return state.orders.filter(function (t) {
+      if (state.status !== "all" && statusKey(t.status) !== state.status) return false;
+      if (q) {
+        var hay = (orderCode(t) + " " + (t.customerName || "") + " " + (t.customerPhone || "")).toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  function rowHTML(t) {
+    var open = state.openRowId === t.id;
+    var pay = readPayment(t.paymentStatus, t.paymentMethod);
+    var panelId = "order-items-" + t.id;
+    var h = '<tr data-open="' + open + '" data-ticket-id="' + t.id + '">' +
+      "<td><a class=\"order-id\" href=\"order-detail.html?id=" + encodeURIComponent(t.id) + "\" title=\"Open the order\">" + esc(orderCode(t)) + "</a>" +
+        '<span class="meta" style="display:block;font-size:12px">' + esc(typeLabel(t)) + "</span></td>" +
+      "<td><strong>" + esc(t.customerName || "Walk-in") + "</strong><br /><span class=\"meta\">" + esc(t.customerPhone || "—") + "</span>" +
+        (pay.attention ? '<br /><span class="pill pill-warn" style="font-size:11px">' + esc(pay.label) + "</span>" : "") + "</td>" +
+      "<td>" + esc(wantedFor(t)) + "</td>" +
+      "<td>" + esc(fmtTime(t.createdMs)) + '<br /><span class="meta">' + minutesAgo(t.createdMs) + " min ago</span></td>" +
+      "<td>" + statusPill(t.status) + "</td>" +
+      "<td><button type=\"button\" class=\"row-expand\" data-expand=\"" + t.id + "\" aria-expanded=\"" + open + "\" aria-controls=\"" + panelId + "\">" +
+        '<span class="pill pill-neutral" style="font-size:11px">' + esc(progressLabel(t) || "No items") + "</span>" +
+        '<span class="row-expand-chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9.5 6 5.5 6-5.5"/></svg></span>' +
+        '<span class="sr-only">' + (open ? "Hide dishes" : "Show dishes") + "</span></button></td>" +
+      '<td class="num-col">' + money(t.total) + "</td>" +
+      '<td><a class="btn btn-ghost" style="min-height:36px;padding:6px 12px;font-size:13px" href="order-detail.html?id=' + encodeURIComponent(t.id) + '">Open</a></td>' +
+      "</tr>";
+    if (open) {
+      h += '<tr class="row-items"><td colspan="8" id="' + panelId + '">' + itemsPanelHTML(t) + "</td></tr>";
+    }
+    return h;
+  }
+
+  function renderFilters() {
+    filtersEl.innerHTML = STATUS_FILTERS.map(function (f) {
+      return '<button type="button" data-status="' + f.id + '" aria-pressed="' + (state.status === f.id) + '">' + esc(f.label) + "</button>";
+    }).join("");
+  }
+
+  function render() {
+    var rows = filtered();
+    var isFiltered = state.query !== "" || state.status !== "all";
+    countEl.innerHTML = "Showing " + rows.length + " of " + state.orders.length + " orders" +
+      (isFiltered ? ' · <button type="button" id="clearFilters" style="background:none;border:0;color:var(--color-accent);cursor:pointer;font-weight:700;font:inherit">Clear filters</button>' : "");
+
+    if (!rows.length) {
+      bodyEl.innerHTML = '<tr><td colspan="8"><div class="state-block">' +
+        '<span class="state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></span>' +
+        "<h3>No orders match</h3><p>Try a different status or search term.</p>" +
+        '<button type="button" class="btn btn-secondary" id="emptyClear">Clear filters</button></div></td></tr>';
+    } else {
+      bodyEl.innerHTML = rows.map(rowHTML).join("");
+    }
+    footEl.textContent = "Showing today's most recent " + state.orders.length + " orders.";
+  }
+
+  function refresh() {
+    var live = loadOrders();
+    state.orders = live || sampleOrders();
+    render();
+  }
+
+  /* ─── events ─── */
+  searchEl.addEventListener("input", function (e) { state.query = e.target.value; render(); });
+  filtersEl.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-status]");
+    if (!b) return;
+    state.status = b.getAttribute("data-status");
+    renderFilters(); render();
+  });
+  bodyEl.addEventListener("click", function (e) {
+    var ex = e.target.closest("[data-expand]");
+    if (ex) {
+      var id = Number(ex.getAttribute("data-expand"));
+      state.openRowId = state.openRowId === id ? null : id;
+      render();
+      return;
+    }
+    if (e.target.closest("#emptyClear") || e.target.closest("#clearFilters")) {
+      state.query = ""; state.status = "all"; searchEl.value = "";
+      renderFilters(); render();
+    }
+  });
+
+  /* rail collapse + account menu */
+  document.getElementById("railToggle").addEventListener("click", function () {
+    var admin = document.getElementById("admin");
+    var collapsed = admin.getAttribute("data-rail") === "collapsed";
+    admin.setAttribute("data-rail", collapsed ? "expanded" : "collapsed");
+    this.setAttribute("aria-expanded", String(collapsed));
+    document.getElementById("railChevron").setAttribute("d", collapsed ? "m14 6-6 6 6 6" : "m10 6 6 6-6 6");
+  });
+  document.getElementById("accountBtn").addEventListener("click", function () {
+    var menu = document.getElementById("accountMenu");
+    var open = menu.hidden; menu.hidden = !open; this.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".admin-account")) {
+      document.getElementById("accountMenu").hidden = true;
+      document.getElementById("accountBtn").setAttribute("aria-expanded", "false");
+    }
+  });
+
+  /* the shop clock + live refresh from the board's store */
+  var clockEl = document.getElementById("adminClock");
+  function renderClock() { if (clockEl) clockEl.textContent = "Adelaide " + fmtTime(Date.now()); }
+  setInterval(renderClock, 30000);
+  /* keep "min ago" and the wanted clock honest without a manual refresh */
+  setInterval(render, 30000);
+  window.addEventListener("storage", function (e) { if (e.key === STORE_KEY) { refresh(); toast("Orders updated"); } });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+
+  renderClock();
+  renderFilters();
+  refresh();
+})();
+</script>
+</body>
+</html>

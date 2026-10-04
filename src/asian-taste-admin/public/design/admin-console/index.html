@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overview · Asian Taste staff console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,500;0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="admin.css" />
+<style>
+  .snapshot { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .snapshot { grid-template-columns: 1fr 1fr; } }
+  .stat { display: flex; flex-direction: column; gap: 4px; padding: 18px 20px; }
+  .stat .num { font-family: var(--font-display); font-size: clamp(26px, 3.4vw, 34px); font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+  .stat .num.is-accent { color: var(--color-accent); }
+  .stat .lbl { font-size: 13px; color: var(--color-muted); }
+  .ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+  .ov-card { display: flex; flex-direction: column; gap: 12px; padding: 22px; text-decoration: none; color: inherit; transition: border-color 0.15s ease, transform 0.15s ease; }
+  .ov-card:hover { border-color: var(--color-accent-line); transform: translateY(-2px); }
+  .ov-card-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--color-accent-soft); color: var(--color-accent); }
+  .ov-card-icon svg { width: 21px; height: 21px; }
+  .ov-card h2 { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin: 0; }
+  .ov-card p { margin: 0; font-size: 14px; color: var(--color-muted); line-height: 1.5; }
+  .ov-card .go { margin-top: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--color-accent); }
+  .ov-card .go svg { width: 15px; height: 15px; }
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--color-muted); }
+  .flow .step { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface); color: var(--color-fg); font-weight: 600; }
+  .flow .step svg { width: 15px; height: 15px; color: var(--color-accent); }
+  .flow .arrow { color: var(--color-gold); font-weight: 800; }
+</style>
+</head>
+<body>
+<div class="admin" data-rail="expanded" id="admin">
+
+  <aside class="admin-rail">
+    <div class="rail-top">
+      <a class="brand" href="index.html">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z" />
+            <path d="M9 7.5c0-1.3 1.1-1.7 1.1-2.8M12.5 7.5c0-1.3 1.1-1.7 1.1-2.8" />
+          </svg>
+        </span>
+        <span class="brand-text"><span class="brand-name">Asian Taste</span><span class="brand-tag">Staff console</span></span>
+      </a>
+      <button type="button" class="rail-toggle" id="railToggle" aria-expanded="true" aria-controls="adminNav" title="Collapse the sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="railChevron" d="m14 6-6 6 6 6" /></svg>
+        <span class="sr-only">Collapse the sidebar</span>
+      </button>
+    </div>
+
+    <nav class="admin-nav" id="adminNav" aria-label="Staff sections">
+      <a href="index.html" title="Overview" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5" /><path d="M6 10v9h12v-9" /></svg><span>Overview</span>
+      </a>
+      <a href="kitchen-board.html" title="Board">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></svg><span>Board</span>
+      </a>
+      <a href="counter-order-pos.html" title="Counter">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M3.5 9h17M8 4.5v15" /></svg><span>Counter</span>
+      </a>
+      <a href="orders.html" title="Orders">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="6" r="1" /><circle cx="4" cy="12" r="1" /><circle cx="4" cy="18" r="1" /></svg><span>Orders</span>
+      </a>
+      <a href="menu.html" title="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM11 4h7.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H11" /></svg><span>Menu</span>
+      </a>
+    </nav>
+
+    <div class="admin-rail-foot">
+      <span class="live-dot" id="liveDot" title="Kitchen online">Kitchen online</span>
+      <div class="admin-account">
+        <button type="button" class="admin-account-btn" id="accountBtn" aria-expanded="false" aria-haspopup="menu">
+          <span class="avatar" aria-hidden="true">LT</span>
+          <span class="ac-text"><strong>Linh Tran</strong><span class="ac-role">Manager</span></span>
+          <span class="ac-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9.5 6 5.5 6-5.5" /></svg></span>
+        </button>
+        <div class="admin-account-menu" id="accountMenu" role="menu" hidden>
+          <a role="menuitem" class="is-danger" href="login.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5" /><path d="M4 12h10M11 8l4 4-4 4" /></svg>
+            Sign out
+          </a>
+        </div>
+      </div>
+      <a class="admin-back" href="login.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5" /><path d="M4 12h10M11 8l4 4-4 4" /></svg>
+        <span>Staff sign-in</span>
+      </a>
+    </div>
+  </aside>
+
+  <div class="admin-main">
+    <header class="admin-top">
+      <div>
+        <h1>Overview</h1>
+        <p class="sub" id="ovDate">Service at a glance.</p>
+      </div>
+      <div class="admin-top-actions">
+        <span class="admin-clock" id="adminClock" title="The shop clock — Australia/Adelaide">Adelaide —</span>
+      </div>
+    </header>
+
+    <div class="admin-page page-wide" data-od-id="overview">
+
+      <section class="panel" data-od-id="overview-snapshot">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Today's service</p>
+            <h2>Live from the cook line</h2>
+          </div>
+          <span class="pill pill-neutral" id="ovFoot">Read from the board</span>
+        </div>
+        <div class="panel-body">
+          <div class="snapshot">
+            <div class="stat panel" data-od-id="stat-open">
+              <span class="num is-accent" id="statOpen">—</span>
+              <span class="lbl">Orders on the board</span>
+            </div>
+            <div class="stat panel" data-od-id="stat-ready">
+              <span class="num" id="statReady">—</span>
+              <span class="lbl">Ready for collection</span>
+            </div>
+            <div class="stat panel" data-od-id="stat-collected">
+              <span class="num" id="statCollected">—</span>
+              <span class="lbl">Collected today</span>
+            </div>
+            <div class="stat panel" data-od-id="stat-revenue">
+              <span class="num" id="statRevenue">—</span>
+              <span class="lbl">Takings today</span>
+            </div>
+          </div>
+          <div class="flow" style="margin-top:20px" aria-label="How the console fits together">
+            <span class="step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M3.5 9h17M8 4.5v15" /></svg>Counter takes the order</span>
+            <span class="arrow" aria-hidden="true">→</span>
+            <span class="step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></svg>Board cooks it</span>
+            <span class="arrow" aria-hidden="true">→</span>
+            <span class="step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="12" r="1" /></svg>Orders keeps the record</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-od-id="overview-screens">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Jump to</p>
+            <h2>Every screen in the console</h2>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="ov-grid">
+            <a class="panel ov-card" href="kitchen-board.html" data-od-id="card-board">
+              <span class="ov-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></svg></span>
+              <h2>Board</h2>
+              <p>The cook line. Drag orders through New → Cooking → Ready, tick off dishes, and set the pickup time.</p>
+              <span class="go">Open the board <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></span>
+            </a>
+            <a class="panel ov-card" href="counter-order-pos.html" data-od-id="card-counter">
+              <span class="ov-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M3.5 9h17M8 4.5v15" /></svg></span>
+              <h2>Counter</h2>
+              <p>Take an order at the till — quick-add dishes, choose options, capture a pickup time and send it straight to the board.</p>
+              <span class="go">Take an order <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></span>
+            </a>
+            <a class="panel ov-card" href="orders.html" data-od-id="card-orders">
+              <span class="ov-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="6" r="1" /><circle cx="4" cy="12" r="1" /><circle cx="4" cy="18" r="1" /></svg></span>
+              <h2>Orders</h2>
+              <p>Search and filter the day's orders, expand the dishes inline, or open one for the full timeline and a printable bill.</p>
+              <span class="go">Browse orders <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></span>
+            </a>
+            <a class="panel ov-card" href="menu.html" data-od-id="card-menu">
+              <span class="ov-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM11 4h7.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H11" /></svg></span>
+              <h2>Menu</h2>
+              <p>82 dishes across 14 categories. Change a price, edit a description, adjust spice, or mark a dish unavailable.</p>
+              <span class="go">Edit the menu <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></span>
+            </a>
+            <a class="panel ov-card" href="login.html" data-od-id="card-login">
+              <span class="ov-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /><path d="M12 14.5v2" /></svg></span>
+              <h2>Staff sign-in</h2>
+              <p>The console's front door. Sign in with a staff account to reach the board, counter, orders and menu.</p>
+              <span class="go">Go to sign-in <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+  var TZ = "Australia/Adelaide";
+  var AUD = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
+  var TZ_TIME = new Intl.DateTimeFormat("en-AU", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+  var TZ_DATE = new Intl.DateTimeFormat("en-AU", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
+  function fmtTime(ms) { return TZ_TIME.format(new Date(ms)).replace(/[\u202f\u00a0]/g, " "); }
+
+  var STORE_KEY = "asiantaste.admin.board.v1";
+
+  function num(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+
+  function render() {
+    document.getElementById("ovDate").textContent = TZ_DATE.format(new Date()) + " · service at a glance.";
+    document.getElementById("adminClock").textContent = "Adelaide " + fmtTime(Date.now());
+
+    var store = null;
+    try { var raw = localStorage.getItem(STORE_KEY); store = raw ? JSON.parse(raw) : null; } catch (e) { store = null; }
+
+    if (store && ((store.orders || []).length || store.collectedToday != null)) {
+      var open = (store.orders || []).length;
+      var ready = (store.orders || []).filter(function (t) { return String(t.status || "").toLowerCase() === "ready"; }).length;
+      num("statOpen", open);
+      num("statReady", ready);
+      num("statCollected", store.collectedToday != null ? store.collectedToday : "—");
+      num("statRevenue", AUD.format(store.revenueToday || 0));
+      document.getElementById("ovFoot").textContent = "Live from the board";
+    } else {
+      num("statOpen", 8);
+      num("statReady", 2);
+      num("statCollected", 42);
+      num("statRevenue", AUD.format(1486.5));
+      document.getElementById("ovFoot").textContent = "Sample — open the board to go live";
+    }
+  }
+
+  /* rail collapse + account menu (shared shell) */
+  document.getElementById("railToggle").addEventListener("click", function () {
+    var admin = document.getElementById("admin");
+    var collapsed = admin.getAttribute("data-rail") === "collapsed";
+    admin.setAttribute("data-rail", collapsed ? "expanded" : "collapsed");
+    this.setAttribute("aria-expanded", String(collapsed));
+    document.getElementById("railChevron").setAttribute("d", collapsed ? "m14 6-6 6 6 6" : "m10 6 6 6-6 6");
+  });
+  document.getElementById("accountBtn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    var menu = document.getElementById("accountMenu");
+    var open = menu.hidden; menu.hidden = !open; this.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".admin-account")) {
+      document.getElementById("accountMenu").hidden = true;
+      document.getElementById("accountBtn").setAttribute("aria-expanded", "false");
+    }
+  });
+
+  setInterval(render, 30000);
+  window.addEventListener("storage", function (e) { if (e.key === STORE_KEY) render(); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) render(); });
+  render();
+})();
+</script>
+</body>
+</html>
