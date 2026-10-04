@@ -3,6 +3,8 @@ import {
   type OrderDetail,
   type DashboardSummary,
   type ItemCompletionResult,
+  type SetPickupTimeRequest,
+  type SetPickupTimeResult,
   type UpdateOrderItemsRequest,
   type UpdateOrderItemsResult,
   type UpdateOrderStatusRequest,
@@ -94,6 +96,22 @@ export const ordersApi = {
     request: UpdateOrderItemsRequest,
   ): Promise<UpdateOrderItemsResult> {
     const response = await apiClient.put<UpdateOrderItemsResult>(`/admin/orders/${id}/items`, request)
+    return response.data
+  },
+
+  /**
+   * Move an order's promised pickup time.
+   *
+   * A column-level write, NOT the items edit: the edit replaces the lines wholesale and
+   * would wipe the kitchen's per-dish ticks and notes just to move a time. Judged by the
+   * server against the same trading hours as checkout, so a time the kitchen cannot serve
+   * is refused with a 409 rather than silently stored.
+   */
+  async setPickupTime(id: number, request: SetPickupTimeRequest): Promise<SetPickupTimeResult> {
+    const response = await apiClient.put<SetPickupTimeResult>(
+      `/admin/orders/${id}/pickup-time`,
+      request,
+    )
     return response.data
   },
 

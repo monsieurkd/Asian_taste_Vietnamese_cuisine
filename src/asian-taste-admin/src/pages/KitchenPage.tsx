@@ -1,16 +1,24 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ordersApi } from "@/api/orders"
 import { kitchenApi, type KitchenItem, type KitchenTicket } from "@/api/kitchenApi"
 import { AdminTop } from "@/components/AdminLayout"
-import { Button, Panel, PanelBody, Pill } from "@/components/ui/Primitives"
+import { Button } from "@/components/ui/Primitives"
 import { AdminModal } from "@/components/ui/AdminModal"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { BoardTicket } from "@/components/orders/BoardTicket"
-import { apiStatusValue, isClosed, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
-import { readPayment } from "@/lib/payment"
+import { apiStatusValue, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
 import { urgencyOf } from "@/lib/kitchenBoard"
 import { formatCurrency } from "@/lib/utils"
+import {
+  adelaideInstant,
+  formatShopTime,
+  shopClockParts,
+  shopDayLabel,
+  shopDayOffset,
+  shopRelativeLabel,
+} from "@/lib/shopTime"
+import { canTransition } from "@shared/lib/orderTransitions"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 import type { Order, OrderStatus } from "@/types"
 
@@ -82,6 +90,23 @@ export function KitchenPage() {
   /** The single dish currently being ticked, so only its own row reads "saving". */
   const [tickingItemId, setTickingItemId] = useState<number | null>(null)
 
+  /**
+   * Drag-and-drop state.
+   *
+   * `dragOrigin` is a ref rather than state because the pointerup handler reads it at the
+   * moment of the drop; `draggingId`/`dropStage` are state only so the card and column can
+   * repaint while the drag is in flight.
+   */
+  const dragOrigin = useRef<{ id: number; from: StatusKey } | null>(null)
+  const [draggingId, setDraggingId] = useState<number | null>(null)
+  const [dropStage, setDropStage] = useState<StatusKey | null>(null)
+
+  /** The pickup-time editor: which ticket, and the draft time in the shop's own clock. */
+  const [pickupFor, setPickupFor] = useState<KitchenTicket | null>(null)
+  const [pickupDraft, setPickupDraft] = useState(() => Date.now())
+  /** The instant the editor opened, captured so the "Now" line is not read during render. */
+  const [pickupNow, setPickupNow] = useState(0)
+
   // The board asks for the LINES, which is what both the cross-out list and the per-dish
   // notes are rendered from. Fetching them per ticket on demand would be one request per
   // press on the screen whose whole job is to be glanceable.
@@ -123,6 +148,69 @@ export function KitchenPage() {
     onSuccess: refresh,
     onError: () => showAdminToast("Couldn't update that order — try again"),
   })
+
+  /**
+   * Start dragging a ticket by its grip.
+   *
+   * Pointer events rather than HTML5 drag-and-drop, because the board runs on iPads and
+   * native drag-and-drop does not fire for touch. The move/up listeners live on the window
+   * so the gesture survives the pointer leaving the card.
+   */
+  const beginDrag = (ticket: KitchenTicket) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return
+    // Stop the browser's own selection/long-press behaviour, which otherwise fights the drag.
+    e.preventDefault()
+    dragOrigin.current = { id: ticket.id, from: statusKey(ticket.status) }
+    setDraggingId(ticket.id)
+  }
+
+  useEffect(() => {
+    if (draggingId === null) return
+
+    const columnUnder = (x: number, y: number): StatusKey | null => {
+      const el = document.elementFromPoint(x, y) as HTMLElement | null
+      const col = el?.closest<HTMLElement>("[data-stage]")
+      return (col?.dataset.stage as StatusKey | undefined) ?? null
+    }
+
+    const onMove = (e: PointerEvent) => setDropStage(columnUnder(e.clientX, e.clientY))
+
+    /**
+     * Finish the drag. The move is decided by `canTransition`, NOT by how far the card was
+     * dragged: a WebSocket frame that moved the ticket while it was in the air, or a drop on
+     * a non-adjacent column, must not talk the board into an illegal move. A refused drop
+     * snaps back and says why.
+     */
+    const finish = (e: PointerEvent, cancelled: boolean) => {
+      const origin = dragOrigin.current
+      dragOrigin.current = null
+      setDraggingId(null)
+      setDropStage(null)
+      if (!origin || cancelled) return
+
+      const to = columnUnder(e.clientX, e.clientY)
+      if (!to || to === origin.from) return
+
+      const check = canTransition(origin.from, to)
+      if (check.allowed) {
+        advance.mutate({ id: origin.id, status: to })
+      } else {
+        showAdminToast(check.reason)
+      }
+    }
+
+    const onUp = (e: PointerEvent) => finish(e, false)
+    const onCancel = (e: PointerEvent) => finish(e, true)
+
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+    window.addEventListener("pointercancel", onCancel)
+    return () => {
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onCancel)
+    }
+  }, [draggingId, advance])
 
   /**
    * Tick one dish off, from the board.
@@ -215,6 +303,31 @@ export function KitchenPage() {
     onError: () => showAdminToast("Couldn't change the hold"),
   })
 
+  /**
+   * Move the ticket's promised pickup time.
+   *
+   * Sends ONLY the time — never the items — so the write cannot disturb the kitchen's
+   * per-dish ticks, cook state or notes. The server judges it against trading hours, so a
+   * time the kitchen cannot serve comes back as a 409 with a reason worth reading out.
+   */
+  const savePickup = useMutation({
+    mutationFn: () => {
+      if (!pickupFor) throw new Error("No ticket selected")
+      return ordersApi.setPickupTime(pickupFor.id, {
+        pickupTime: { type: "SCHEDULED", scheduledTime: new Date(pickupDraft).toISOString() },
+      })
+    },
+    onSuccess: () => {
+      setPickupFor(null)
+      showAdminToast("Pickup time moved")
+      refresh()
+    },
+    onError: (error: unknown) => {
+      const e = error as { response?: { data?: { message?: string } } }
+      showAdminToast(e.response?.data?.message ?? "Couldn't move that time — try again")
+    },
+  })
+
   /** Which tickets each column shows, after the filter and the urgency sort. */
   const shown = useMemo(() => {
     const list = tickets.filter((t) => {
@@ -260,16 +373,6 @@ export function KitchenPage() {
     all: tickets.length,
   }
 
-  /** A ready order whose money never arrived cannot go out. Counted for the stat card. */
-  const uncollectedMoney = useMemo(
-    () =>
-      tickets.filter((t) => {
-        const payment = readPayment(t.paymentStatus, t.paymentMethod)
-        return payment.attention && !isClosed(t.status)
-      }).length,
-    [tickets],
-  )
-
   return (
     <>
       <AdminTop
@@ -287,84 +390,79 @@ export function KitchenPage() {
         }
       />
 
-      <div className="admin-page">
-        <section className="stat-grid" data-od-id="board-stats">
-          <div className="stat-card is-accent">
-            <p className="stat-k">On the line</p>
-            <p className="stat-v">{boardSummary?.liveOrders ?? 0}</p>
-            <p className="stat-delta">{boardSummary?.dishesToCook ?? 0} dishes still to cook</p>
+      <div className="admin-page board-page">
+        {/* One compact toolbar: the filters, and the numbers that say whether the line is
+            keeping up. The mockup puts both here rather than in four stat cards, so the
+            board itself gets the height. */}
+        <section className="board-bar" data-od-id="board-bar">
+          <div className="seg-sm" role="group" aria-label="Filter the board">
+            {FILTERS.map((f) => (
+              <button key={f.id} type="button" aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
+                {f.label}
+                <span className="seg-count">{filterCounts[f.id] ?? 0}</span>
+              </button>
+            ))}
           </div>
-          <div className="stat-card">
-            <p className="stat-k">Late</p>
-            <p className="stat-v">{boardSummary?.overdueOrders ?? 0}</p>
-            <p className="stat-delta down">past the promised time</p>
-          </div>
-          <div className="stat-card">
-            <p className="stat-k">Collected today</p>
-            <p className="stat-v">{collectedToday}</p>
-            <p className="stat-delta">
-              {boardSummary?.heldOrders ?? 0} held · {uncollectedMoney} unpaid
-            </p>
-          </div>
-          <div className="stat-card">
-            <p className="stat-k">Revenue today</p>
-            <p className="stat-v">{formatCurrency(revenueToday)}</p>
-            <p className="stat-delta">GST inclusive · AUD</p>
+          <div className="board-metrics" aria-live="polite" data-od-id="board-metrics">
+            <span className="bm">
+              <strong>{boardSummary?.dishesToCook ?? 0}</strong> dishes to cook
+            </span>
+            {(filterCounts.late ?? 0) > 0 && (
+              <span className="bm is-late">
+                <strong>{filterCounts.late}</strong> late
+              </span>
+            )}
+            {(filterCounts.held ?? 0) > 0 && (
+              <span className="bm">
+                <strong>{filterCounts.held}</strong> held
+              </span>
+            )}
+            <span className="bm">
+              <strong>{collectedToday}</strong> collected
+            </span>
+            <span className="bm">
+              <strong>{formatCurrency(revenueToday)}</strong> today
+            </span>
           </div>
         </section>
 
-        <Panel data-od-id="board-filters">
-          <PanelBody>
-            <div className="filterbar">
-              <div className="seg-sm" role="group" aria-label="Filter the board">
-                {FILTERS.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    aria-pressed={filter === f.id}
-                    onClick={() => setFilter(f.id)}
-                  >
-                    {f.label}
-                    <span className="seg-count">{filterCounts[f.id] ?? 0}</span>
-                  </button>
-                ))}
-              </div>
-              <Pill neutral>{boardSummary?.awaitingAcceptance ?? 0} to accept</Pill>
-            </div>
-          </PanelBody>
-        </Panel>
-
         {isLoading ? (
-          <Panel>
-            <PanelBody>
-              <p className="meta" style={{ margin: 0 }}>
-                Loading the board…
-              </p>
-            </PanelBody>
-          </Panel>
+          <p className="board-empty">Loading the board…</p>
+        ) : shown.length === 0 ? (
+          <p className="board-empty" style={{ gridColumn: "1 / -1" }}>
+            Nothing in this filter.{" "}
+            {filter === "late" ? "No order is past its time." : filter === "held" ? "No order is held." : ""}
+          </p>
         ) : (
           <div className="board" data-od-id="board-columns">
             {COLUMNS.map((column) => {
               const list = inColumn(column.key)
               return (
-                <div className="col" key={column.key}>
+                <div
+                  className={`col ${dropStage === column.key ? "drop-target" : ""}`}
+                  key={column.key}
+                  data-stage={column.key}
+                >
                   <div className="col-head">
                     <h3>{column.title}</h3>
                     <span className="count">{list.length}</span>
                   </div>
-                  <p className="meta" style={{ margin: "-6px 0 12px" }}>
-                    {column.hint}
-                  </p>
+                  <div className="col-scroll">
+                    <p className="meta" style={{ margin: "0 0 4px" }}>
+                      {column.hint}
+                    </p>
 
-                  {list.length === 0 ? (
-                    <p className="board-empty">Nothing here.</p>
-                  ) : (
-                    list.map((ticket) => (
+                    {list.length === 0 ? (
+                      <p className="board-empty">Nothing here.</p>
+                    ) : (
+                      list.map((ticket) => (
                       <BoardTicket
                         key={ticket.id}
                         ticket={ticket}
                         saving={savingId === ticket.id}
                         tickingItemId={tickingItemId}
+                        dragging={draggingId === ticket.id}
+                        onDragHandlePointerDown={beginDrag(ticket)}
                         onAdvance={(status) => advance.mutate({ id: ticket.id, status })}
                         onTick={(itemId, isCompleted) =>
                           tick.mutate({ orderId: ticket.id, itemId, isCompleted })
@@ -379,9 +477,16 @@ export function KitchenPage() {
                           setNoteDraft(item.kitchenNote ?? "")
                         }}
                         onHistory={() => setHistoryFor(ticket)}
+                        onPickup={() => {
+                          setPickupFor(ticket)
+                          const openedAt = Date.now()
+                          setPickupDraft(openedAt)
+                          setPickupNow(openedAt)
+                        }}
                       />
                     ))
-                  )}
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -474,8 +579,187 @@ export function KitchenPage() {
         </AdminModal>
       )}
 
+      {pickupFor && (
+        <PickupTimeEditor
+          ticket={pickupFor}
+          draft={pickupDraft}
+          now={pickupNow}
+          setDraft={setPickupDraft}
+          saving={savePickup.isPending}
+          onSave={() => savePickup.mutate()}
+          onClose={() => setPickupFor(null)}
+        />
+      )}
+
       {historyFor && <TicketHistory ticket={historyFor} onClose={() => setHistoryFor(null)} />}
     </>
+  )
+}
+
+/**
+ * The pickup-time editor.
+ *
+ * Opens on NOW rather than on the order's current promise, because the usual reason to open
+ * it is "the customer is running late" — staff nudge forward from the present, and a draft
+ * seeded from a stale promise would make every +15 land in the past. It works entirely in
+ * the SHOP's wall clock: the steppers and the day buttons use Adelaide fields, so a tablet
+ * in another timezone cannot move an order to a time the kitchen never agreed to.
+ *
+ * It deliberately does NOT show the order's dishes or offer a reason field. Changing a time
+ * is a one-field act, and the request it sends carries no items — see `ordersApi.setPickupTime`.
+ */
+function PickupTimeEditor({
+  ticket,
+  draft,
+  now,
+  setDraft,
+  saving,
+  onSave,
+  onClose,
+}: {
+  ticket: KitchenTicket
+  draft: number
+  /** The instant the editor opened, in epoch ms. */
+  now: number
+  setDraft: (next: number | ((current: number) => number)) => void
+  saving: boolean
+  onSave: () => void
+  onClose: () => void
+}) {
+  const parts = shopClockParts(draft)
+  const hour12 = parts.hour % 12 || 12
+  const ampm = parts.hour < 12 ? "am" : "pm"
+  const day = shopDayOffset(draft)
+
+  return (
+    <AdminModal
+      title={`Pickup time — ${ticket.orderNumber}`}
+      labelledBy="pickup-title"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={saving} onClick={onSave}>
+            {saving ? "Saving…" : "Save time"}
+          </Button>
+        </>
+      }
+    >
+      <div className="pick">
+        <p className="pick-now">
+          <span className="pick-now-label">Now</span>
+          <strong>{formatShopTime(now)}</strong>
+          <span className="pick-tz">Adelaide</span>
+        </p>
+
+        <div className="pick-preview">
+          <span className="pick-time">{formatShopTime(draft)}</span>
+          <span className="pick-meta">
+            <span className="pick-day">{shopDayLabel(draft)}</span>
+            <span className="dot">·</span>
+            {shopRelativeLabel(draft)}
+          </span>
+        </div>
+
+        {ticket.isScheduled && (
+          <p className="pick-was">
+            Currently promised <strong>{formatShopTime(ticket.requestedTime)}</strong>
+          </p>
+        )}
+
+        <div className="pick-quick" role="group" aria-label="Push the pickup time">
+          {[15, 30, 60, 120].map((mins) => (
+            <button
+              key={mins}
+              type="button"
+              className="pick-chip"
+              onClick={() => setDraft(Date.now() + mins * 60_000)}
+            >
+              {mins < 60 ? `+${mins} min` : `+${mins / 60} hr`}
+            </button>
+          ))}
+          <button type="button" className="pick-chip" onClick={() => setDraft(Date.now())}>
+            Now
+          </button>
+        </div>
+
+        <div className="pick-steppers">
+          <div className="pick-step">
+            <span className="pick-step-label">Hour</span>
+            <div className="pick-step-ctl">
+              <button
+                type="button"
+                className="pick-round"
+                aria-label="One hour earlier"
+                onClick={() => setDraft((d) => d - 3_600_000)}
+              >
+                −
+              </button>
+              <span className="pick-step-val">
+                {hour12}
+                <span className="pick-ampm">{ampm}</span>
+              </span>
+              <button
+                type="button"
+                className="pick-round"
+                aria-label="One hour later"
+                onClick={() => setDraft((d) => d + 3_600_000)}
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <div className="pick-step">
+            <span className="pick-step-label">Minute</span>
+            <div className="pick-step-ctl">
+              <button
+                type="button"
+                className="pick-round"
+                aria-label="Five minutes earlier"
+                onClick={() => setDraft((d) => d - 300_000)}
+              >
+                −
+              </button>
+              <span className="pick-step-val">{String(parts.minute).padStart(2, "0")}</span>
+              <button
+                type="button"
+                className="pick-round"
+                aria-label="Five minutes later"
+                onClick={() => setDraft((d) => d + 300_000)}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="seg-sm pick-dayrow" role="group" aria-label="Pickup day">
+          {[0, 1].map((offset) => (
+            <button
+              key={offset}
+              type="button"
+              aria-pressed={day === offset}
+              onClick={() => {
+                const today = shopClockParts(now)
+                const p = shopClockParts(draft)
+                setDraft(
+                  new Date(
+                    adelaideInstant(today.year, today.month, today.day + offset, p.hour, p.minute),
+                  ).getTime(),
+                )
+              }}
+            >
+              {offset === 0 ? "Today" : "Tomorrow"}
+            </button>
+          ))}
+        </div>
+
+        <p className="pick-hint">Most orders move by 15–120 min. Pick Tomorrow only for a pre-order.</p>
+      </div>
+    </AdminModal>
   )
 }
 

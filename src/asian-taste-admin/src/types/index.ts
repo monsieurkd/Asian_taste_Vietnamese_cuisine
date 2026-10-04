@@ -270,6 +270,26 @@ export interface UpdateOrderStatusRequest {
 }
 
 /**
+ * Move an order's promised pickup time, and nothing else.
+ *
+ * Deliberately carries no items: the items-edit endpoint replaces the lines wholesale,
+ * which wipes the kitchen's per-dish ticks. Moving a time must not cost the ticket its
+ * place on the line.
+ */
+export interface SetPickupTimeRequest {
+  pickupTime: { type: "ASAP" | "SCHEDULED"; scheduledTime?: string }
+  reason?: string
+}
+
+/** The stored result of moving a pickup time. */
+export interface SetPickupTimeResult {
+  orderId: number
+  orderNumber: string
+  requestedTime: string
+  isScheduled: boolean
+}
+
+/**
  * WebSocket message types.
  */
 export type WebSocketMessageType =
