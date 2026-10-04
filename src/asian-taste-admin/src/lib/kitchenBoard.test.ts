@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  DUE_SOON_MINUTES,
   LATE_MINUTES,
   WARNING_MINUTES,
   canAdvance,
@@ -11,6 +12,7 @@ import {
   minutesUntilWanted,
   nextCookState,
   progressPhrase,
+  urgencyForDue,
   urgencyOf,
   wantedLabel,
 } from './kitchenBoard';
@@ -150,6 +152,24 @@ describe('urgency', () => {
   it('warns when a scheduled order is nearly due', () => {
     const soon = new Date(Date.now() + 3 * 60_000).toISOString();
     expect(urgencyOf(ticket({ isScheduled: true, requestedTime: soon }))).toBe('warning');
+  });
+});
+
+describe('the one due-soon number', () => {
+  // The board (scheduled tickets) and the counter (its pickup field) share this, so a 7pm
+  // promise warns at the same distance on both screens.
+  it('is the ratified mockup value', () => {
+    expect(DUE_SOON_MINUTES).toBe(10);
+  });
+
+  it('warns up to the threshold and no further', () => {
+    expect(urgencyForDue(DUE_SOON_MINUTES)).toBe('warning');
+    expect(urgencyForDue(DUE_SOON_MINUTES + 1)).toBe('normal');
+  });
+
+  it('is late the moment the promise passes', () => {
+    expect(urgencyForDue(-1)).toBe('late');
+    expect(urgencyForDue(0)).toBe('warning');
   });
 });
 

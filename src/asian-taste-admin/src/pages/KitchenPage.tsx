@@ -7,17 +7,10 @@ import { Button } from "@/components/ui/Primitives"
 import { AdminModal } from "@/components/ui/AdminModal"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { BoardTicket } from "@/components/orders/BoardTicket"
+import { PickupTimeEditor } from "@/components/orders/PickupTimeEditor"
 import { apiStatusValue, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
 import { urgencyOf } from "@/lib/kitchenBoard"
 import { formatCurrency } from "@/lib/utils"
-import {
-  adelaideInstant,
-  formatShopTime,
-  shopClockParts,
-  shopDayLabel,
-  shopDayOffset,
-  shopRelativeLabel,
-} from "@/lib/shopTime"
 import { canTransition } from "@shared/lib/orderTransitions"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 import type { Order, OrderStatus } from "@/types"
@@ -581,10 +574,11 @@ export function KitchenPage() {
 
       {pickupFor && (
         <PickupTimeEditor
-          ticket={pickupFor}
+          title={`Pickup time — ${pickupFor.orderNumber}`}
           draft={pickupDraft}
           now={pickupNow}
           setDraft={setPickupDraft}
+          current={pickupFor.isScheduled ? pickupFor.requestedTime : null}
           saving={savePickup.isPending}
           onSave={() => savePickup.mutate()}
           onClose={() => setPickupFor(null)}
@@ -593,173 +587,6 @@ export function KitchenPage() {
 
       {historyFor && <TicketHistory ticket={historyFor} onClose={() => setHistoryFor(null)} />}
     </>
-  )
-}
-
-/**
- * The pickup-time editor.
- *
- * Opens on NOW rather than on the order's current promise, because the usual reason to open
- * it is "the customer is running late" — staff nudge forward from the present, and a draft
- * seeded from a stale promise would make every +15 land in the past. It works entirely in
- * the SHOP's wall clock: the steppers and the day buttons use Adelaide fields, so a tablet
- * in another timezone cannot move an order to a time the kitchen never agreed to.
- *
- * It deliberately does NOT show the order's dishes or offer a reason field. Changing a time
- * is a one-field act, and the request it sends carries no items — see `ordersApi.setPickupTime`.
- */
-function PickupTimeEditor({
-  ticket,
-  draft,
-  now,
-  setDraft,
-  saving,
-  onSave,
-  onClose,
-}: {
-  ticket: KitchenTicket
-  draft: number
-  /** The instant the editor opened, in epoch ms. */
-  now: number
-  setDraft: (next: number | ((current: number) => number)) => void
-  saving: boolean
-  onSave: () => void
-  onClose: () => void
-}) {
-  const parts = shopClockParts(draft)
-  const hour12 = parts.hour % 12 || 12
-  const ampm = parts.hour < 12 ? "am" : "pm"
-  const day = shopDayOffset(draft)
-
-  return (
-    <AdminModal
-      title={`Pickup time — ${ticket.orderNumber}`}
-      labelledBy="pickup-title"
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" disabled={saving} onClick={onSave}>
-            {saving ? "Saving…" : "Save time"}
-          </Button>
-        </>
-      }
-    >
-      <div className="pick">
-        <p className="pick-now">
-          <span className="pick-now-label">Now</span>
-          <strong>{formatShopTime(now)}</strong>
-          <span className="pick-tz">Adelaide</span>
-        </p>
-
-        <div className="pick-preview">
-          <span className="pick-time">{formatShopTime(draft)}</span>
-          <span className="pick-meta">
-            <span className="pick-day">{shopDayLabel(draft)}</span>
-            <span className="dot">·</span>
-            {shopRelativeLabel(draft)}
-          </span>
-        </div>
-
-        {ticket.isScheduled && (
-          <p className="pick-was">
-            Currently promised <strong>{formatShopTime(ticket.requestedTime)}</strong>
-          </p>
-        )}
-
-        <div className="pick-quick" role="group" aria-label="Push the pickup time">
-          {[15, 30, 60, 120].map((mins) => (
-            <button
-              key={mins}
-              type="button"
-              className="pick-chip"
-              onClick={() => setDraft(Date.now() + mins * 60_000)}
-            >
-              {mins < 60 ? `+${mins} min` : `+${mins / 60} hr`}
-            </button>
-          ))}
-          <button type="button" className="pick-chip" onClick={() => setDraft(Date.now())}>
-            Now
-          </button>
-        </div>
-
-        <div className="pick-steppers">
-          <div className="pick-step">
-            <span className="pick-step-label">Hour</span>
-            <div className="pick-step-ctl">
-              <button
-                type="button"
-                className="pick-round"
-                aria-label="One hour earlier"
-                onClick={() => setDraft((d) => d - 3_600_000)}
-              >
-                −
-              </button>
-              <span className="pick-step-val">
-                {hour12}
-                <span className="pick-ampm">{ampm}</span>
-              </span>
-              <button
-                type="button"
-                className="pick-round"
-                aria-label="One hour later"
-                onClick={() => setDraft((d) => d + 3_600_000)}
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          <div className="pick-step">
-            <span className="pick-step-label">Minute</span>
-            <div className="pick-step-ctl">
-              <button
-                type="button"
-                className="pick-round"
-                aria-label="Five minutes earlier"
-                onClick={() => setDraft((d) => d - 300_000)}
-              >
-                −
-              </button>
-              <span className="pick-step-val">{String(parts.minute).padStart(2, "0")}</span>
-              <button
-                type="button"
-                className="pick-round"
-                aria-label="Five minutes later"
-                onClick={() => setDraft((d) => d + 300_000)}
-              >
-                +
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="seg-sm pick-dayrow" role="group" aria-label="Pickup day">
-          {[0, 1].map((offset) => (
-            <button
-              key={offset}
-              type="button"
-              aria-pressed={day === offset}
-              onClick={() => {
-                const today = shopClockParts(now)
-                const p = shopClockParts(draft)
-                setDraft(
-                  new Date(
-                    adelaideInstant(today.year, today.month, today.day + offset, p.hour, p.minute),
-                  ).getTime(),
-                )
-              }}
-            >
-              {offset === 0 ? "Today" : "Tomorrow"}
-            </button>
-          ))}
-        </div>
-
-        <p className="pick-hint">Most orders move by 15–120 min. Pick Tomorrow only for a pre-order.</p>
-      </div>
-    </AdminModal>
   )
 }
 

@@ -96,6 +96,16 @@ export const WARNING_MINUTES = 15
 /** Minutes before it is genuinely a problem. */
 export const LATE_MINUTES = 25
 
+/**
+ * Minutes ahead of a promised time at which a promise starts to warn.
+ *
+ * One number, shared by the board's scheduled tickets and the counter's pickup field, so
+ * "due soon" means the same thing wherever a promise is printed (§31/P4). It is the
+ * ratified mockup's value; the board previously used a private `5` here, which put the
+ * board and the counter two different distances from the same 7pm order.
+ */
+export const DUE_SOON_MINUTES = 10
+
 export function urgencyOf(ticket: KitchenTicket): Urgency {
   // A scheduled order is not late for existing early — it is exactly on time. Judging it by
   // age would flag every 7pm order as overdue from the moment it was placed at 4pm, which is
@@ -104,14 +114,24 @@ export function urgencyOf(ticket: KitchenTicket): Urgency {
   if (ticket.isScheduled) {
     const until = minutesUntilWanted(ticket)
     if (until === null) return "normal"
-    // Past its time: late. Within a few minutes of it: worth watching.
-    if (until < 0) return "late"
-    if (until <= 5) return "warning"
-    return "normal"
+    return urgencyForDue(until)
   }
 
   if (ticket.ageMinutes >= LATE_MINUTES) return "late"
   if (ticket.ageMinutes >= WARNING_MINUTES) return "warning"
+  return "normal"
+}
+
+/**
+ * The band for a promise, from the minutes left until it is wanted.
+ *
+ * Split out from `urgencyOf` so the counter — which has a promise but no ticket age — reads
+ * the SAME rule rather than a second copy with its own number. Positive `minutesUntil` is
+ * time still to wait; negative is already past.
+ */
+export function urgencyForDue(minutesUntil: number): Urgency {
+  if (minutesUntil < 0) return "late"
+  if (minutesUntil <= DUE_SOON_MINUTES) return "warning"
   return "normal"
 }
 
