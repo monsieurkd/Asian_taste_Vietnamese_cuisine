@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Order · Asian Taste staff console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,500;0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+<div class="admin" data-rail="expanded" id="admin">
+
+  <aside class="admin-rail">
+    <div class="rail-top">
+      <a class="brand" href="index.html">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z" />
+            <path d="M9 7.5c0-1.3 1.1-1.7 1.1-2.8M12.5 7.5c0-1.3 1.1-1.7 1.1-2.8" />
+          </svg>
+        </span>
+        <span class="brand-text"><span class="brand-name">Asian Taste</span><span class="brand-tag">Staff console</span></span>
+      </a>
+      <button type="button" class="rail-toggle" id="railToggle" aria-expanded="true" aria-controls="adminNav" title="Collapse the sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="railChevron" d="m14 6-6 6 6 6" /></svg>
+        <span class="sr-only">Collapse the sidebar</span>
+      </button>
+    </div>
+
+    <nav class="admin-nav" id="adminNav" aria-label="Staff sections">
+      <a href="kitchen-board.html" title="Board">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></svg><span>Board</span>
+      </a>
+      <a href="counter-order-pos.html" title="Counter">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M3.5 9h17M8 4.5v15" /></svg><span>Counter</span>
+      </a>
+      <a href="orders.html" title="Orders" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="6" r="1" /><circle cx="4" cy="12" r="1" /><circle cx="4" cy="18" r="1" /></svg><span>Orders</span>
+      </a>
+      <a href="menu.html" title="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM11 4h7.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H11" /></svg><span>Menu</span>
+      </a>
+    </nav>
+
+    <div class="admin-rail-foot">
+      <span class="live-dot" id="liveDot" title="Kitchen online">Kitchen online</span>
+      <div class="admin-account">
+        <button type="button" class="admin-account-btn" id="accountBtn" aria-expanded="false" aria-haspopup="menu">
+          <span class="avatar" aria-hidden="true">LT</span>
+          <span class="ac-text"><strong>Linh Tran</strong><span class="ac-role">Manager</span></span>
+          <span class="ac-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9.5 6 5.5 6-5.5" /></svg></span>
+        </button>
+        <div class="admin-account-menu" id="accountMenu" role="menu" hidden>
+          <a role="menuitem" class="is-danger" href="login.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5" /><path d="M4 12h10M11 8l4 4-4 4" /></svg>
+            Sign out
+          </a>
+        </div>
+      </div>
+      <a class="admin-back" href="orders.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+        <span>Back to orders</span>
+      </a>
+    </div>
+  </aside>
+
+  <div class="admin-main">
+    <header class="admin-top">
+      <div>
+        <h1 id="topTitle">Order</h1>
+        <p class="sub" id="topSub">Loading this ticket…</p>
+      </div>
+      <div class="admin-top-actions" id="topActions">
+        <span class="admin-clock" id="adminClock" title="The shop clock — Australia/Adelaide">Adelaide —</span>
+      </div>
+    </header>
+
+    <div class="admin-page page-wide" id="detailPage" data-od-id="order-detail"></div>
+  </div>
+</div>
+
+<button type="button" class="modal-scrim" id="modalScrim" aria-label="Close" hidden></button>
+<div class="modal-shell" id="modalShell" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+  <div class="panel modal-panel" id="modalPanel" tabindex="-1">
+    <div class="panel-head">
+      <h3 id="modalTitle" style="margin:0">Edit order</h3>
+      <button type="button" class="icon-btn" id="modalClose" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+    <div class="panel-body" id="modalBody"></div>
+    <div class="panel-foot row-between" id="modalFoot"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TZ = "Australia/Adelaide";
+  var AUD = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
+  function money(n) { return AUD.format(n || 0); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function pad(n, len) { n = String(n); while (n.length < len) n = "0" + n; return n; }
+  function r2(n) { return Math.round((n || 0) * 100) / 100; }
+
+  var TZ_TIME = new Intl.DateTimeFormat("en-AU", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+  var TZ_LONG = new Intl.DateTimeFormat("en-AU", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit" });
+  var TZ_PARTS = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  function fmtTime(ms) { return TZ_TIME.format(new Date(ms)).replace(/[\u202f\u00a0]/g, " "); }
+  function fmtDateLong(ms) { return TZ_LONG.format(new Date(ms)).replace(/[\u202f\u00a0]/g, " "); }
+  function tzParts(ms) { var o = {}; TZ_PARTS.formatToParts(new Date(ms)).forEach(function (p) { o[p.type] = p.value; }); return o; }
+  function minutesAgo(ms) { return Math.max(0, Math.round((Date.now() - ms) / 60000)); }
+
+  var TYPE_CODE = { DineIn: "00", Takeaway: "01", Delivery: "02" };
+  function orderCode(t) {
+    var d = tzParts(t.createdMs);
+    return pad(d.day, 2) + "." + pad(d.month, 2) + "." + (TYPE_CODE[t.orderType] || "01") + "." + pad(t.seq, 3);
+  }
+
+  /* ─── status vocabulary (shared/lib/orderStatus) ─── */
+  var STATUS_META = {
+    placed: { label: "New", desc: "Waiting for the kitchen to accept", cls: "status-placed" },
+    confirmed: { label: "Cooking", desc: "Accepted and being cooked", cls: "status-confirmed" },
+    ready: { label: "Ready", desc: "Packed and waiting to be collected", cls: "status-ready" },
+    collected: { label: "Collected", desc: "Handed to the customer — done", cls: "status-collected" },
+    cancelled: { label: "Cancelled", desc: "Stopped or refunded", cls: "status-cancelled" }
+  };
+  var STATUS_ORDER = ["placed", "confirmed", "ready", "collected"];
+  var LOOKUP = { pending: "placed", placed: "placed", new: "placed", confirmed: "confirmed", preparing: "confirmed", ready: "ready", collected: "collected", completed: "collected", pickedup: "collected", cancelled: "cancelled", canceled: "cancelled" };
+  function statusKey(s) { return LOOKUP[String(s || "").trim().toLowerCase().replace(/[\s_-]/g, "")] || "placed"; }
+  function isClosed(s) { var k = statusKey(s); return k === "collected" || k === "cancelled"; }
+
+  function readPayment(paymentStatus, paymentMethod, failureReason) {
+    var s = String(paymentStatus || "").toLowerCase(), m = String(paymentMethod || "").toLowerCase();
+    if (s === "succeeded") return { label: "Paid online", detail: "", attention: false };
+    if (s === "refunded") return { label: "Refunded", detail: "This order was refunded in full.", attention: false };
+    if (s === "partiallyrefunded") return { label: "Partly refunded", detail: "Part of this order was refunded.", attention: false };
+    if (s === "failed") return { label: "Payment declined", detail: failureReason ? failureReason + " Take payment at the counter." : "The charge did not go through. Take payment at the counter.", attention: true };
+    if (s === "processing") return { label: "Payment processing", detail: "The bank has not finished with this charge yet.", attention: true };
+    if (s === "requiresaction") return { label: "Payment unfinished", detail: "The customer did not finish the card step. Take payment at the counter.", attention: true };
+    if (s === "canceled") return { label: "Payment cancelled", detail: "The charge was cancelled. Take payment at the counter.", attention: true };
+    if (m === "cash") return { label: "Pay at counter", detail: "Cash order — collect at handover.", attention: false };
+    return { label: "Payment not taken", detail: "No charge was captured. Take payment at the counter.", attention: true };
+  }
+
+  function refundEligibility(paymentStatus, paymentMethod, paymentIntentId) {
+    var s = String(paymentStatus || "").toLowerCase(), m = String(paymentMethod || "").toLowerCase();
+    if (s === "refunded") return { canRefund: false, alreadyRefunded: true, reason: "" };
+    if (s !== "succeeded" && s !== "partiallyrefunded") {
+      return { canRefund: false, alreadyRefunded: false, reason: m === "cash" ? "Cash orders are refunded at the counter, not through the card gateway." : "There is no captured card payment on this order to refund." };
+    }
+    if (!paymentIntentId) return { canRefund: false, alreadyRefunded: false, reason: "This order has no payment reference recorded, so a refund cannot be matched to it. Refund it from Stripe." };
+    return { canRefund: true, alreadyRefunded: false, reason: "" };
+  }
+
+  /* ─── sample data (mirrors orders.html, so "Open" lands on the same order) ─── */
+  var P = { "Pad Thai": 16, "Honey Chicken": 18, "Cold rolls (serve of 4)": 8.5, "Pho - Beef noodle soup (Combo)": 16.5, "Steamed rice": 2, "Spring roll (serve of 3)": 5.8, "Salt & Pepper Squid / Fish": 18.5, "Crispy Pork (Roasted Pork) Banh Mi": 8.5 };
+  var MENU = Object.keys(P).map(function (name, i) { return { id: i + 1, name: name, price: P[name] }; });
+  function menuId(name) { for (var i = 0; i < MENU.length; i++) if (MENU[i].name === name) return MENU[i].id; return MENU.length + 1; }
+
+  function it(id, name, qty, o) {
+    o = o || {};
+    return { id: id, name: name, quantity: qty, modifiers: o.mods || null, specialInstructions: o.special || null, isCompleted: !!o.done };
+  }
+  function base(id, seq, type, table, name, phone, status, ageMin, wantedMin, pay, method, items, notes) {
+    var total = items.reduce(function (s, i) { return s + (P[i.name] || 0) * i.quantity; }, 0);
+    return { id: id, seq: seq, orderType: type, tableNumber: table, customerName: name, customerPhone: phone, status: status, createdMs: null, wantedAt: null, ageMin: ageMin, wantedMin: wantedMin, paymentStatus: pay, paymentMethod: method, items: items, total: r2(total), notes: notes || null };
+  }
+  var SAMPLE = [
+    base(52, 52, "Takeaway", null, "Helen Nguyen", "0402 776 118", "Pending", 3, 45, "succeeded", "card", [it(122, "Pad Thai", 4), it(123, "Spring roll (serve of 3)", 2)], "Birthday — keep the sauce separate"),
+    base(51, 51, "Delivery", null, "Aisha Rahman", "0431 220 884", "Pending", 1, 45, "succeeded", "card", [it(120, "Salt & Pepper Squid / Fish", 1), it(121, "Steamed rice", 1)], "Leave at the door"),
+    base(50, 50, "Takeaway", null, "Daniel Okafor", "0412 555 019", "Confirmed", 2, 20, "succeeded", "card", [it(118, "Pho - Beef noodle soup (Combo)", 2, { special: "No onion" }), it(119, "Cold rolls (serve of 4)", 1)]),
+    base(49, 49, "DineIn", "3", "Marisol Reyes", "0400 118 273", "Pending", 5, 20, null, "cash", [it(116, "Pad Thai", 1, { mods: "Extra protein" }), it(117, "Honey Chicken", 2)], "Extra napkins please"),
+    base(48, 48, "DineIn", "2", "Grace Lim", "0410 998 320", "Ready", 6, 20, "succeeded", "card", [it(113, "Salt & Pepper Squid / Fish", 1, { done: true }), it(114, "Steamed rice", 2, { done: true })]),
+    base(47, 47, "Takeaway", null, "Noah Bennett", "0488 210 664", "Ready", 8, 20, "succeeded", "card", [it(111, "Pad Thai", 1, { mods: "Extra protein", done: true }), it(112, "Crispy Pork (Roasted Pork) Banh Mi", 1, { done: true })]),
+    base(46, 46, "DineIn", "6", "Priya Nair", "0421 664 007", "Confirmed", 9, 20, "succeeded", "card", [it(109, "Cold rolls (serve of 4)", 3, { done: true }), it(110, "Pad Thai", 1, { special: "No coriander" })]),
+    base(43, 43, "Takeaway", null, "Marcus Lee", "0466 330 512", "Confirmed", 28, 20, "failed", "card", [it(101, "Honey Chicken", 1), it(102, "Spring roll (serve of 3)", 2)], null)
+  ];
+  var ALLERGY = {
+    52: "Peanuts and tree nuts — severe. Please use the nut-free fryer.",
+    49: "Shellfish (prawns and squid). Clean utensils, please."
+  };
+
+  function slug(name) { return String(name || "guest").trim().toLowerCase().replace(/[^a-z]+/g, ".").replace(/^\.|\.$/g, ""); }
+
+  function enrich(t) {
+    var now = Date.now();
+    var createdMs = t.createdMs != null ? t.createdMs : now - (t.ageMin || 0) * 60000;
+    var wantedMin = t.wantedMin != null ? t.wantedMin : 20;
+    var wantedAt = t.wantedAt != null ? t.wantedAt : createdMs + wantedMin * 60000;
+    var items = (t.items || []).map(function (l, i) {
+      var price = P[l.name] || 0;
+      return {
+        id: l.id || (t.id * 10 + i), menuItemId: menuId(l.name), menuItemName: l.name, name: l.name,
+        quantity: l.quantity, unitPrice: price, totalPrice: r2(price * l.quantity),
+        modifiers: l.modifiers ? l.modifiers.split(" · ").map(function (s) { return { modifierName: s }; }) : [],
+        specialInstructions: l.specialInstructions || null, isCompleted: !!l.isCompleted
+      };
+    });
+    var subtotal = r2(items.reduce(function (s, i) { return s + i.totalPrice; }, 0));
+    var pay = String(t.paymentStatus || "").toLowerCase();
+    return {
+      id: t.id, seq: t.seq, orderNumber: orderCode({ createdMs: createdMs, orderType: t.orderType, seq: t.seq }),
+      orderType: t.orderType, tableNumber: t.tableNumber, customerName: t.customerName, customerPhone: t.customerPhone,
+      customerEmail: slug(t.customerName) + "@example.com", status: t.status, createdMs: createdMs, createdAt: createdMs, requestedTime: wantedAt,
+      paymentStatus: t.paymentStatus, paymentMethod: t.paymentMethod, paymentFailureReason: t.paymentFailureReason || null,
+      paymentIntentId: pay === "succeeded" ? "pi_" + t.id + "_asianTaste" : null,
+      paidAmount: pay === "succeeded" ? (t.total != null ? t.total : subtotal) : null,
+      items: items, subtotal: subtotal, total: t.total != null ? t.total : subtotal, notes: t.notes || null,
+      allergyDeclaration: ALLERGY[t.id] || null
+    };
+  }
+
+  var STORE_KEY = "asiantaste.admin.board.v1";
+  function readStore() { try { var r = localStorage.getItem(STORE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
+  function writeStore(store) { try { store.savedAt = Date.now(); localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) {} }
+
+  var wantedId = Number((new URLSearchParams(location.search).get("id")) || 52);
+  var order = null;
+  var storeRef = readStore();
+
+  function pickOrder() {
+    if (storeRef) {
+      var hit = (storeRef.orders || []).concat(storeRef.history || []).filter(function (t) { return Number(t.id) === wantedId; })[0];
+      if (hit) return enrich(hit);
+    }
+    var s = SAMPLE.filter(function (t) { return t.id === wantedId; })[0] || SAMPLE[0];
+    return enrich(s);
+  }
+
+  function persist() {
+    if (!storeRef) return;
+    var list = (storeRef.orders || []);
+    for (var i = 0; i < list.length; i++) {
+      if (Number(list[i].id) === order.id) {
+        list[i].status = order.status;
+        list[i].items = (list[i].items || []).map(function (l, idx) {
+          var m = order.items[idx]; return m ? Object.assign({}, l, { isCompleted: m.isCompleted }) : l;
+        });
+        writeStore(storeRef);
+        return;
+      }
+    }
+  }
+
+  /* ─── render ─── */
+  var pageEl = document.getElementById("detailPage");
+  var toastEl = document.getElementById("toast");
+  var toastTimer = null;
+  function toast(m) { toastEl.textContent = m; toastEl.classList.add("is-open"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove("is-open"); }, 2400); }
+
+  function statusPill(status) {
+    var meta = STATUS_META[statusKey(status)];
+    return '<span class="status-pill ' + meta.cls + '"><span class="sdot" aria-hidden="true"></span>' + esc(meta.label) + "</span>";
+  }
+  function lineDetail(l) {
+    var parts = [];
+    if (l.modifiers && l.modifiers.length) parts.push(l.modifiers.map(function (m) { return m.modifierName; }).join(" · "));
+    if (l.specialInstructions) parts.push(l.specialInstructions);
+    return parts.join(" · ");
+  }
+  function typeLabel(t) {
+    if (t.orderType === "DineIn") return t.tableNumber ? "Dine in · Table " + t.tableNumber : "Dine in";
+    return { Takeaway: "Takeaway", Delivery: "Delivery" }[t.orderType] || "Takeaway";
+  }
+  function isScheduled(t) { return Number.isFinite(t.requestedTime) && t.requestedTime - t.createdMs > 5 * 60000; }
+
+  function itemsHTML() {
+    var items = order.items;
+    var total = items.length;
+    if (!total) return '<p class="items-empty" role="status">This order has no items recorded.</p>';
+    var done = items.filter(function (l) { return l.isCompleted; }).length;
+    var pct = Math.round((done / total) * 100);
+    var closed = isClosed(order.status);
+    var rows = items.map(function (l) {
+      var detail = lineDetail(l);
+      var body = '<span class="ticket-line-body"><span class="ticket-line-name"><strong>' + l.quantity + "×</strong> " + esc(l.name) + "</span>" + (detail ? '<span class="ticket-line-detail">' + esc(detail) + "</span>" : "") + "</span>";
+      if (closed) {
+        return '<li data-done="' + !!l.isCompleted + '" class="ticket-line-static"><span class="ticket-line-check' + (l.isCompleted ? " is-done" : "") + '" aria-hidden="true">' + (l.isCompleted ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>' : "") + "</span>" + body + '<span class="sr-only">' + (l.isCompleted ? "Done" : "Not done yet") + "</span></li>";
+      }
+      return '<li data-done="' + !!l.isCompleted + '"><button type="button" class="ticket-line" data-item="' + l.id + '" aria-pressed="' + !!l.isCompleted + '"><span class="ticket-line-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>' + body + "</button></li>";
+    }).join("");
+    var allDone = done === total;
+    return '<div class="order-items">' +
+      '<div class="ticket-progress"><span class="ticket-progress-label">' + done + " of " + total + ' dishes done</span><span class="ticket-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + total + '" aria-valuenow="' + done + '" aria-label="' + done + " of " + total + ' dishes done"><span style="width:' + pct + '%"></span></span></div>' +
+      '<ul class="ticket-line-list">' + rows + "</ul>" +
+      (allDone ? '<p class="ticket-alldone" role="status">' + (closed ? "Every dish is done." : "Every dish is done — this order is ready.") + "</p>" : "") +
+      "</div>";
+  }
+
+  function render() {
+    order = order || pickOrder();
+    var key = statusKey(order.status);
+    var currentIndex = STATUS_ORDER.indexOf(key);
+    var closed = isClosed(order.status);
+    var payment = readPayment(order.paymentStatus, order.paymentMethod, order.paymentFailureReason);
+    var refundable = refundEligibility(order.paymentStatus, order.paymentMethod, order.paymentIntentId);
+    var scheduled = isScheduled(order);
+    var itemCount = order.items.reduce(function (s, i) { return s + i.quantity; }, 0);
+
+    document.title = order.orderNumber + " · Asian Taste staff console";
+    document.getElementById("topTitle").textContent = order.orderNumber;
+    document.getElementById("topSub").textContent = "Placed " + fmtDateLong(order.createdMs) + " · " + minutesAgo(order.createdMs) + " min ago";
+    document.getElementById("topActions").innerHTML = statusPill(order.status) + (payment.attention ? '<span class="pill pill-warn">' + esc(payment.label) + "</span>" : "") + '<span class="admin-clock" id="adminClock" title="The shop clock — Australia/Adelaide">Adelaide —</span>';
+
+    var nextLabel = closed ? (key === "cancelled" ? "This order was cancelled." : "Collected — this order is done and has left the live board.") : "Next: " + STATUS_META[STATUS_ORDER[Math.min(STATUS_ORDER.length - 1, currentIndex + 1)]].label + ".";
+
+    var scale = STATUS_ORDER.map(function (stage, i) {
+      return '<div class="scale-step" data-done="' + (i < currentIndex) + '" data-current="' + (i === currentIndex && !closed) + '"><span class="scale-bar"></span><span class="scale-label">' + esc(STATUS_META[stage].label) + "</span></div>";
+    }).join("");
+    var statusBtns = STATUS_ORDER.map(function (stage) {
+      return '<button type="button" class="status-btn" data-status="' + stage + '" aria-pressed="' + (stage === key) + '"><strong>' + esc(STATUS_META[stage].label) + "</strong><span>" + esc(STATUS_META[stage].desc) + "</span></button>";
+    }).join("");
+
+    var timeline = STATUS_ORDER.map(function (stage, i) {
+      var mark = i < currentIndex
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7" /></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="' + (i === currentIndex ? 4 : 3.5) + '" fill="' + (i === currentIndex ? "currentColor" : "none") + '" /></svg>';
+      return '<li data-done="' + (i < currentIndex) + '" data-current="' + (i === currentIndex && !closed) + '"><span class="tl-mark">' + mark + '</span><div class="tl-body"><strong>' + esc(STATUS_META[stage].label) + "</strong><p>" + esc(i <= currentIndex ? STATUS_META[stage].desc : "Not yet.") + "</p></div></li>";
+    }).join("");
+
+    var paymentRows = '<div class="sum-row"><span>Subtotal</span><span class="num">' + money(order.subtotal) + "</span></div>" +
+      '<div class="sum-row"><span>GST</span><span>included</span></div>' +
+      '<div class="sum-row total"><span>Total</span><span class="num">' + money(order.total) + "</span></div>";
+    var payExtra = "";
+    if (payment.attention) payExtra += '<p class="pay-warning" role="status">' + esc(payment.detail) + "</p>";
+    else if (payment.detail) payExtra += '<p class="meta" style="margin:8px 0 0">' + esc(payment.detail) + "</p>";
+    if (refundable.alreadyRefunded) payExtra += '<p class="meta" style="margin:14px 0 0">Refunded in full — nothing further to collect or return.</p>';
+    else if (refundable.canRefund) payExtra += '<div style="margin-top:14px"><button type="button" class="btn btn-ghost" id="refundBtn">Refund this order</button></div>';
+    if (refundable.reason) payExtra += '<p class="meta" style="margin:12px 0 0">' + esc(refundable.reason) + "</p>";
+
+    var allergy = order.allergyDeclaration ? '<section class="panel panel-alert" data-od-id="detail-allergy"><div class="panel-head"><h3 style="margin:0;display:inline-flex;align-items:center;gap:8px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:17px;height:17px;flex:none"><path d="M12 3.5 22 20H2z"/><path d="M12 9.8v4.2"/><path d="M12 17.2h.01"/></svg>Allergies</h3><span class="pill pill-warn">Check before cooking</span></div><div class="panel-body"><p class="allergy-statement" role="alert">' + esc(order.allergyDeclaration) + '</p><p class="meta" style="margin:10px 0 0">Declared by the customer at checkout. If anything here is unclear, call <a href="tel:' + esc(String(order.customerPhone).replace(/\s/g, "")) + '">' + esc(order.customerPhone) + "</a> before starting.</p></div></section>" : "";
+
+    pageEl.innerHTML =
+      '<div class="filterbar">' +
+        '<a class="btn btn-ghost" href="orders.html"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg> Back to orders</a>' +
+        '<span class="head-who"><span class="avatar" aria-hidden="true">' + esc(initials(order.customerName)) + '</span><span><strong>' + esc(order.customerName) + '</strong><span class="meta">' + esc(order.customerPhone) + "</span></span></span>" +
+      "</div>" +
+
+      '<section class="panel" data-od-id="detail-status">' +
+        '<div class="panel-head"><div><h3 style="margin:0">Status</h3><p class="meta" style="margin:2px 0 0">Four stages, left to right. The bar shows the whole journey, not just where it is.</p></div>' + statusPill(order.status) + "</div>" +
+        '<div class="panel-body"><div class="scale" aria-hidden="true">' + scale + "</div>" +
+        '<div class="status-control" role="group" aria-label="Set order status" style="margin-top:22px">' + statusBtns + "</div>" +
+        '<div class="row" style="margin-top:16px"><button type="button" class="btn btn-ghost" id="cancelBtn"' + (closed ? " disabled" : "") + ">Cancel this order</button><p class=\"meta\" style=\"margin:0\">" + esc(nextLabel) + "</p></div>" +
+        "</div></section>" +
+
+      '<div class="detail-grid">' +
+        '<div class="stack" data-od-id="detail-items">' +
+          '<section class="panel"><div class="panel-head"><h3 style="margin:0">Items</h3><div class="row"><span class="pill">' + itemCount + " items</span>" + (closed ? "" : '<button type="button" class="btn btn-ghost" id="editBtn">Edit</button>') + "</div></div>" +
+          '<div class="panel-body">' + itemsHTML() + '<div class="sum-row total" style="margin-top:14px"><span>Items</span><span class="num">' + money(order.subtotal) + "</span></div></div></section>" +
+          allergy +
+          '<section class="panel"><div class="panel-head"><h3 style="margin:0">Kitchen note</h3></div><div class="panel-body"><p style="margin:0">' + esc(order.notes || "No special instructions for this order.") + "</p></div></section>" +
+          '<section class="panel" data-od-id="detail-payment"><div class="panel-head"><h3 style="margin:0">Payment</h3><span class="pill' + (payment.attention ? " pill-warn" : "") + '">' + esc(payment.label) + "</span></div>" +
+          '<div class="panel-body">' + paymentRows + payExtra + "</div></section>" +
+        "</div>" +
+
+        '<div class="stack" data-od-id="detail-customer">' +
+          '<section class="panel"><div class="panel-head"><h3 style="margin:0">Customer</h3></div><div class="panel-body">' +
+            '<div class="row" style="margin-bottom:16px"><span class="avatar is-lg" aria-hidden="true">' + esc(initials(order.customerName)) + '</span><div><strong>' + esc(order.customerName) + '</strong><p class="meta" style="margin:2px 0 0">' + esc(order.customerPhone) + "</p></div></div>" +
+            '<dl class="kv"><dt>' + (scheduled ? "Wanted for" : "Time") + "</dt><dd>" + esc(scheduled ? fmtTime(order.requestedTime) : "As soon as possible") + "</dd>" +
+            "<dt>Email</dt><dd>" + esc(order.customerEmail) + "</dd>" +
+            "<dt>Placed</dt><dd>" + esc(fmtDateLong(order.createdMs)) + "</dd></dl>" +
+            '<div class="row" style="margin-top:16px"><a class="btn btn-secondary" href="tel:' + esc(String(order.customerPhone).replace(/\s/g, "")) + '">Call</a><button type="button" class="btn btn-ghost" id="printBtn">Print bill</button></div>' +
+          "</div></section>" +
+          '<section class="panel"><div class="panel-head"><h3 style="margin:0">Progress</h3></div><div class="panel-body"><ol class="timeline">' + timeline + "</ol></div></section>" +
+        "</div>" +
+      "</div>" +
+
+      billHTML();
+
+    renderClock();
+  }
+
+  function initials(name) {
+    var p = String(name || "?").trim().split(/\s+/);
+    return ((p[0] || "?")[0] + (p[1] ? p[1][0] : "")).toUpperCase();
+  }
+
+  function billHTML() {
+    var payment = readPayment(order.paymentStatus, order.paymentMethod, order.paymentFailureReason);
+    var scheduled = isScheduled(order);
+    var lines = order.items.map(function (item) {
+      return "<div><div class=\"bill-line\"><span class=\"bill-qty\">" + item.quantity + "×</span><span class=\"bill-dish\">" + esc(item.menuItemName) + '</span><span class="bill-amt">' + money(item.totalPrice) + "</span></div>" +
+        (item.modifiers.length ? '<div class="bill-sub">' + esc(item.modifiers.map(function (m) { return m.modifierName; }).join(" · ")) + "</div>" : "") +
+        (item.specialInstructions ? '<div class="bill-sub">' + esc(item.specialInstructions) + "</div>" : "") + "</div>";
+    }).join("");
+    return '<div class="bill" aria-hidden="true">' +
+      '<div class="bill-head"><div class="bill-name">Asian Taste</div><div class="bill-sub">Vietnamese Cuisine</div><div class="bill-sub">Brooklyn Park, SA</div></div>' +
+      '<div class="bill-meta">' +
+        '<div class="bill-meta-row"><span>Order</span><strong>' + esc(order.orderNumber) + "</strong></div>" +
+        '<div class="bill-meta-row"><span>Name</span><span>' + esc(order.customerName) + "</span></div>" +
+        '<div class="bill-meta-row"><span>' + (order.orderType === "DineIn" ? "Dine in" : "Pickup") + "</span><span>" + esc(scheduled ? fmtTime(order.requestedTime) : "As soon as possible") + "</span></div>" +
+        '<div class="bill-meta-row"><span>Placed</span><span>' + esc(fmtDateLong(order.createdMs)) + "</span></div>" +
+      "</div>" +
+      '<div class="bill-lines">' + lines + "</div>" +
+      '<div class="bill-totals">' +
+        '<div class="bill-total-row"><span>Subtotal</span><span>' + money(order.subtotal) + "</span></div>" +
+        '<div class="bill-total-row"><span>GST</span><span>included</span></div>' +
+        '<div class="bill-total-row bill-grand"><span>Total</span><span>' + money(order.total) + "</span></div>" +
+        '<div class="bill-total-row"><span>Payment</span><span>' + esc(payment.label) + "</span></div>" +
+      "</div>" +
+      (order.allergyDeclaration ? '<div class="bill-allergy"><div class="bill-allergy-head" style="display:flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:14px;height:14px;flex:none"><path d="M12 3.5 22 20H2z"/><path d="M12 9.8v4.2"/><path d="M12 17.2h.01"/></svg>Allergy</div><div>' + esc(order.allergyDeclaration) + "</div></div>" : "") +
+      (order.notes ? '<div class="bill-sub">Note: ' + esc(order.notes) + "</div>" : "") +
+      '<div class="bill-foot"><div>Please keep this ticket</div><div class="bill-number">' + esc(order.orderNumber) + "</div><div>Thank you</div></div>" +
+    "</div>";
+  }
+
+  /* ─── actions ─── */
+  function setStatus(key) {
+    if (key === "cancelled") {
+      var reason = window.prompt("Reason for cancelling this order?");
+      if (!reason) return;
+    }
+    order.status = key;
+    persist();
+    toast("Status updated");
+    render();
+  }
+
+  function tickItem(id) {
+    var l = order.items.filter(function (x) { return x.id === id; })[0];
+    if (!l) return;
+    l.isCompleted = !l.isCompleted;
+    var allDone = order.items.length && order.items.every(function (x) { return x.isCompleted; });
+    if (allDone && statusKey(order.status) !== "ready" && !isClosed(order.status)) {
+      order.status = "ready";
+      toast("Every dish done — order is ready");
+    }
+    persist();
+    render();
+  }
+
+  /* ─── order editor modal ─── */
+  var scrim = document.getElementById("modalScrim");
+  var shell = document.getElementById("modalShell");
+  var panel = document.getElementById("modalPanel");
+  var mBody = document.getElementById("modalBody");
+  var mFoot = document.getElementById("modalFoot");
+  var mTitle = document.getElementById("modalTitle");
+  var editorLines = null, editorReason = "";
+
+  function openModal(title) { mTitle.textContent = title; scrim.hidden = false; shell.hidden = false; document.body.classList.add("is-locked"); panel.focus({ preventScroll: true }); }
+  function closeModal() { scrim.hidden = true; shell.hidden = true; document.body.classList.remove("is-locked"); }
+
+  function openEditor() {
+    editorLines = order.items.map(function (l, i) { return { key: "l" + i, menuItemId: l.menuItemId, name: l.name, quantity: l.quantity, unitPrice: l.unitPrice }; });
+    editorReason = "";
+    renderEditor();
+    openModal("Edit " + order.orderNumber);
+  }
+
+  function previewLines() {
+    var sum = r2(editorLines.reduce(function (s, l) { return s + l.unitPrice * l.quantity; }, 0));
+    return sum;
+  }
+
+  function renderEditor() {
+    mTitle.textContent = "Edit " + order.orderNumber;
+    var rows = editorLines.length === 0
+      ? '<p class="field-error" style="margin:0">An order needs at least one dish. To cancel it instead, use the status control on the ticket.</p>'
+      : editorLines.map(function (l) {
+          return '<div class="row" style="gap:12px;flex-wrap:nowrap">' +
+            '<div style="flex:1;min-width:0"><strong style="font-size:14px">' + esc(l.name) + '</strong><p class="meta" style="margin:2px 0 0">' + money(l.unitPrice) + " each</p></div>" +
+            '<div class="qty" role="group" aria-label="Quantity for ' + esc(l.name) + '"><button type="button" data-dec="' + l.key + '"' + (l.quantity <= 1 ? " disabled" : "") + ' aria-label="Fewer">−</button><span aria-live="polite">' + l.quantity + '</span><button type="button" data-inc="' + l.key + '"' + (l.quantity >= 10 ? " disabled" : "") + ' aria-label="More">+</button></div>' +
+            '<span class="num" style="font-weight:700;min-width:72px;text-align:right">' + money(l.unitPrice * l.quantity) + "</span>" +
+            '<button type="button" class="icon-btn" data-del="' + l.key + '" aria-label="Remove ' + esc(l.name) + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>' +
+          "</div>";
+        }).join("");
+    mBody.innerHTML =
+      '<p class="meta" style="margin:0 0 14px">Prices come from the menu when you save, so a price change since the order was placed is applied automatically.</p>' +
+      '<div style="display:flex;flex-direction:column;gap:12px">' + rows + "</div>" +
+      '<div class="field" style="margin-top:18px"><label for="edit-add">Add a dish</label><select id="edit-add" class="select"><option value="">Choose a dish…</option>' + MENU.map(function (d) { return '<option value="' + d.id + '">' + esc(d.name) + " — " + money(d.price) + "</option>"; }).join("") + "</select></div>" +
+      '<div class="field" style="margin-top:14px"><label for="edit-reason">Why the change? <span class="muted font-medium">(recorded on the order)</span></label><input id="edit-reason" class="input" placeholder="Customer rang — swapped the pho for a rice dish" maxlength="500" value="' + esc(editorReason) + '" /></div>';
+
+    var newTotal = previewLines();
+    var paid = order.paidAmount;
+    var moneyNote = '<p class="meta" style="margin:0">Was ' + money(order.total) + " · now <strong>" + money(newTotal) + "</strong></p>";
+    if (paid != null && newTotal > paid) moneyNote += '<p class="meta" style="margin:4px 0 0;color:var(--color-deal)">' + money(r2(newTotal - paid)) + " more to collect — the card was charged " + money(paid) + ".</p>";
+    else if (paid != null && newTotal < paid) moneyNote += '<p class="meta" style="margin:4px 0 0">' + money(r2(paid - newTotal)) + " less than was charged — refund the difference.</p>";
+    else if (paid == null && String(order.paymentMethod).toLowerCase() === "cash") moneyNote += '<p class="meta" style="margin:4px 0 0">Never paid online — collect ' + money(newTotal) + " at the counter.</p>";
+
+    mFoot.innerHTML = "<div>" + moneyNote + '</div><div class="row" style="gap:12px;flex-wrap:nowrap"><button type="button" class="btn btn-ghost" id="editCancel">Cancel</button><button type="button" class="btn btn-primary" id="editSave"' + (editorLines.length === 0 ? " disabled" : "") + ">Save changes</button></div>";
+  }
+
+  function saveEdit() {
+    order.items = editorLines.map(function (l, i) {
+      return { id: order.items[i] ? order.items[i].id : (order.id * 10 + i), menuItemId: l.menuItemId, menuItemName: l.name, name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, totalPrice: r2(l.unitPrice * l.quantity), modifiers: [], specialInstructions: null, isCompleted: false };
+    });
+    order.subtotal = r2(order.items.reduce(function (s, i) { return s + i.totalPrice; }, 0));
+    order.total = order.subtotal;
+    closeModal();
+    toast("Order updated — " + money(order.total));
+    render();
+  }
+
+  /* ─── refund modal ─── */
+  function openRefund() {
+    mTitle.textContent = "Refund this order?";
+    mBody.innerHTML = '<p style="margin:0 0 10px"><strong>' + money(order.total) + "</strong> will be returned to <strong>" + esc(order.customerName) + "</strong> for order <strong>" + esc(order.orderNumber) + "</strong>.</p>" +
+      '<p class="meta" style="margin:0">The money goes back to the card within a few business days. This cannot be undone here — the order will be marked refunded, and cancelling it afterwards will not take the money back.</p>';
+    mFoot.innerHTML = '<button type="button" class="btn btn-ghost" id="refundKeep">Keep the payment</button><button type="button" class="btn btn-primary" id="refundGo">Refund ' + money(order.total) + "</button>";
+    openModal("Refund this order?");
+  }
+
+  /* ─── delegated events ─── */
+  pageEl.addEventListener("click", function (e) {
+    var st = e.target.closest("[data-status]");
+    if (st) { setStatus(st.getAttribute("data-status")); return; }
+    var tk = e.target.closest("[data-item]");
+    if (tk) { tickItem(Number(tk.getAttribute("data-item"))); return; }
+    if (e.target.closest("#cancelBtn")) { setStatus("cancelled"); return; }
+    if (e.target.closest("#editBtn")) { openEditor(); return; }
+    if (e.target.closest("#refundBtn")) { openRefund(); return; }
+    if (e.target.closest("#printBtn")) { window.print(); return; }
+  });
+
+  shell.addEventListener("click", function (e) {
+    var inc = e.target.closest("[data-inc]"), dec = e.target.closest("[data-dec]"), del = e.target.closest("[data-del]");
+    if (inc) { var a = editorLines.filter(function (l) { return l.key === inc.getAttribute("data-inc"); })[0]; if (a) a.quantity = Math.min(10, a.quantity + 1); renderEditor(); return; }
+    if (dec) { var b = editorLines.filter(function (l) { return l.key === dec.getAttribute("data-dec"); })[0]; if (b) b.quantity = Math.max(1, b.quantity - 1); renderEditor(); return; }
+    if (del) { editorLines = editorLines.filter(function (l) { return l.key !== del.getAttribute("data-del"); }); renderEditor(); return; }
+    if (e.target.closest("#editCancel")) { closeModal(); return; }
+    if (e.target.closest("#editSave")) { saveEdit(); return; }
+    if (e.target.closest("#refundKeep")) { closeModal(); return; }
+    if (e.target.closest("#refundGo")) { order.paymentStatus = "refunded"; persist(); closeModal(); toast("Refunded " + money(order.total)); render(); return; }
+    if (e.target.closest("#modalClose")) { closeModal(); return; }
+  });
+  shell.addEventListener("change", function (e) {
+    if (e.target.id === "edit-add" && e.target.value) {
+      var id = Number(e.target.value);
+      var existing = editorLines.filter(function (l) { return l.menuItemId === id; })[0];
+      if (existing) existing.quantity = Math.min(10, existing.quantity + 1);
+      else { var d = MENU.filter(function (m) { return m.id === id; })[0]; editorLines.push({ key: "l" + Date.now(), menuItemId: id, name: d.name, quantity: 1, unitPrice: d.price }); }
+      renderEditor();
+    }
+  });
+  shell.addEventListener("input", function (e) {
+    if (e.target.id === "edit-reason") editorReason = e.target.value;
+  });
+  scrim.addEventListener("click", closeModal);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !shell.hidden) closeModal(); });
+
+  /* rail collapse + account menu */
+  document.getElementById("railToggle").addEventListener("click", function () {
+    var admin = document.getElementById("admin");
+    var collapsed = admin.getAttribute("data-rail") === "collapsed";
+    admin.setAttribute("data-rail", collapsed ? "expanded" : "collapsed");
+    this.setAttribute("aria-expanded", String(collapsed));
+    document.getElementById("railChevron").setAttribute("d", collapsed ? "m14 6-6 6 6 6" : "m10 6 6 6-6 6");
+  });
+  document.getElementById("accountBtn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    var menu = document.getElementById("accountMenu");
+    var open = menu.hidden; menu.hidden = !open; this.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".admin-account")) {
+      document.getElementById("accountMenu").hidden = true;
+      document.getElementById("accountBtn").setAttribute("aria-expanded", "false");
+    }
+  });
+
+  var clockEl = null;
+  function renderClock() { clockEl = document.getElementById("adminClock"); if (clockEl) clockEl.textContent = "Adelaide " + fmtTime(Date.now()); }
+
+  render();
+  setInterval(renderClock, 30000);
+})();
+</script>
+</body>
+</html>
