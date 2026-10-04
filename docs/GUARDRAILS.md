@@ -121,12 +121,15 @@ editing the script:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MAX_FILES_CHANGED` | 60 | Max files touched in one change |
-| `MAX_LINES_CHANGED` | 2500 | Max added+removed lines in one change |
-| `MAX_SINGLE_FILE_LINES` | 600 | Max lines changed in a single file |
+| `MAX_FILES_CHANGED` | 40 | Max files touched in one change |
+| `MAX_LINES_CHANGED` | 9000 | Max added+removed lines in one change |
+| `MAX_SINGLE_FILE_LINES` | 2000 | Max lines changed in a single file |
 
 Defaults are deliberately generous — these are tripwires for "this cannot be reviewed",
-not style rules. Raise them only with a reason.
+not style rules. Raise them only with a reason. The single-file ceiling sits at 2000 to
+admit the self-contained staff-console design pages (largest 1833 lines) published under
+`src/asian-taste-admin/public/design/`; a page that must load on its own cannot be split
+across commits, so it is the one shape the ceiling deliberately allows.
 
 ## What is still NOT guarded
 

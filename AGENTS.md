@@ -63,10 +63,10 @@ explained commit.
 
 **`check-ci-integrity.sh --static-only` does NOT check change size.** That is the
 pre-commit hook's mode, and it skips the file/line tripwire by design — so a green
-pre-commit run says nothing about size. A single file over **600 lines** (or a commit over
-40 files / 3000 lines) **fails CI**, and because Deploy waits for CI, it blocks the
-release. This actually happened: a 615-line test file went in, CI and Deploy both went red
-on `main`, and the work did not reach production. Before pushing anything large, run
+pre-commit run says nothing about size. A single file over **2000 lines** (or a commit over
+40 files / 9000 lines) **fails CI**, and because Deploy waits for CI, it blocks the
+release. This actually happened: a test file over the 600-line limit of the day went in, CI
+and Deploy both went red on `main`, and the work did not reach production. Before pushing anything large, run
 `./scripts/check-ci-integrity.sh` **without** the flag, and after pushing check the real
 run with `gh run list --json conclusion,workflowName,headSha`.
 
