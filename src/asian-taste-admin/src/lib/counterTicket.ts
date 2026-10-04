@@ -207,6 +207,15 @@ export function toRequest(
     notes?: string
     allergyDeclaration?: string
     markedPaid?: boolean
+    /**
+     * When the order is promised.
+     *
+     * Only meaningful on the create path: an addition to an existing order goes through
+     * the items-edit endpoint, which does not carry a time (see `ordersApi.setPickupTime`
+     * for the one field that does). Omitted for a walk-in with no promise, and the server
+     * defaults it to ASAP.
+     */
+    pickupTime?: { type: "ASAP" | "SCHEDULED"; scheduledTime?: string }
   },
 ): { items: CounterOrderItem[] } & Record<string, unknown> {
   return {
@@ -318,7 +327,17 @@ function selectionKey(modifiers: Modifier[]): string {
     .join(",")
 }
 
-function lineSignature(line: TicketLineDraft): string {
+/**
+ * A stable identity for a line, from the three things that make it distinct.
+ *
+ * Exported so the screen can ask "is THIS the line I just added" without reproducing the
+ * rule — the pulse that confirms a tap has to match on the same dish, options and note the
+ * merge in `addLine` uses, or a tapped dish that merged into an existing line would never
+ * light up.
+ */
+export function lineSignature(
+  line: Pick<TicketLineDraft, "menuItemId" | "modifiers" | "note">,
+): string {
   return `${line.menuItemId}|${selectionKey(line.modifiers)}|${line.note.trim()}`
 }
 

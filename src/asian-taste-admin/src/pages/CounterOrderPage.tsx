@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { menuAdminApi, type MenuItemDetail, type Modifier } from "@/api/menuApi"
 import { counterOrderApi, type CounterOrderCandidate } from "@/api/counterOrderApi"
@@ -6,14 +6,17 @@ import { ordersApi } from "@/api/orders"
 import { AdminTop } from "@/components/AdminLayout"
 import { Button, Panel, PanelBody, PanelHead, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { AdminModal } from "@/components/ui/AdminModal"
+import { PickupTimeEditor } from "@/components/orders/PickupTimeEditor"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { formatCurrency } from "@/lib/utils"
 import { editMoney } from "@/lib/orderEdit"
+import { formatShopTime, shopDayLabel, shopDayOffset, shopRelativeLabel } from "@/lib/shopTime"
 import {
   MAX_QUANTITY,
   addLine,
   clearTicket,
   hasOptions,
+  lineSignature,
   loadOrder,
   pricedUnit,
   removeLine,
@@ -34,6 +37,9 @@ import {
  *   * **The dish grid is dense and tap-to-add.** No opening a dish in a dialog unless it
  *     HAS options, because most of a Vietnamese menu is a name and a price and a staff
  *     member already knows what the customer said. Two taps became one.
+ *   * **The menu is searchable from the first keystroke.** The search box is always on the
+ *     toolbar rather than hidden behind a mode: "goi cuon" is faster to type than it is to
+ *     hunt through fourteen categories, and it searches the category name too.
  *   * **The ticket is beside the grid, not behind a button.** The running total has to be
  *     readable while the customer is talking, and a total you have to navigate to is a
  *     total you quote from memory.
@@ -44,9 +50,21 @@ import {
  *     is open; the gate exists to stop scripts and stale tabs, and it would refuse a
  *     walk-in at 9:55pm — the last five minutes of trade.
  *
- * This screen deliberately does NOT sell DineIn by default: the customer at the counter is
- * usually waiting, and the choice is one tap away when they are not.
+ * This screen was ported onto the console design beside the board, so the two now share a
+ * toolbar, a tile, a quantity stepper and — through `PickupTimeEditor` — the same pickup
+ * promise the board runs on. A counter order takes a pickup time by default; the board can
+ * change it afterwards, and both read the shop clock, not the tablet's.
  */
+
+/** A walked-in order is promised in this many minutes unless staff change it. */
+const DEFAULT_PROMISE_MIN = 20
+
+/** The synthetic rail entry that filters to the shop's popular dishes. */
+const POPULAR = "__popular"
+
+/** A promise this many minutes out. Read at call time, never cached at module load. */
+const defaultWanted = () => Date.now() + DEFAULT_PROMISE_MIN * 60_000
+
 export function CounterOrderPage() {
   const [lines, setLines] = useState<TicketLineDraft[]>(clearTicket())
   const [customerName, setCustomerName] = useState("")
@@ -55,6 +73,41 @@ export function CounterOrderPage() {
   const [notes, setNotes] = useState("")
   const [allergy, setAllergy] = useState("")
   const [markedPaid, setMarkedPaid] = useState(true)
+  /** The promised time, in epoch ms. Always set for a new order, hidden when adding. */
+  const [wantedAt, setWantedAt] = useState(defaultWanted)
+  /** The pickup-time editor's working copy while it is open. */
+  const [pickupOpen, setPickupOpen] = useState(false)
+  const [pickupDraft, setPickupDraft] = useState(wantedAt)
+
+  /** The menu-wide search. Filters the grid across every category. */
+  const [menuQuery, setMenuQuery] = useState("")
+
+  /**
+   * The signature of the line just added, so its row can flash.
+   *
+   * A dish with options does not go straight on the bill — it opens a chooser — so without
+   * this a tap looks like it did nothing. It clears itself once the animation has run.
+   */
+  const [pulseSig, setPulseSig] = useState<string | null>(null)
+
+  /**
+   * A ticking "now" for the promise.
+   *
+   * Relative labels and the late/due-soon tint must move as the clock does, or a screen
+   * left open through a shift would keep saying "in 20 min" at 3pm. Thirty seconds is
+   * enough for a minute-granularity label.
+   */
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  useEffect(() => {
+    if (!pulseSig) return
+    const t = setTimeout(() => setPulseSig(null), 600)
+    return () => clearTimeout(t)
+  }, [pulseSig])
 
   /**
    * Whether this is a NEW order or an addition to one that exists.
@@ -105,42 +158,52 @@ export function CounterOrderPage() {
   // over nothing, rendering a counter screen with no dishes on it at all.
   const available = useMemo(() => dishes.filter((d) => d.isAvailable), [dishes])
 
-  /** Grouped by category, so the grid can be read the way the printed menu is. */
+  const categories = useMemo(
+    () => [...new Set(available.map((d) => d.categoryName || "Other"))],
+    [available],
+  )
+
+  const popularDishes = useMemo(() => available.filter((d) => d.isPopular), [available])
+
   /**
-   * Which category the dish grid is showing.
+   * Which rail entry is showing, as a CHOICE (`null` = "not chosen yet").
    *
    * The grid used to render ALL 14 categories stacked, which made the menu column about
    * 4,900px tall — 82 dishes end to end. That was the real reason an order needed scrolling
-   * to complete: the running ticket sits beside that column, so it could not stick, and the
-   * Save button lived 4,000px below the fold.
+   * to complete: the running ticket sits beside that column, so it could not stick.
    *
-   * One category at a time makes the menu roughly a screen tall, which is what lets the
-   * ticket be pinned and the whole flow work without the page moving.
-   *
-   * Stored as a CHOICE (`null` = "not chosen yet") rather than as a resolved category, and
-   * combined with the menu below. An effect syncing it to the first category was the
-   * obvious alternative and is worse: it sets state during render for a value that is
-   * purely derived, and it re-runs whenever the menu changes.
+   * One category at a time makes the menu roughly a screen tall. While a search is running
+   * no category is pressed: the search spans all of them, and lighting one up would claim
+   * it is filtering when it is not.
    */
   const [chosenCategory, setChosenCategory] = useState<string | null>(null)
 
-  /** Dishes in the active category, and the rail's own order, which follows the menu. */
-  const categories = useMemo(() => [...new Set(available.map((d) => d.categoryName || "Other"))], [available])
+  const searching = menuQuery.trim().length > 0
+
+  /** The category (or Popular) actually on screen when no search is running. */
+  const activeCategory = useMemo(() => {
+    if (chosenCategory === POPULAR) return POPULAR
+    if (chosenCategory && categories.includes(chosenCategory)) return chosenCategory
+    return categories[0] ?? null
+  }, [chosenCategory, categories])
 
   /**
-   * The category actually on screen.
-   *
-   * The first category until something is chosen, and recovered to the first if the chosen
-   * one disappears mid-shift (a dish retired leaves a category with no dishes, and the grid
-   * would otherwise render an empty page with no way back).
+   * Dishes on screen: the search wins over a category, so typing narrows the whole menu
+   * instead of the one rail entry that happened to be lit.
    */
-  const activeCategory =
-    chosenCategory && categories.includes(chosenCategory) ? chosenCategory : (categories[0] ?? null)
-
   const dishesInView = useMemo(() => {
+    const q = menuQuery.trim().toLowerCase()
+    if (q) {
+      return available.filter(
+        (d) =>
+          d.name.toLowerCase().includes(q) ||
+          (d.categoryName || "Other").toLowerCase().includes(q),
+      )
+    }
+    if (activeCategory === POPULAR) return popularDishes
     if (activeCategory === null) return []
     return available.filter((d) => (d.categoryName || "Other") === activeCategory)
-  }, [available, activeCategory])
+  }, [available, menuQuery, activeCategory, popularDishes])
 
   const total = ticketTotal(lines)
 
@@ -163,7 +226,7 @@ export function CounterOrderPage() {
   }, [mode, loadedFrom, lines])
 
   /** Orders matching what the staff member typed, so they can pick the right one. */
-  const { data: candidates = [], isFetching: searching } = useQuery({
+  const { data: candidates = [], isFetching: searchingOrders } = useQuery({
     queryKey: ["counter-order-lookup", lookup],
     queryFn: () => counterOrderApi.findExisting(lookup),
     // Only while looking: a background refetch of a search nobody is waiting on would be
@@ -205,12 +268,25 @@ export function CounterOrderPage() {
     onError: () => showAdminToast("Couldn't load that order — try again"),
   })
 
+  /** Clear the ticket and every field that belongs to a single order. */
+  const startFresh = () => {
+    setLines(clearTicket())
+    setCustomerName("")
+    setTableNumber("")
+    setNotes("")
+    setAllergy("")
+    setMarkedPaid(true)
+    setWantedAt(defaultWanted())
+    setMenuQuery("")
+    setPulseSig(null)
+  }
+
   const clearTarget = () => {
     setTarget(null)
     setLoadedFrom(null)
-    setLines(clearTicket())
     setReason("")
     setMode("new")
+    startFresh()
   }
 
   const isAddingToOrder = mode === "existing" && !!target
@@ -244,6 +320,11 @@ export function CounterOrderPage() {
           notes: notes.trim() || undefined,
           allergyDeclaration: allergy.trim() || undefined,
           markedPaid,
+          // Every counter order carries a promise. The board runs on it and the customer
+          // is told it, so leaving it out would make this screen the one place a time is
+          // unknown. `toISOString` sends a Z-suffixed instant, which the server reads as
+          // the shop's own wall clock.
+          pickupTime: { type: "SCHEDULED", scheduledTime: new Date(wantedAt).toISOString() },
         }) as Parameters<typeof counterOrderApi.create>[0],
       )
     },
@@ -261,9 +342,9 @@ export function CounterOrderPage() {
         })
         setTarget(null)
         setLoadedFrom(null)
-        setLines(clearTicket())
         setReason("")
         setMode("new")
+        startFresh()
         showAdminToast(
           `${edit.orderNumber} updated — now ${formatCurrency(edit.total)}`,
         )
@@ -275,12 +356,7 @@ export function CounterOrderPage() {
       // reads the number out to the customer, and a ticket that stayed behind would be
       // sent twice by the next tap.
       setLastOrder({ orderNumber: created.orderNumber, note: created.counterNote })
-      setLines(clearTicket())
-      setCustomerName("")
-      setTableNumber("")
-      setNotes("")
-      setAllergy("")
-      setMarkedPaid(true)
+      startFresh()
       showAdminToast(`${created.orderNumber} sent to the kitchen`)
     },
     onError: (error: unknown) => {
@@ -291,6 +367,11 @@ export function CounterOrderPage() {
     },
   })
 
+  /** Remember which line to flash, by the same key the merge in `addLine` uses. */
+  const pulse = (dish: MenuItemDetail, modifiers: Modifier[], note = "") => {
+    setPulseSig(lineSignature({ menuItemId: dish.id, modifiers, note: note.trim() }))
+  }
+
   /** Add a dish, opening its options first when it has any. */
   const choose = (dish: MenuItemDetail) => {
     // "Has options" is about whether there is anything to CHOOSE, not whether a flag
@@ -299,6 +380,7 @@ export function CounterOrderPage() {
     // a required choice could be added without ever being asked for it.
     if (!hasOptions(dish)) {
       setLines((current) => addLine(current, dish))
+      pulse(dish, [])
       return
     }
 
@@ -392,8 +474,18 @@ export function CounterOrderPage() {
     }
 
     setLines((current) => addLine(current, openDish, pending, pendingNote))
+    pulse(openDish, pending, pendingNote)
     setOpenDish(null)
   }
+
+  const itemCount = ticketItemCount(lines)
+
+  /** The promise's own clock state: whether it has passed or is nearly due, per the shop day. */
+  const minsToPromise = Math.round((wantedAt - now) / 60_000)
+  const promiseIsToday = shopDayOffset(wantedAt) === 0
+  const promiseIsLate = promiseIsToday && minsToPromise < 0
+  const promiseIsWarn = promiseIsToday && minsToPromise >= 0 && minsToPromise <= 10
+  const promiseWord = orderType === "DineIn" ? "serve" : "pickup"
 
   const canSend = lines.length > 0 && !submit.isPending
 
@@ -407,117 +499,131 @@ export function CounterOrderPage() {
             : "Take an order for someone standing with you. No payment is taken here."
         }
         actions={
-          <>
-            <Pill neutral>{ticketItemCount(lines)} items</Pill>
-            <Pill className="pill-total">{formatCurrency(total)}</Pill>
-          </>
+          <Pill neutral>
+            {itemCount} {itemCount === 1 ? "item" : "items"} · {formatCurrency(total)}
+          </Pill>
         }
       />
 
       <div className="admin-page counter-page" data-od-id="counter">
-        {/* ── New order, or adding to one that exists ────────────────────────────
-            One screen, two modes. The alternative — a separate edit screen — would be a
-            second copy of the dish grid, the options panel and the ticket rules, and the
-            two would drift. */}
-        <Panel data-od-id="counter-mode">
-          <PanelBody>
-            <div className="filterbar">
-              <div className="seg-sm" role="group" aria-label="What are you doing?">
-                <button
-                  type="button"
-                  aria-pressed={mode === "new"}
-                  onClick={() => {
-                    setMode("new")
-                    setTarget(null)
-                    setLoadedFrom(null)
-                    setLines(clearTicket())
-                  }}
-                >
-                  New order
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={mode === "existing"}
-                  onClick={() => {
-                    setMode("existing")
-                    setLines(clearTicket())
-                    setTarget(null)
-                    setLoadedFrom(null)
-                  }}
-                >
-                  Add to an order
-                </button>
-              </div>
+        {/* ── The toolbar ────────────────────────────────────────────────────────
+            Mode, the always-on menu search, and the order lookup that appears only
+            when adding. New order and add-to-order are one screen: a separate edit
+            screen would be a second copy of the dish grid, the options panel and the
+            ticket rules, and the two would drift. */}
+        <div className="counter-toolbar" data-od-id="counter-mode">
+          <div className="seg-sm" role="group" aria-label="What are you doing?">
+            <button
+              type="button"
+              aria-pressed={mode === "new"}
+              onClick={() => {
+                setMode("new")
+                setTarget(null)
+                setLoadedFrom(null)
+                startFresh()
+              }}
+            >
+              New order
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "existing"}
+              onClick={() => {
+                setMode("existing")
+                setTarget(null)
+                setLoadedFrom(null)
+                startFresh()
+              }}
+            >
+              Add to an order
+            </button>
+          </div>
 
-              {isAddingToOrder ? (
-                <span className="head-who">
-                  <span>
-                    <strong>{target!.orderNumber}</strong>
-                    <span className="meta">
-                      {target!.customerName} · {formatCurrency(target!.total)} on the docket
-                    </span>
-                  </span>
-                  <button type="button" className="btn-link" onClick={clearTarget}>
-                    Start a new order instead
-                  </button>
+          {/* Search the menu, always. Typing "banh mi" beats hunting fourteen categories. */}
+          <div className="search" id="menuSearchWrap">
+            <label className="sr-only" htmlFor="menu-search">
+              Search the menu
+            </label>
+            <input
+              id="menu-search"
+              className="input"
+              type="search"
+              placeholder="Search the menu — dish name or category"
+              autoComplete="off"
+              value={menuQuery}
+              onChange={(e) => setMenuQuery(e.target.value)}
+            />
+          </div>
+
+          {isAddingToOrder && (
+            <span className="head-who">
+              <span className="avatar" aria-hidden="true">
+                {initials(target!.customerName)}
+              </span>
+              <span>
+                <strong>{target!.orderNumber}</strong>
+                <span className="meta">
+                  {target!.customerName} · {formatCurrency(target!.total)} on the docket
                 </span>
-              ) : mode === "existing" ? (
-                <div className="search">
-                  <label className="sr-only" htmlFor="order-lookup">
-                    Find an order
-                  </label>
-                  <input
-                    id="order-lookup"
-                    className="input"
-                    type="search"
-                    placeholder="Docket number, e.g. AT-031407 or 5…"
-                    value={lookup}
-                    autoFocus
-                    onChange={(e) => setLookup(e.target.value)}
-                  />
-                </div>
-              ) : (
+              </span>
+              <button type="button" className="btn-link" onClick={clearTarget}>
+                Start a new order instead
+              </button>
+            </span>
+          )}
+
+          {mode === "existing" && !isAddingToOrder && (
+            <div className="search" id="lookupWrap">
+              <label className="sr-only" htmlFor="order-lookup">
+                Find an order
+              </label>
+              <input
+                id="order-lookup"
+                className="input"
+                type="search"
+                placeholder="Docket number, e.g. AT-031407 or a name"
+                autoComplete="off"
+                autoFocus
+                value={lookup}
+                onChange={(e) => setLookup(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* The matches. Shown rather than auto-loaded, because a partial docket number
+              read out loud usually matches more than one order. */}
+          {mode === "existing" && !isAddingToOrder && lookup.trim().length >= 3 && (
+            <div className="lookup-results">
+              {searchingOrders ? (
+                <p className="meta" style={{ margin: 0 }}>Searching…</p>
+              ) : candidates.length === 0 ? (
                 <p className="meta" style={{ margin: 0 }}>
-                  Taking a new order for someone at the counter.
+                  No order matches “{lookup.trim()}”. Check the docket, or start a new order.
                 </p>
+              ) : (
+                <ul className="order-picks">
+                  {candidates.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className="order-pick"
+                        disabled={load.isPending}
+                        onClick={() => load.mutate(c.id)}
+                      >
+                        <strong>{c.orderNumber}</strong>
+                        <span>{c.customerName}</span>
+                        <span className="meta">
+                          {c.itemsDone?.total ?? 0} items · {formatCurrency(c.total)}
+                        </span>
+                        <span className="meta">{c.status}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
-
-            {/* The matches. Shown rather than auto-loaded, because a partial docket number
-                read out loud usually matches more than one order. */}
-            {mode === "existing" && !isAddingToOrder && lookup.trim().length >= 3 && (
-              <div style={{ marginTop: 12 }}>
-                {searching ? (
-                  <p className="meta" style={{ margin: 0 }}>Searching…</p>
-                ) : candidates.length === 0 ? (
-                  <p className="meta" style={{ margin: 0 }}>
-                    No order matches “{lookup.trim()}”. Check the docket, or start a new order.
-                  </p>
-                ) : (
-                  <ul className="order-picks">
-                    {candidates.map((c) => (
-                      <li key={c.id}>
-                        <button
-                          type="button"
-                          className="order-pick"
-                          disabled={load.isPending}
-                          onClick={() => load.mutate(c.id)}
-                        >
-                          <strong>{c.orderNumber}</strong>
-                          <span>{c.customerName}</span>
-                          <span className="meta">
-                            {c.itemsDone?.total ?? 0} items · {formatCurrency(c.total)}
-                          </span>
-                          <span className="meta">{c.status}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </PanelBody>
-        </Panel>
+          )}
+        </div>
 
         {/* The menu. A category rail on the left of the dishes, because with 14 categories
             the rail is what makes the menu a screen tall instead of five. It is the shape
@@ -525,8 +631,23 @@ export function CounterOrderPage() {
             can stay pinned. */}
         <section className="counter-menu" data-od-id="counter-dishes" aria-label="Menu">
           <nav className="counter-rail" aria-label="Menu categories">
+            <button
+              type="button"
+              className="cat-key"
+              aria-pressed={!searching && activeCategory === POPULAR}
+              onClick={() => setChosenCategory(POPULAR)}
+            >
+              <span className="cat-label">
+                <svg className="cat-ico" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <path d="M8 1.6l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.3l-3.8 2 .7-4.3-3.1-3 4.3-.6z" />
+                </svg>
+                Popular
+              </span>
+              <span className="cat-count">{popularDishes.length}</span>
+            </button>
+
             {categories.map((category) => {
-              const on = category === activeCategory
+              const on = !searching && category === activeCategory
               return (
                 <button
                   key={category}
@@ -547,34 +668,62 @@ export function CounterOrderPage() {
           <div className="counter-dishes-wrap">
             {isLoading ? (
               <SkeletonRows rows={6} />
-            ) : dishesInView.length === 0 ? (
-              <p className="meta" style={{ margin: 0 }}>
-                Nothing in this category right now.
-              </p>
             ) : (
               <div className="counter-dishes" data-od-id="counter-dish-grid">
-                {dishesInView.map((dish) => {
-                  // One shared rule, so the flag on the button and the panel it opens
-                  // cannot disagree. See hasOptions.
-                  const opensPanel = hasOptions(dish)
+                {dishesInView.length === 0 ? (
+                  <p className="counter-empty">
+                    {searching
+                      ? `No dish matches “${menuQuery.trim()}”. Try another word, or pick a category.`
+                      : "Nothing in this category right now."}
+                  </p>
+                ) : (
+                  dishesInView.map((dish) => {
+                    // One shared rule, so the glyph on the button and the panel it opens
+                    // cannot disagree. A dish WITH options shows a chooser arrow; the rest
+                    // show a plus, because those go straight onto the bill.
+                    const opensPanel = hasOptions(dish)
 
-                  return (
-                    <button
-                      key={dish.id}
-                      type="button"
-                      className="dish-key"
-                      onClick={() => choose(dish)}
-                    >
-                      <span className="dk-name">{dish.name}</span>
-                      <span className="dk-price">{formatCurrency(dish.price)}</span>
-                      {opensPanel && (
-                        <span className="dk-flag" aria-label="has options">
-                          ⋯
+                    return (
+                      <button
+                        key={dish.id}
+                        type="button"
+                        className="dish-key"
+                        aria-label={
+                          opensPanel
+                            ? `Choose options for ${dish.name} — ${formatCurrency(dish.price)}`
+                            : `Add ${dish.name} — ${formatCurrency(dish.price)}`
+                        }
+                        onClick={() => choose(dish)}
+                      >
+                        <span className="dk-name">{dish.name}</span>
+                        <span className="dk-foot">
+                          <span className="dk-price">{formatCurrency(dish.price)}</span>
+                          <span className="dk-add" aria-hidden="true">
+                            {opensPanel ? (
+                              <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+                                <circle cx="3" cy="8" r="1.5" />
+                                <circle cx="8" cy="8" r="1.5" />
+                                <circle cx="13" cy="8" r="1.5" />
+                              </svg>
+                            ) : (
+                              <svg
+                                viewBox="0 0 16 16"
+                                width="12"
+                                height="12"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                              >
+                                <path d="M8 3v10M3 8h10" />
+                              </svg>
+                            )}
+                          </span>
                         </span>
-                      )}
-                    </button>
-                  )
-                })}
+                      </button>
+                    )
+                  })
+                )}
               </div>
             )}
           </div>
@@ -589,7 +738,7 @@ export function CounterOrderPage() {
                 <button
                   type="button"
                   className="btn-link"
-                  onClick={() => setLines(clearTicket())}
+                  onClick={() => startFresh()}
                 >
                   Clear
                 </button>
@@ -607,13 +756,12 @@ export function CounterOrderPage() {
                   </p>
                 ) : (
                   <ul className="counter-lines">
-                  {lines.map((line) => (
-                    <li key={line.key} className="counter-line">
+                  {lines.map((line) => {
+                    const isNew = pulseSig !== null && lineSignature(line) === pulseSig
+                    return (
+                    <li key={line.key} className={`counter-line${isNew ? " is-new" : ""}`}>
                       <div className="cl-top">
-                        <strong>
-                          {line.name}
-                          {line.quantity > 1 && ` ×${line.quantity}`}
-                        </strong>
+                        <strong>{line.name}</strong>
                         <span className="cl-price">{formatCurrency(line.unitPrice * line.quantity)}</span>
                       </div>
 
@@ -625,28 +773,30 @@ export function CounterOrderPage() {
                         </p>
                       )}
 
-                      {/* Quantity and Remove stay on every line; Edit opens the options panel
-                          for THIS line. Ordered so the most-pressed control (one more) is a
-                          thumb-width from the right edge on a tablet. */}
+                      {/* Quantity is one control, then Edit and Remove. Ordered so the
+                          most-pressed control (one more) is a thumb-width from the right
+                          edge on a tablet. */}
                       <div className="cl-controls">
-                        <button
-                          type="button"
-                          aria-label={`One less ${line.name}`}
-                          onClick={() => setLines((c) => setQuantity(c, line.key, line.quantity - 1))}
-                        >
-                          −
-                        </button>
-                        <span className="cl-qty" aria-label={`Quantity ${line.quantity}`}>
-                          {line.quantity}
+                        <span className="cl-step">
+                          <button
+                            type="button"
+                            aria-label={`One less ${line.name}`}
+                            onClick={() => setLines((c) => setQuantity(c, line.key, line.quantity - 1))}
+                          >
+                            −
+                          </button>
+                          <span className="cl-qty" aria-label={`Quantity ${line.quantity}`}>
+                            {line.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`One more ${line.name}`}
+                            disabled={line.quantity >= MAX_QUANTITY}
+                            onClick={() => setLines((c) => setQuantity(c, line.key, line.quantity + 1))}
+                          >
+                            +
+                          </button>
                         </span>
-                        <button
-                          type="button"
-                          aria-label={`One more ${line.name}`}
-                          disabled={line.quantity >= MAX_QUANTITY}
-                          onClick={() => setLines((c) => setQuantity(c, line.key, line.quantity + 1))}
-                        >
-                          +
-                        </button>
                         <button
                           type="button"
                           className="cl-edit"
@@ -661,11 +811,23 @@ export function CounterOrderPage() {
                           aria-label={`Remove ${line.name}`}
                           onClick={() => setLines((c) => removeLine(c, line.key))}
                         >
-                          ✕
+                          <svg
+                            viewBox="0 0 16 16"
+                            width="13"
+                            height="13"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.7"
+                            strokeLinecap="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M4 4l8 8M12 4l-8 8" />
+                          </svg>
                         </button>
                       </div>
                     </li>
-                  ))}
+                    )
+                  })}
                 </ul>
                 )}
 
@@ -678,7 +840,7 @@ export function CounterOrderPage() {
                     footer below the scroll. */}
                 <div className="counter-fields">
                 <label>
-                  <span>Name (optional)</span>
+                  <span>Name</span>
                   <input
                     className="input"
                     value={customerName}
@@ -698,7 +860,7 @@ export function CounterOrderPage() {
                           aria-pressed={orderType === option}
                           onClick={() => setOrderType(option)}
                         >
-                          {option === "Pickup" ? "Waiting" : "Dine in"}
+                          {option === "Pickup" ? "Takeaway" : "Dine in"}
                         </button>
                       ))}
                     </div>
@@ -716,6 +878,56 @@ export function CounterOrderPage() {
                     </label>
                   )}
                 </div>
+
+                {/* The promise. The one line the kitchen runs on, and the way to move it.
+                    Hidden when adding to an order: that order already has a time, and the
+                    board owns changing it — see `ordersApi.setPickupTime`. */}
+                {!isAddingToOrder && (
+                  <div className="counter-pickup" data-od-id="counter-pickup">
+                    <span className="pickup-label">
+                      {orderType === "DineIn" ? "Serve by" : "Pickup time"}
+                    </span>
+                    <button
+                      type="button"
+                      className={`t-time${promiseIsLate ? " is-late" : promiseIsWarn ? " is-warn" : ""}`}
+                      aria-label={`Change the ${promiseWord} time, currently ${shopDayLabel(wantedAt)} ${formatShopTime(wantedAt)}`}
+                      onClick={() => {
+                        setPickupDraft(wantedAt)
+                        setPickupOpen(true)
+                      }}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <circle cx="12" cy="12" r="8.5" />
+                        <path d="M12 7.5V12l3 2" />
+                      </svg>
+                      <span className="t-time-val">{formatShopTime(wantedAt)}</span>
+                      {shopDayLabel(wantedAt) !== "Today" && (
+                        <span className="t-time-day">{shopDayLabel(wantedAt)}</span>
+                      )}
+                      <span className="t-time-rel">{shopRelativeLabel(wantedAt, now)}</span>
+                      <svg
+                        className="t-time-edit"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M4 20h4L20 8l-4-4L4 16z" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
 
                 <label>
                   <span>Allergies (say it before the kitchen starts)</span>
@@ -939,6 +1151,32 @@ export function CounterOrderPage() {
           </label>
         </AdminModal>
       )}
+
+      {/* The promise editor — the SAME component the board uses, so a time set here and a
+          time moved there cannot mean two different things. */}
+      {pickupOpen && (
+        <PickupTimeEditor
+          title={`${orderType === "DineIn" ? "Serve time" : "Pickup time"} — ${customerName.trim() || "Counter"}`}
+          draft={pickupDraft}
+          now={now}
+          setDraft={setPickupDraft}
+          current={wantedAt}
+          confirmLabel="Set time"
+          onSave={() => {
+            setWantedAt(pickupDraft)
+            setPickupOpen(false)
+          }}
+          onClose={() => setPickupOpen(false)}
+        />
+      )}
     </>
   )
+}
+
+/** Two initials for the avatar, from a customer name. `AT` when there is no name. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return "AT"
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }

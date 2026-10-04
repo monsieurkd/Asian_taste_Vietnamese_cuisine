@@ -1,5 +1,11 @@
 import apiClient from "./client"
-import type { OrderType, PaymentMethod, UpdateOrderItemsRequest, UpdateOrderItemsResult } from "@/types"
+import type {
+  OrderType,
+  PaymentMethod,
+  SetPickupTimeRequest,
+  UpdateOrderItemsRequest,
+  UpdateOrderItemsResult,
+} from "@/types"
 
 /**
  * The counter (face-to-face) order API.
@@ -27,6 +33,11 @@ export interface CreateCounterOrderRequest {
   tableNumber?: string
   notes?: string
   allergyDeclaration?: string
+  /**
+   * When the order is promised. Omitted for a walk-in with no promise, and the server
+   * defaults it to ASAP — so the ordinary counter order is unchanged.
+   */
+  pickupTime?: SetPickupTimeRequest["pickupTime"]
   paymentMethod?: PaymentMethod
   /** True when the staff member already has the money. This app takes no counter payment. */
   markedPaid?: boolean

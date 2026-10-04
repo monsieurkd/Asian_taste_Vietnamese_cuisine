@@ -2676,12 +2676,15 @@ files left behind; the working tree is clean and `main` is current.
 
 The ratified mockups in `docs/DESIGN/mockups/admin-console/` are the target the deployed
 admin app is now being rebuilt onto, screen by screen, rather than left as static pages
-served beside the old UI. This session landed the **kitchen board** (`/kitchen`): the
-stat-grid and pill layout is gone, replaced by the board-bar, the board metrics, scrolling
-stage columns and the ticket card with the shop clock, dish rows, flags and one verb per
-stage. Drag-to-advance is kept and still gated on `canTransition` — an illegal drop snaps
-back with the rule's reason. The **counter screen (`/counter`) is next** and is not in
-this change.
+served beside the old UI. This session landed the **kitchen board** (`/kitchen`) and then
+the **counter screen** (`/counter`). The board's stat-grid and pill layout is gone,
+replaced by the board-bar, the board metrics, scrolling stage columns and the ticket card
+with the shop clock, dish rows, flags and one verb per stage. Drag-to-advance is kept and
+still gated on `canTransition` — an illegal drop snaps back with the rule's reason. The
+counter is now the mockup's screen too: the always-on menu search and mode switch share one
+toolbar, the rail leads with a **Popular** row, the dish tiles are price-forward with a
+glyph that says add-vs-choose, quantity is one stepper, a newly added line flashes, and the
+ticket carries a **pickup promise** set through the same editor the board uses.
 
 ### The pickup-time endpoint, and what is left to finish it
 
@@ -2692,18 +2695,18 @@ deletes and re-inserts every `order_items` row — so moving the time silently w
 kitchen's per-dish ticks, cook state and notes. A five-minute delay must not knock the food
 off the pass.
 
-Added this session: `PUT /admin/orders/{id}/pickup-time` (`SetOrderPickupTimeAsync`), a
+Added earlier: `PUT /admin/orders/{id}/pickup-time` (`SetOrderPickupTimeAsync`), a
 column-level `UPDATE` of `orders.requested_time` only, judged by the same trading rule as
 checkout (`ShopClosedException` → 409) and recorded as a `PickupTimeChanged` activity with
 the actor and reason. The request carries no items, so it cannot damage the line. The
 console's tap-to-edit modal is wired to it.
 
-**Still to build before this is finished in production** — kept here rather than invented
-now:
+**All four follow-ups below are now done.** Kept here as the record of what shipped, and
+the shape it took — not invented after the fact:
 
-| | Item | Why it is not done | Shape of the work |
-|---|---|---|---|
-| **P1** | **Tell the other screens.** | The write logs the change but does not broadcast, so a second open board (or the orders list) only shows the new time on its next refetch. | Broadcast a `status_update` after the write; the client's `status_update` handler already invalidates `["orders"]`, so no client change is needed. |
-| **P2** | **Tell the customer.** | Moving the time is silent to the guest; the confirmation page still shows the old time and nothing is sent. | Decide the channel (email vs SMS) and send "your pickup time moved to X" from the same method, reusing the order-email queue. |
-| **P3** | **Counter parity.** | The counter screen cannot move a time (a walk-in has none); the phone-edit path can carry one. | Decide whether the counter gains the same tap-to-edit, or stays out of it. |
-| **P4** | **One urgency number.** | The mockup warns at `DUE_SOON_MINUTES = 10`; the app uses warn 15 / late 25. | Pick the canonical threshold so the board and the counter agree on "late". |
+| | Item | How it was closed |
+|---|---|---|
+| **P1** | **Tell the other screens.** | `NotifyPickupTimeMovedAsync` (`OrderService`) broadcasts a `status_update` for the order after the write. `status_update` is reused deliberately: the console already treats it as "refetch this order", so no new client branch was needed. Best-effort and isolated in `try/catch` — the time is already moved, and a failed push must not fail the move. |
+| **P2** | **Tell the customer.** | The same method queues an `OrderStatusUpdateEmailJob` with status `PickupTimeChanged` and "your pickup/serve time for order N has moved to X", reusing the existing `OrderEmailQueue`. Channel is email, because that is what the order already holds; a counter order has no address and is skipped (the walk-in was told face-to-face). Also best-effort. |
+| **P3** | **Counter parity.** | `CreateCounterOrderDto` gained an optional `PickupTime`, defaulting to ASAP, so a walk-in can be given a promise. The counter's new pickup field sets it on create, and it is hidden when ADDING to an existing order — that order already has a time and the board owns changing it. |
+| **P4** | **One urgency number.** | The canonical due-soon threshold is **10 minutes**. `lib/kitchenBoard.ts` now exports `DUE_SOON_MINUTES = 10` and a shared `urgencyForDue(minutesUntil)`; `urgencyOf`'s scheduled branch delegates to it, so the board and the counter tint a promise the same way. |

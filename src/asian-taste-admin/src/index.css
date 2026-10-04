@@ -3921,3 +3921,198 @@
     color: var(--color-muted);
   }
 }
+
+/* ==========================================================================
+   Counter port — the pieces the console design added after the counter's own
+   block above was written: the toolbar, the Popular row, the price-forward
+   tile footer, the one-piece quantity stepper, the line-added flash and the
+   pickup field. Grouped as one layer so the port is a single readable change,
+   and so the `.t-time` override below can stay scoped to the counter and leave
+   the board's soft-chip pickup button untouched.
+   ========================================================================== */
+@layer components {
+  /* The toolbar: mode switch, an always-on menu search, and the order lookup
+     that appears only in "add to an order". */
+  .counter-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .counter-toolbar .search {
+    flex: 1 1 260px;
+    min-width: 220px;
+    position: relative;
+  }
+  .counter-toolbar .lookup-results {
+    flex-basis: 100%;
+    margin-top: 2px;
+  }
+
+  /* The Popular row: the same shape as a category, with a star and its own count,
+     so it does not read as a category the shop does not have. */
+  .cat-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cat-ico {
+    width: 14px;
+    height: 14px;
+    flex: none;
+  }
+
+  .counter-empty {
+    grid-column: 1 / -1;
+    padding: 26px 4px;
+    font-size: 13px;
+    color: var(--color-muted);
+  }
+
+  /* Price-forward tile: name, then a footer band with the price and a glyph that
+     says what a tap will do — a plus adds, a chooser opens the options. */
+  .dk-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .dk-add {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    flex: none;
+    border-radius: 50%;
+    background-color: var(--color-fg-soft);
+    color: var(--color-fg);
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .dish-key:hover .dk-add,
+  .dish-key:focus-visible .dk-add {
+    background-color: var(--color-accent);
+    color: var(--color-surface);
+  }
+
+  /* Quantity is one bordered control, not three separate boxes. These land after
+     the older `.cl-controls button` rules, so they win at equal specificity. */
+  .cl-step {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm, 7px);
+    overflow: hidden;
+    background-color: var(--color-surface);
+  }
+  .cl-step button {
+    width: 32px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    color: inherit;
+  }
+  .cl-step button:hover {
+    background-color: var(--color-fg-soft);
+  }
+  .cl-step button:disabled {
+    opacity: 0.35;
+    cursor: default;
+    background: transparent;
+  }
+  .cl-controls .cl-edit,
+  .cl-controls .cl-remove {
+    height: 30px;
+    border: 0;
+    border-radius: var(--radius-sm, 7px);
+  }
+  .cl-controls .cl-edit:hover {
+    background-color: var(--color-accent-soft);
+  }
+  .cl-controls .cl-remove:hover {
+    background-color: color-mix(in oklch, var(--color-deal) 10%, transparent);
+  }
+
+  /* The line just added flashes, so a dish that opened a chooser is visibly ON
+     the bill — without it the tap looked like it did nothing. */
+  @keyframes lineIn {
+    from {
+      background-color: var(--color-accent-soft);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+  .counter-line.is-new {
+    animation: lineIn 520ms ease-out;
+  }
+
+  /* The pickup promise, and the one way to change it. */
+  .counter-pickup {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .counter-pickup > .pickup-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-muted);
+  }
+  /* Turn the board's soft-chip `.t-time` into the counter's bordered field. Scoped
+     to `.counter-pickup` so the board's own pickup button is untouched. */
+  .counter-pickup .t-time {
+    display: inline-flex;
+    gap: 8px;
+    padding: 8px 11px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm, 8px);
+    background-color: var(--color-surface);
+    font-size: 13.5px;
+  }
+  .counter-pickup .t-time:hover {
+    border-color: var(--color-accent-line);
+    background-color: color-mix(in oklch, var(--color-fg) 5%, var(--color-surface));
+  }
+  .counter-pickup .t-time .t-time-day {
+    padding: 0;
+    border-radius: 0;
+    background-color: transparent;
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--color-accent);
+  }
+  .counter-pickup .t-time .t-time-rel {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--color-muted);
+  }
+  .counter-pickup .t-time.is-warn {
+    background-color: var(--color-gold-soft);
+    border-color: color-mix(in oklch, var(--color-gold) 34%, transparent);
+  }
+  .counter-pickup .t-time.is-warn .t-time-rel {
+    color: color-mix(in oklch, var(--color-gold) 55%, var(--color-fg));
+  }
+  .counter-pickup .t-time.is-late {
+    background-color: color-mix(in oklch, var(--color-deal) 10%, var(--color-surface));
+    border-color: color-mix(in oklch, var(--color-deal) 32%, transparent);
+  }
+  .counter-pickup .t-time.is-late .t-time-rel {
+    color: var(--color-deal);
+  }
+}
