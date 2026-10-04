@@ -136,6 +136,7 @@ public class OrderServicePaymentTests
         public Task<CookStateResult?> SetItemCookStateAsync(int orderId, int orderItemId, string state, string? actor, CancellationToken cancellationToken = default) => Task.FromResult<CookStateResult?>(null);
         public Task<bool> SetItemKitchenNoteAsync(int orderId, int orderItemId, string? note, string? actor, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<bool> SetOrderHeldAsync(int orderId, bool held, string? reason, string? actor, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<bool> SetOrderRequestedTimeAsync(int orderId, DateTime requestedTime, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task AddActivityAsync(int orderId, int? orderItemId, string kind, string detail, string? actor, string? statusAtEvent, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<List<OrderActivityDto>> GetActivityAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult(new List<OrderActivityDto>());
         public Task<bool> TryMarkReadyNotifiedAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult(false);

@@ -265,6 +265,62 @@ public class OrderServiceEditTests
         Assert.Contains("unchanged", result.PaymentNote, StringComparison.OrdinalIgnoreCase);
     }
 
+    // ── Moving the pickup time ───────────────────────────────────────────────
+    //
+    // The promised time is the one field staff need to move on its own. It is the
+    // small sibling of UpdateOrderItemsAsync: it must touch nothing but orders.
+    // requested_time — no dish, no tick, no kitchen note — because the full item
+    // replace deletes and re-inserts every order_items row, wiping cook state off
+    // the pass for what the guest experiences as "we're running ten minutes late".
+
+    [Fact]
+    public async Task Moving_the_pickup_time_writes_only_the_time()
+    {
+        var h = CreateHarness();
+        var promised = Adelaide(15).UtcDateTime;
+
+        var result = await h.Service.SetOrderPickupTimeAsync(
+            1,
+            new SetPickupTimeDto { PickupTime = new PickupTimeDto { Type = "SCHEDULED", ScheduledTime = promised } },
+            "Mai");
+
+        Assert.NotNull(result);
+        Assert.Equal(promised, h.Orders.RequestedTimeWritten);
+        Assert.True(result!.IsScheduled);
+        Assert.Contains("PickupTimeChanged", h.Orders.ActivityKinds);
+    }
+
+    [Fact]
+    public async Task A_time_the_kitchen_cannot_serve_is_refused_before_anything_is_written()
+    {
+        // Wednesday lunch only; 7pm is after the kitchen has closed for the day.
+        var h = CreateHarness(windows: LunchOnly);
+
+        await Assert.ThrowsAsync<ShopClosedException>(() =>
+            h.Service.SetOrderPickupTimeAsync(
+                1,
+                new SetPickupTimeDto { PickupTime = new PickupTimeDto { Type = "SCHEDULED", ScheduledTime = Adelaide(19).UtcDateTime } },
+                "Mai"));
+
+        Assert.Null(h.Orders.RequestedTimeWritten);
+        Assert.DoesNotContain("PickupTimeChanged", h.Orders.ActivityKinds);
+    }
+
+    [Fact]
+    public async Task A_missing_order_is_just_null()
+    {
+        var h = CreateHarness();
+        h.Orders.ReturnNullOrder = true;
+
+        var result = await h.Service.SetOrderPickupTimeAsync(
+            1,
+            new SetPickupTimeDto { PickupTime = new PickupTimeDto { Type = "ASAP" } },
+            "Mai");
+
+        Assert.Null(result);
+        Assert.Null(h.Orders.RequestedTimeWritten);
+    }
+
     // ── Collaborators ───────────────────────────────────────────────────────
 
     private sealed class RecordingOrderRepository : IOrderRepository
@@ -272,6 +328,9 @@ public class OrderServiceEditTests
         public Order OrderToReturn { get; set; } = new();
         public bool ReturnNullOrder { get; set; }
         public IReadOnlyList<OrderLineWrite>? ReplacedLines { get; private set; }
+
+        /// <summary>The promised time the service asked to store, if it asked at all.</summary>
+        public DateTime? RequestedTimeWritten { get; private set; }
 
         public Task<Order?> GetOrderByIdAsync(int orderId, CancellationToken cancellationToken = default) =>
             Task.FromResult(ReturnNullOrder ? null : OrderToReturn);
@@ -300,7 +359,24 @@ public class OrderServiceEditTests
         public Task<CookStateResult?> SetItemCookStateAsync(int orderId, int orderItemId, string state, string? actor, CancellationToken cancellationToken = default) => Task.FromResult<CookStateResult?>(null);
         public Task<bool> SetItemKitchenNoteAsync(int orderId, int orderItemId, string? note, string? actor, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<bool> SetOrderHeldAsync(int orderId, bool held, string? reason, string? actor, CancellationToken cancellationToken = default) => Task.FromResult(false);
-        public Task AddActivityAsync(int orderId, int? orderItemId, string kind, string detail, string? actor, string? statusAtEvent, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> SetOrderRequestedTimeAsync(int orderId, DateTime requestedTime, CancellationToken cancellationToken = default)
+        {
+            if (ReturnNullOrder)
+            {
+                return Task.FromResult(false);
+            }
+
+            OrderToReturn.RequestedTime = requestedTime;
+            RequestedTimeWritten = requestedTime;
+            return Task.FromResult(true);
+        }
+        public List<string> ActivityKinds { get; } = [];
+
+        public Task AddActivityAsync(int orderId, int? orderItemId, string kind, string detail, string? actor, string? statusAtEvent, CancellationToken cancellationToken = default)
+        {
+            ActivityKinds.Add(kind);
+            return Task.CompletedTask;
+        }
         public Task<List<OrderActivityDto>> GetActivityAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult(new List<OrderActivityDto>());
         public Task<bool> TryMarkReadyNotifiedAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<AdminOrderDetailDto?> GetAdminOrderDetailAsync(int orderId, CancellationToken cancellationToken = default) => Task.FromResult<AdminOrderDetailDto?>(null);

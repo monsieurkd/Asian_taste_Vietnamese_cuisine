@@ -110,6 +110,16 @@ internal static class KitchenTestHarness
             return Task.FromResult(true);
         }
 
+        /// <summary>The promised times written, so a test can prove the time moved.</summary>
+        public List<DateTime> RequestedTimeWrites { get; } = new();
+
+        public Task<bool> SetOrderRequestedTimeAsync(int orderId, DateTime requestedTime, CancellationToken cancellationToken = default)
+        {
+            Order.RequestedTime = requestedTime;
+            RequestedTimeWrites.Add(requestedTime);
+            return Task.FromResult(true);
+        }
+
         public Task AddActivityAsync(int orderId, int? orderItemId, string kind, string detail, string? actor, string? statusAtEvent, CancellationToken cancellationToken = default)
         {
             if (ThrowOnActivity) throw new InvalidOperationException("the log is unavailable");

@@ -7,6 +7,8 @@ using AsianTaste.API.Services.Payment.Interfaces;
 
 using AsianTaste.API.WebSockets;
 
+using System.Globalization;
+
 namespace AsianTaste.API.Services;
 
 /// <summary>
@@ -771,6 +773,64 @@ public class OrderService
         };
     }
 
+    /// <summary>
+    /// Moves an order's promised pickup time, leaving everything else on the ticket alone.
+    /// </summary>
+    /// <remarks>
+    /// The small sibling of <see cref="UpdateOrderItemsAsync"/>. That path answers "the
+    /// customer changed their mind about WHAT they want" and rewrites the lines; this one
+    /// answers "the customer is running late" and rewrites one timestamp. Keeping them
+    /// apart is what stops a time change from deleting the kitchen's per-dish ticks — see
+    /// the note on <c>ReplaceOrderItemsAsync</c>.
+    ///
+    /// The new time is judged by the same trading rule as checkout: a time the kitchen
+    /// cannot serve is a business refusal, so it is a 409 rather than a saved order the
+    /// kitchen would never cook.
+    /// </remarks>
+    /// <returns>The stored time, or null when the order does not exist.</returns>
+    /// <exception cref="ShopClosedException">The new time is outside trading hours.</exception>
+    public async Task<PickupTimeResponseDto?> SetOrderPickupTimeAsync(
+        int orderId,
+        SetPickupTimeDto request,
+        string? actor,
+        CancellationToken cancellationToken = default)
+    {
+        var order = await _orderRepository.GetOrderByIdAsync(orderId, cancellationToken);
+        if (order is null) return null;
+
+        var settings = await LoadRestaurantSettingsAsync(cancellationToken);
+        var requestedTime = PickupTime.ResolveRequestedTime(request.PickupTime);
+
+        var trading = _tradingHours.Evaluate(settings.Windows, settings.Timezone, requestedTime);
+        if (!trading.Open)
+        {
+            throw new ShopClosedException(trading.Reason);
+        }
+
+        var moved = await _orderRepository.SetOrderRequestedTimeAsync(orderId, requestedTime, cancellationToken);
+        if (!moved) return null;
+
+        var isScheduled = PickupTime.IsScheduled(request.PickupTime);
+
+        await SafeLogAsync(
+            orderId, null, "PickupTimeChanged",
+            $"{Describe(actor)} moved the pickup time to {DescribeLocal(settings.Timezone, requestedTime)}"
+                + (string.IsNullOrWhiteSpace(request.Reason) ? "." : $": \u201c{request.Reason.Trim()}\u201d"),
+            actor, order.Status.ToString(), cancellationToken);
+
+        _logger.LogInformation(
+            "Order {OrderNumber} pickup time moved to {RequestedTime:o} by {Actor}",
+            order.OrderNumber, requestedTime, actor ?? "system");
+
+        return new PickupTimeResponseDto
+        {
+            OrderId = orderId,
+            OrderNumber = order.OrderNumber,
+            RequestedTime = requestedTime,
+            IsScheduled = isScheduled,
+        };
+    }
+
     /// <summary>Everything that has happened to an order, newest first.</summary>
     public Task<List<OrderActivityDto>> GetOrderActivityAsync(int orderId, CancellationToken cancellationToken = default) =>
         _orderRepository.GetActivityAsync(orderId, cancellationToken);
@@ -834,6 +894,30 @@ public class OrderService
     /// a vague pronoun when the question being asked is "who moved my order".
     /// </remarks>
     private static string Describe(string? actor) => string.IsNullOrWhiteSpace(actor) ? "The system" : actor;
+
+    /// <summary>
+    /// A UTC instant as the shop's wall-clock time, for a log line.
+    /// </summary>
+    /// <remarks>
+    /// The activity log is read by people standing in the shop, so a pickup time in UTC
+    /// is worse than useless — 18:30 Adelaide prints as 08:00 the same day in winter. The
+    /// stored value stays UTC; only the sentence is localised. An unreadable timezone
+    /// falls back to a labelled UTC reading rather than throwing over a log line.
+    /// </remarks>
+    private static string DescribeLocal(string timezoneId, DateTime utc)
+    {
+        try
+        {
+            var instant = utc.Kind == DateTimeKind.Utc ? utc : DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+            var local = TimeZoneInfo.ConvertTimeFromUtc(instant, tz);
+            return local.ToString("h:mm tt", CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            return utc.ToString("HH:mm", CultureInfo.InvariantCulture) + " UTC";
+        }
+    }
 
     /// <summary>
     /// Tells the customer their food is ready, at most once.

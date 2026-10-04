@@ -263,6 +263,57 @@ public class AdminOrdersController : ControllerBase
     }
 
     /// <summary>
+    /// Moves an order's promised pickup time — the "customer is running late" path.
+    /// </summary>
+    /// <remarks>
+    /// A column-level write. It deliberately does NOT go through the items-edit endpoint,
+    /// which replaces the lines wholesale and would therefore wipe the kitchen's per-dish
+    /// ticks and notes just to move a time. The new time is judged by the same trading rule
+    /// as checkout, so a time the kitchen cannot serve is refused rather than stored.
+    /// </remarks>
+    /// <param name="id">Order ID.</param>
+    /// <param name="request">The new pickup time.</param>
+    /// <response code="200">The time as stored.</response>
+    /// <response code="400">The request is invalid.</response>
+    /// <response code="404">Order not found.</response>
+    /// <response code="409">The new pickup time is outside trading hours.</response>
+    [HttpPut("{id}/pickup-time")]
+    [ProducesResponseType(typeof(PickupTimeResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<PickupTimeResponseDto>> SetPickupTime(
+        int id,
+        [FromBody] SetPickupTimeDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _orderService.SetOrderPickupTimeAsync(id, request, Actor, cancellationToken);
+            if (result is null)
+            {
+                return NotFound(new { error = $"Order with ID {id} not found" });
+            }
+
+            _logger.LogInformation(
+                "Order {OrderId} pickup time moved to {RequestedTime:o} by admin", id, result.RequestedTime);
+
+            return Ok(result);
+        }
+        catch (ShopClosedException ex)
+        {
+            // The same 409 checkout gives, for the same reason: a pickup time the kitchen
+            // cannot serve is a business refusal, not a fault.
+            return Conflict(new { error = "kitchen_closed", message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error moving the pickup time for order {OrderId}", id);
+            return StatusCode(500, new { error = "An error occurred while moving the pickup time" });
+        }
+    }
+
+    /// <summary>
     /// Updates the status of an order.
     /// </summary>
     /// <param name="id">Order ID.</param>

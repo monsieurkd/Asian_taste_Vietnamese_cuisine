@@ -171,6 +171,19 @@ public interface IOrderRepository
     Task<bool> SetOrderHeldAsync(int orderId, bool held, string? reason, string? actor, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Moves only an order's promised pickup time.
+    /// </summary>
+    /// <remarks>
+    /// A column-level write rather than <see cref="UpdateOrderAsync"/>, which does NOT
+    /// carry <c>requested_time</c> and would therefore silently drop the change — the
+    /// bug the items-edit path inherited from reusing it. This touches the one column
+    /// and nothing else, so moving a time cannot disturb a ticket's dishes, ticks or
+    /// hold.
+    /// </remarks>
+    /// <returns>False when the order does not exist.</returns>
+    Task<bool> SetOrderRequestedTimeAsync(int orderId, DateTime requestedTime, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Appends one line to an order's activity log.
     /// </summary>
     /// <remarks>

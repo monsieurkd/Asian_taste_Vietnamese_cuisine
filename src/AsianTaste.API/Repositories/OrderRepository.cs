@@ -4,7 +4,6 @@ using AsianTaste.API.Data;
 using AsianTaste.API.Models.Entities;
 using AsianTaste.API.Models.DTOs;
 using AsianTaste.API.Models.Enums;
-using AsianTaste.API.Models.DTOs;
 
 namespace AsianTaste.API.Repositories;
 
@@ -1027,6 +1026,30 @@ public class OrderRepository : IOrderRepository
                          updated_at = @Now
                    WHERE id = @OrderId",
                 new { OrderId = orderId, Held = held, Reason = reason, Actor = actor, Now = DateTime.UtcNow },
+                cancellationToken: cancellationToken));
+
+        return rows > 0;
+    }
+
+    public async Task<bool> SetOrderRequestedTimeAsync(int orderId, DateTime requestedTime, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+
+        // Normalise to UTC the way every other write does. A bare local string from a
+        // client arrives as Unspecified; treating it as UTC is the convention the DTO
+        // documents, and a Local kind must not be converted a second time.
+        var utc = requestedTime.Kind == DateTimeKind.Utc
+            ? requestedTime
+            : DateTime.SpecifyKind(requestedTime, DateTimeKind.Utc);
+
+        var rows = await connection.ExecuteAsync(
+            new CommandDefinition(
+                @"UPDATE orders
+                     SET requested_time = @RequestedTime,
+                         updated_at = @Now
+                   WHERE id = @OrderId",
+                new { OrderId = orderId, RequestedTime = utc, Now = DateTime.UtcNow },
                 cancellationToken: cancellationToken));
 
         return rows > 0;
