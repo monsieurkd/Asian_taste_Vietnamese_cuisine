@@ -1,0 +1,1530 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Board — Asian Taste staff console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* ==========================================================================
+     Design tokens — the same locked set as asian-taste-admin/src/index.css.
+     Cream content, deep-brown rail, maroon actions, gold highlight.
+     Display = Plus Jakarta Sans · Body = Manrope.
+     ========================================================================== */
+  :root {
+    --color-bg: #f5f0e6;
+    --color-surface: #ffffff;
+    --color-fg: #3c2a21;
+    --color-muted: color-mix(in oklch, var(--color-fg) 66%, var(--color-bg));
+    --color-border: #e8dcc8;
+    --color-accent: #8b3a3a;
+
+    --color-gold: #d4af37;
+    --color-deal: #c30139;
+    --color-spicy: #ff5722;
+    --color-gf: #4caf50;
+
+    --color-accent-soft: color-mix(in oklch, var(--color-accent) 12%, transparent);
+    --color-accent-line: color-mix(in oklch, var(--color-accent) 30%, var(--color-border));
+    --color-fg-soft: color-mix(in oklch, var(--color-fg) 6%, transparent);
+    --color-fg-line: color-mix(in oklch, var(--color-fg) 22%, transparent);
+    --color-gold-soft: color-mix(in oklch, var(--color-gold) 20%, transparent);
+    --color-on-dark: color-mix(in oklch, var(--color-surface) 84%, transparent);
+    --color-on-dark-dim: color-mix(in oklch, var(--color-surface) 64%, transparent);
+
+    --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-body: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+    --radius-sm: 8px;
+    --radius: 10px;
+    --radius-lg: 16px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; border-width: 0; border-style: solid; border-color: var(--color-border); }
+  html { -webkit-text-size-adjust: 100%; line-height: 1.5; }
+  body {
+    margin: 0; min-height: 100vh;
+    background-color: var(--color-bg); color: var(--color-fg);
+    font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); font-weight: 600; color: var(--color-fg); margin: 0; text-wrap: balance; }
+  p { margin: 0; text-wrap: pretty; }
+  ul, ol { margin: 0; padding: 0; list-style: none; }
+  a { color: inherit; text-decoration: inherit; }
+  img, svg { display: block; }
+  button { font: inherit; color: inherit; background-color: transparent; background-image: none; cursor: pointer; }
+  input, select, textarea { font: inherit; color: inherit; }
+  /* Author `display` rules (.modal-shell, .admin-account-menu) otherwise beat the UA
+     `[hidden] { display: none }`, so hidden dialogs leaked on load. */
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  .meta { font-size: 13px; color: var(--color-muted); }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  /* ─── console shell ───────────────────────────────────────────────────── */
+  .admin { min-height: 100vh; display: grid; grid-template-columns: 244px 1fr; background: var(--color-bg); }
+  .admin[data-rail='collapsed'] { grid-template-columns: 68px 1fr; }
+  @media (prefers-reduced-motion: no-preference) { .admin { transition: grid-template-columns 0.16s ease; } }
+
+  .rail-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .rail-toggle {
+    flex: none; display: grid; place-items: center; width: 32px; height: 32px;
+    border: 1px solid color-mix(in oklch, var(--color-surface) 24%, transparent);
+    border-radius: var(--radius-sm, 8px);
+    background: transparent; color: var(--color-on-dark-dim); cursor: pointer;
+  }
+  .rail-toggle:hover { color: var(--color-surface); border-color: color-mix(in oklch, var(--color-surface) 48%, transparent); }
+  .rail-toggle svg { width: 18px; height: 18px; }
+  .admin[data-rail='collapsed'] .admin-rail { padding: 18px 10px; gap: 18px; align-items: center; }
+  .admin[data-rail='collapsed'] .brand-text,
+  .admin[data-rail='collapsed'] .admin-nav a span,
+  .admin[data-rail='collapsed'] .admin-account .ac-text,
+  .admin[data-rail='collapsed'] .admin-account .ac-chev,
+  .admin[data-rail='collapsed'] .admin-back span { display: none; }
+  .admin[data-rail='collapsed'] .admin-nav a { justify-content: center; padding: 11px 0; }
+  .admin[data-rail='collapsed'] .admin-account-btn { justify-content: center; padding: 6px; }
+
+  .admin-rail {
+    background: var(--color-fg); color: var(--color-on-dark);
+    display: flex; flex-direction: column; gap: 22px; padding: 20px 16px;
+    position: sticky; top: 0; height: 100dvh; overflow-y: auto;
+  }
+  .brand { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand-text { display: flex; flex-direction: column; line-height: 1.05; }
+  .admin-rail .brand-name { color: var(--color-surface); font-weight: 700; font-size: 15px; }
+  .admin-rail .brand-tag { color: var(--color-on-dark-dim); font-size: 11px; }
+  .admin-rail .brand-mark { color: var(--color-gold); }
+  .brand-mark svg { width: 26px; height: 26px; }
+
+  .admin-nav { display: flex; flex-direction: column; gap: 4px; }
+  .admin-nav a {
+    display: flex; align-items: center; gap: 11px; padding: 11px 12px; border-radius: var(--radius-sm, 8px);
+    color: var(--color-on-dark); font-size: 14px; font-weight: 600; min-height: 44px;
+  }
+  .admin-nav a svg { width: 19px; height: 19px; flex: none; opacity: 0.85; }
+  .admin-nav a:hover { background: color-mix(in oklch, var(--color-surface) 10%, transparent); color: var(--color-surface); }
+  .admin-nav a[aria-current='page'] { background: var(--color-accent); color: var(--color-surface); }
+
+  .admin-rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+  .admin-account { position: relative; }
+  .admin-account-btn {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
+    border: 1px solid color-mix(in oklch, var(--color-surface) 14%, transparent);
+    border-radius: var(--radius-sm, 8px); cursor: pointer;
+    background: color-mix(in oklch, var(--color-surface) 8%, transparent);
+    color: var(--color-on-dark); text-align: left;
+  }
+  .admin-account-btn:hover { background: color-mix(in oklch, var(--color-surface) 14%, transparent); }
+  .admin-account-btn[aria-expanded='true'] { border-color: color-mix(in oklch, var(--color-gold) 55%, transparent); background: color-mix(in oklch, var(--color-surface) 14%, transparent); }
+  .admin-account-btn .ac-text { min-width: 0; flex: 1; }
+  .admin-account-btn strong { display: block; font-size: 13px; color: var(--color-surface); }
+  .admin-account-btn .ac-role { display: block; font-size: 11px; color: var(--color-on-dark-dim); }
+  .admin-account-btn .ac-chev { width: 16px; height: 16px; flex: none; color: var(--color-on-dark-dim); transition: transform 0.18s ease; }
+  .admin-account-btn .ac-chev svg { width: 100%; height: 100%; }
+  .admin-account-btn[aria-expanded='true'] .ac-chev { transform: rotate(180deg); }
+  .admin-account-menu {
+    position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 40;
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius);
+    box-shadow: 0 18px 44px color-mix(in oklch, var(--color-fg) 20%, transparent); padding: 6px;
+    display: flex; flex-direction: column;
+  }
+  .admin-account-menu button, .admin-account-menu a {
+    display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: var(--radius-sm, 7px);
+    font-size: 13px; font-weight: 700; color: var(--color-fg); text-align: left; text-decoration: none;
+  }
+  .admin-account-menu button:hover, .admin-account-menu a:hover { background: var(--color-fg-soft); color: var(--color-accent); }
+  .admin-account-menu .is-danger { color: var(--color-accent); }
+  .admin-account-menu svg { width: 16px; height: 16px; }
+  .admin-back {
+    display: flex; align-items: center; gap: 9px; padding: 9px 10px; min-height: 40px;
+    border: 1px solid color-mix(in oklch, var(--color-surface) 24%, transparent);
+    border-radius: var(--radius-sm, 8px);
+    font-size: 13px; font-weight: 700; color: var(--color-surface);
+  }
+  .admin-back svg { width: 17px; height: 17px; }
+  .admin-back:hover { background: var(--color-surface); border-color: var(--color-surface); color: var(--color-fg); }
+
+  .live-dot {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--color-gold);
+  }
+  .live-dot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--color-gf); animation: pulse 2s infinite; }
+  .live-dot.is-off::before { background: var(--color-deal); animation: none; }
+
+  /* The shop clock. The whole board runs on Adelaide time — say so once, plainly. */
+  .admin-clock {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--font-mono); font-size: 12.5px; font-weight: 700;
+    font-variant-numeric: tabular-nums; color: var(--color-fg);
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: 999px; padding: 6px 13px;
+  }
+
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--color-gold); color: var(--color-fg); font-weight: 800; font-size: 13px; flex: none;
+  }
+
+  .admin-main { min-width: 0; display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }
+  .admin-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 1.25rem;
+    padding: 14px clamp(18px, 3vw, 30px);
+    border-bottom: 1px solid var(--color-border);
+    background: color-mix(in oklch, var(--color-bg) 88%, transparent);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    position: sticky; top: 0; z-index: 30; flex: none;
+  }
+  .admin-top h1 { font-family: var(--font-display); font-size: clamp(21px, 2.4vw, 27px); font-weight: 600; margin: 0; }
+  .admin-top .sub { font-size: 12.5px; color: var(--color-muted); margin: 2px 0 0; }
+  .admin-top-actions { display: flex; align-items: center; gap: 12px; }
+  .admin-page { padding: clamp(14px, 2vw, 24px); display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; }
+
+  /* Board fills the console; each column scrolls on its own (the live-scroll fix). */
+  .admin-main:has(.board-page) > .admin-page.board-page { overflow: hidden; }
+
+  /* ─── panel / button / pill / input ─── */
+  .panel { background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; padding: 20px 22px 0; }
+  .panel-body { padding: 18px 20px; }
+  .panel-foot { padding: 18px 22px 20px; }
+  .row-between { display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; flex-wrap: wrap; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 44px; padding: 11px 20px; border-radius: var(--radius); border: 1px solid transparent;
+    font-size: 14px; font-weight: 700; letter-spacing: 0.01em; cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn[disabled], .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--color-accent); color: var(--color-surface); border-color: var(--color-accent); }
+  .btn-primary:hover { background: color-mix(in oklch, var(--color-accent) 84%, black); border-color: color-mix(in oklch, var(--color-accent) 84%, black); }
+  .btn-secondary { background: transparent; color: var(--color-fg); border-color: var(--color-fg-line); }
+  .btn-secondary:hover { border-color: var(--color-fg); background: var(--color-fg-soft); }
+  .btn-ghost { background: transparent; color: var(--color-fg); border-color: transparent; padding-inline: 10px; min-height: 38px; }
+  .btn-ghost:hover { color: var(--color-accent); }
+  .btn-block { width: 100%; }
+  .btn-link { background: none; border: 0; padding: 0; color: var(--color-accent); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .btn-link:hover { text-decoration: underline; }
+  .btn-sm { min-height: 38px; padding: 8px 14px; font-size: 13px; border-radius: var(--radius-sm, 8px); }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px;
+    background-color: var(--color-accent-soft); color: var(--color-accent);
+    font-size: 12px; font-weight: 800; letter-spacing: 0.03em;
+  }
+  .pill-neutral { background-color: var(--color-fg-soft); color: var(--color-muted); }
+
+  .input {
+    width: 100%; padding: 12px 14px; min-height: 46px; border: 1px solid var(--color-border);
+    border-radius: var(--radius); background: var(--color-surface); color: var(--color-fg); font: inherit; font-size: 15px;
+  }
+  .input:focus { outline: 2px solid var(--color-accent-soft); outline-offset: 0; border-color: var(--color-accent); }
+  .counter-note-field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+  .counter-note-field > span { font-weight: 700; color: var(--color-muted); }
+
+  /* Pickup editor — hour and minute lead, because that is what actually moves. */
+  .pick { display: flex; flex-direction: column; gap: 14px; }
+  .pick-now { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 12.5px; color: var(--color-muted); }
+  .pick-now-label { font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .pick-now strong { font-family: var(--font-mono); font-size: 14px; font-variant-numeric: tabular-nums; color: var(--color-fg); }
+  .pick-tz { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--color-muted); }
+  .pick-preview {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background-color: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: var(--radius); padding: 16px;
+  }
+  .pick-time { font-family: var(--font-display); font-size: 40px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .pick-meta { display: flex; align-items: baseline; gap: 7px; font-size: 12.5px; color: var(--color-muted); }
+  .pick-meta .dot { opacity: 0.55; }
+  .pick-was { margin: -6px 0 0; text-align: center; font-size: 12px; color: var(--color-muted); }
+  .pick-was strong { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: color-mix(in oklch, var(--color-fg) 78%, var(--color-muted)); }
+  .pick-quick { display: flex; flex-wrap: wrap; gap: 7px; }
+  .pick-chip {
+    flex: 1 1 auto; min-width: 68px; padding: 9px 10px; border-radius: 8px; cursor: pointer;
+    background-color: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-fg);
+    font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+  }
+  .pick-chip:hover { border-color: var(--color-accent); background-color: var(--color-accent-soft); }
+  .pick-steppers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pick-step { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .pick-step-label { font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-muted); }
+  .pick-step-ctl { display: flex; align-items: center; gap: 10px; }
+  .pick-round {
+    width: 46px; height: 46px; flex: none; display: grid; place-items: center; border-radius: 999px; cursor: pointer;
+    background-color: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-fg);
+    font-size: 22px; font-weight: 700; line-height: 1; transition: border-color 0.12s ease, background-color 0.12s ease;
+  }
+  .pick-round:hover { border-color: var(--color-accent); background-color: var(--color-accent-soft); }
+  .pick-step-val { min-width: 52px; text-align: center; font-family: var(--font-mono); font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .pick-step-val .pick-ampm { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-muted); margin-left: 3px; }
+  .pick-dayrow { display: flex; }
+  .pick-dayrow button { flex: 1; }
+  .pick-hint { margin: 0; font-size: 12px; color: var(--color-muted); }
+
+  .icon-btn {
+    display: inline-grid; place-items: center; width: 42px; height: 42px; flex: none;
+    background: transparent; border: 1px solid var(--color-border); border-radius: var(--radius);
+    color: var(--color-fg); cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .icon-btn:hover { border-color: var(--color-fg); background: var(--color-fg-soft); }
+  .icon-btn svg { width: 19px; height: 19px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px);
+    background: var(--color-fg); color: var(--color-surface); padding: 13px 20px; border-radius: var(--radius);
+    font-size: 14px; font-weight: 600; box-shadow: 0 18px 44px color-mix(in oklch, var(--color-fg) 20%, transparent);
+    z-index: 70; opacity: 0; visibility: hidden;
+    transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease;
+    max-width: calc(100vw - 40px); text-align: center;
+  }
+  .toast.is-open { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-gf) 55%, transparent); }
+    70% { box-shadow: 0 0 0 8px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+
+  /* ==========================================================================
+     The board. One compact toolbar, then three stage columns that own their
+     own scroll. Nothing else scrolls, so the last column never clips.
+     ========================================================================== */
+  .board-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px 16px;
+    flex-wrap: wrap; flex: none;
+  }
+  .seg-sm { display: inline-flex; flex-wrap: wrap; gap: 4px; background: var(--color-fg-soft); padding: 4px; border-radius: 12px; }
+  .seg-sm button {
+    min-height: 38px; padding: 8px 14px; border: 0; background: transparent; border-radius: 9px;
+    font-size: 13px; font-weight: 700; color: var(--color-muted); white-space: nowrap; cursor: pointer;
+    display: inline-flex; align-items: center;
+  }
+  .seg-sm button:hover { color: var(--color-fg); }
+  .seg-sm button[aria-pressed='true'] { background: var(--color-surface); color: var(--color-accent); box-shadow: 0 1px 2px color-mix(in oklch, var(--color-fg) 9%, transparent); }
+  .seg-count { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 800; opacity: 0.72; font-variant-numeric: tabular-nums; }
+
+  .board-metrics { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--color-muted); }
+  .board-metrics .bm { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+  .board-metrics .bm strong { color: var(--color-fg); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .board-metrics .bm.is-late strong { color: var(--color-deal); }
+
+  .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; flex: 1; min-height: 0; align-items: stretch; }
+
+  .col {
+    display: flex; flex-direction: column; min-height: 0;
+    background: color-mix(in oklch, var(--color-bg) 55%, var(--color-surface));
+    border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  }
+  .col.drop-target { border-color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-accent); }
+  .col-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--color-border); flex: none; }
+  .col-head h3 { font-size: 14px; letter-spacing: 0.01em; }
+  .col-head .count {
+    font-size: 12px; font-weight: 800; color: var(--color-muted);
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 999px; padding: 2px 9px;
+    font-variant-numeric: tabular-nums;
+  }
+  .col-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .board-empty { border: 1px dashed var(--color-border); border-radius: var(--radius); padding: 18px; text-align: center; color: var(--color-muted); font-size: 13px; }
+
+  /* ─── the order card ─── */
+  .ticket {
+    position: relative; background: var(--color-surface); border: 1px solid var(--color-border);
+    border-left: 3px solid transparent; border-radius: var(--radius);
+    padding: 9px 11px 10px; display: flex; flex-direction: column; gap: 7px;
+    box-shadow: 0 1px 2px color-mix(in oklch, var(--color-fg) 5%, transparent);
+  }
+  .ticket.late { border-left-color: var(--color-deal); }
+  .ticket.warn { border-left-color: var(--color-gold); }
+  .ticket.held { border-style: dashed; border-left-style: solid; background: color-mix(in oklch, var(--color-gold) 6%, var(--color-surface)); }
+  .ticket.is-source { opacity: 0.35; }
+
+  .t-head { display: flex; align-items: center; gap: 8px; }
+  .t-grip {
+    flex: none; width: 24px; height: 28px; display: grid; place-items: center;
+    color: var(--color-muted); border-radius: 6px; cursor: grab; touch-action: none;
+  }
+  .t-grip:hover { background: var(--color-fg-soft); color: var(--color-fg); }
+  .t-grip:active { cursor: grabbing; }
+  .t-grip svg { width: 15px; height: 15px; }
+  .t-code { font-family: var(--font-mono); font-weight: 700; font-size: 14px; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+  .t-type { margin-left: auto; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-muted); white-space: nowrap; }
+
+  .t-main { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .t-who { min-width: 0; font-size: 13.5px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-who .t-phone { font-weight: 500; font-size: 11.5px; color: var(--color-muted); margin-left: 5px; }
+  .t-total { flex: none; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+  .t-sub { display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: var(--color-muted); flex-wrap: wrap; }
+  .t-sub .dot { opacity: 0.55; }
+
+  /* Pickup time — the one line the kitchen runs on, and the way to edit it. */
+  .t-time {
+    display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
+    padding: 8px 10px; border-radius: 8px; border: 1px solid transparent;
+    background-color: var(--color-fg-soft); color: var(--color-fg);
+    font-size: 13px; font-weight: 700; text-align: left; cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+  }
+  .t-time:hover { background-color: color-mix(in oklch, var(--color-fg) 12%, transparent); }
+  .t-time > svg { width: 15px; height: 15px; flex: none; color: var(--color-muted); }
+  .t-time .t-time-val { font-variant-numeric: tabular-nums; }
+  .t-time .t-time-day {
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    color: color-mix(in oklch, var(--color-gold) 58%, var(--color-fg));
+    background-color: var(--color-gold-soft); border-radius: 999px; padding: 2px 7px;
+  }
+  .t-time .t-time-rel {
+    margin-left: auto; font-size: 11px; font-weight: 800; letter-spacing: 0.03em;
+    text-transform: uppercase; color: var(--color-muted);
+  }
+  .t-time .t-time-edit { width: 13px; height: 13px; opacity: 0.5; }
+  .t-time:hover .t-time-edit { opacity: 1; }
+  .t-time.is-warn { background-color: var(--color-gold-soft); }
+  .t-time.is-warn .t-time-rel { color: color-mix(in oklch, var(--color-gold) 55%, var(--color-fg)); }
+  .t-time.is-late { background-color: color-mix(in oklch, var(--color-deal) 13%, transparent); border-color: color-mix(in oklch, var(--color-deal) 32%, transparent); }
+  .t-time.is-late .t-time-rel { color: var(--color-deal); }
+
+  .t-flags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .t-flag { font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
+  .t-flag.hold { background-color: color-mix(in oklch, var(--color-gold) 18%, transparent); color: color-mix(in oklch, var(--color-fg) 80%, var(--color-gold)); }
+  .t-flag.pay { background-color: var(--color-deal); color: var(--color-surface); }
+
+  .t-note {
+    display: flex; gap: 6px; align-items: flex-start;
+    font-size: 12px; line-height: 1.4; padding: 6px 9px; border-radius: 7px;
+    background-color: var(--color-fg-soft);
+  }
+  .t-note.has-allergy { background-color: color-mix(in oklch, var(--color-deal) 10%, transparent); border-left: 3px solid var(--color-deal); color: color-mix(in oklch, var(--color-deal) 82%, var(--color-fg)); }
+  .t-note .t-note-label { font-weight: 800; flex: none; }
+  .t-note .allergy { font-weight: 800; }
+
+  .t-items { display: flex; flex-direction: column; gap: 1px; border-top: 1px dashed var(--color-border); padding-top: 6px; }
+  .dish { display: flex; flex-direction: column; }
+  .dish-row { display: flex; align-items: flex-start; gap: 4px; }
+  .dish-tap {
+    flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; text-align: left;
+    padding: 6px 7px; min-height: 36px; border-radius: 7px; font: inherit; color: inherit; cursor: pointer;
+  }
+  .dish-tap:hover { background-color: var(--color-fg-soft); }
+  .dish-qty { flex: none; font-weight: 800; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .dish-name { font-size: 12.5px; line-height: 1.3; }
+  .dish-note {
+    flex: none; width: 30px; height: 30px; margin-top: 3px; display: grid; place-items: center;
+    border-radius: 7px; color: var(--color-muted);
+  }
+  .dish-note:hover { background-color: var(--color-fg-soft); color: var(--color-fg); }
+  .dish-note.has-note { color: var(--color-accent); background-color: var(--color-accent-soft); }
+  .dish-note svg { width: 15px; height: 15px; }
+  .dish-detail { font-size: 11px; color: var(--color-muted); line-height: 1.35; padding: 0 7px 3px; }
+  .dish-detail .k { font-weight: 700; color: color-mix(in oklch, var(--color-fg) 82%, var(--color-bg)); }
+  .dish.is-done .dish-name,
+  .dish.is-done .dish-detail { text-decoration: line-through; color: var(--color-muted); }
+
+  .t-alldone { margin: 6px 0 0; font-size: 11.5px; font-weight: 800; color: color-mix(in oklch, var(--color-gf) 72%, var(--color-fg)); }
+
+  .t-foot { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--color-border); padding-top: 8px; margin-top: 1px; }
+  .btn-advance { flex: 1; background-color: var(--color-accent-soft); color: var(--color-accent); border-color: var(--color-accent-line); }
+  .btn-advance:hover { background-color: var(--color-accent); color: var(--color-surface); border-color: var(--color-accent); }
+  .t-act {
+    min-height: 38px; padding: 8px 11px; font-size: 12.5px; font-weight: 700;
+    color: var(--color-muted); border-radius: var(--radius-sm, 8px); border: 1px solid transparent;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .t-act:hover { color: var(--color-fg); background-color: var(--color-fg-soft); }
+  .t-act svg { width: 15px; height: 15px; flex: none; }
+
+  /* ─── drag & drop ─── */
+  .drag-ghost {
+    position: fixed; z-index: 120; pointer-events: none; margin: 0;
+    box-shadow: 0 22px 46px color-mix(in oklch, var(--color-fg) 28%, transparent);
+    transform: rotate(1.2deg); opacity: 0.96;
+  }
+  .drop-slot { flex: none; border: 2px dashed var(--color-accent-line); border-radius: var(--radius); background-color: var(--color-accent-soft); min-height: 54px; }
+  body.is-dragging { cursor: grabbing; }
+  body.is-dragging * { cursor: grabbing !important; }
+
+  /* ─── dialogs ─── */
+  .modal-scrim { position: fixed; inset: 0; z-index: 60; background-color: color-mix(in oklch, var(--color-fg) 45%, transparent); border: 0; cursor: default; }
+  .modal-shell { position: fixed; inset: 0; z-index: 61; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; pointer-events: none; }
+  .modal-panel { pointer-events: auto; width: 100%; max-width: 520px; margin: auto; }
+  .modal-panel:focus { outline: none; }
+  body.is-locked { overflow: hidden; }
+
+  .boh-held { margin: 0; padding: 8px 10px; border-radius: 7px; background-color: color-mix(in oklch, var(--color-gold) 16%, transparent); border-left: 3px solid var(--color-gold); font-size: 12.5px; line-height: 1.4; }
+
+  /* ─── responsive ─── */
+  @media (max-width: 900px) {
+    .admin { grid-template-columns: 1fr; }
+    .admin-rail { position: sticky; top: 0; z-index: 50; height: auto; flex-direction: row; align-items: center; gap: 16px; padding: 12px 16px; overflow-x: auto; }
+    .admin-rail .admin-nav { flex-direction: row; gap: 6px; }
+    .admin-nav a span { display: none; }
+    .admin-rail-foot { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
+    .admin-account-btn { padding: 6px; border-color: transparent; background: transparent; }
+    .admin-account-btn .ac-text { display: none; }
+    .admin-account-menu { position: fixed; left: auto; right: 12px; top: 64px; bottom: auto; min-width: 200px; }
+    .admin-back span { display: none; }
+    .live-dot { display: none; }
+    .admin-main { height: auto; min-height: 100dvh; overflow: visible; }
+    .admin-main:has(.board-page) > .admin-page.board-page { overflow: visible; }
+  }
+  @media (max-width: 700px) {
+    .board { grid-template-columns: 1fr; flex: none; }
+    .col { max-height: 68vh; }
+  }
+</style>
+</head>
+<body>
+<div class="admin" data-rail="expanded" id="admin">
+
+  <aside class="admin-rail">
+    <div class="rail-top">
+      <a class="brand" href="index.html">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z" />
+            <path d="M9 7.5c0-1.3 1.1-1.7 1.1-2.8M12.5 7.5c0-1.3 1.1-1.7 1.1-2.8" />
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">Asian Taste</span>
+          <span class="brand-tag">Staff console</span>
+        </span>
+      </a>
+      <button type="button" class="rail-toggle" id="railToggle" aria-expanded="true" aria-controls="adminNav" title="Collapse the sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path id="railChevron" d="m14 6-6 6 6 6" />
+        </svg>
+        <span class="sr-only">Collapse the sidebar</span>
+      </button>
+    </div>
+
+    <nav class="admin-nav" id="adminNav" aria-label="Staff sections">
+      <a href="index.html" title="Overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5" /><path d="M6 10v9h12v-9" /></svg><span>Overview</span>
+      </a>
+      <a href="kitchen-board.html" title="Board" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+        </svg><span>Board</span>
+      </a>
+      <a href="counter-order-pos.html" title="Counter">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" /><path d="M3.5 9h17M8 4.5v15" />
+        </svg><span>Counter</span>
+      </a>
+      <a href="orders.html" title="Orders">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="6" r="1" /><circle cx="4" cy="12" r="1" /><circle cx="4" cy="18" r="1" />
+        </svg><span>Orders</span>
+      </a>
+      <a href="menu.html" title="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM11 4h7.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H11" />
+        </svg><span>Menu</span>
+      </a>
+    </nav>
+
+    <div class="admin-rail-foot">
+      <span class="live-dot" id="liveDot" title="Kitchen online">Kitchen online</span>
+
+      <div class="admin-account">
+        <button type="button" class="admin-account-btn" id="accountBtn" aria-expanded="false" aria-haspopup="menu">
+          <span class="avatar" aria-hidden="true">LT</span>
+          <span class="ac-text"><strong>Linh Tran</strong><span class="ac-role">Manager</span></span>
+          <span class="ac-chev">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9.5 6 5.5 6-5.5" /></svg>
+          </span>
+        </button>
+        <div class="admin-account-menu" id="accountMenu" role="menu" hidden>
+          <a role="menuitem" class="is-danger" href="login.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5" /><path d="M4 12h10M11 8l4 4-4 4" /></svg>
+            Sign out
+          </a>
+        </div>
+      </div>
+
+      <a class="admin-back" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5" /><path d="M4 12h10M11 8l4 4-4 4" /></svg>
+        <span>Back to site</span>
+      </a>
+    </div>
+  </aside>
+
+  <div class="admin-main">
+    <header class="admin-top">
+      <div>
+        <h1 id="pageTitle">Board</h1>
+        <p class="sub" id="pageSub">Drag an order between its stages, tap a dish to strike it through, tap a pickup time to change it.</p>
+      </div>
+      <div class="admin-top-actions">
+        <span class="admin-clock" id="adminClock" title="The shop clock — Australia/Adelaide">Adelaide —</span>
+        <span class="live-dot" id="connDot" title="The screen is live">Live</span>
+      </div>
+    </header>
+
+    <div class="admin-page board-page" data-od-id="board">
+
+      <section class="board-bar" data-od-id="board-bar">
+        <div class="seg-sm" id="boardFilters" role="group" aria-label="Filter the board"></div>
+        <div class="board-metrics" id="boardMetrics" aria-live="polite"></div>
+      </section>
+
+      <div class="board" data-od-id="board-columns" id="boardColumns"></div>
+    </div>
+  </div>
+</div>
+
+<!-- one shell, three dialogs: Hold · Dish note · Pickup time -->
+<button type="button" class="modal-scrim" id="modalScrim" aria-label="Close" hidden></button>
+<div class="modal-shell" id="modalShell" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+  <div class="panel modal-panel" id="modalPanel" tabindex="-1">
+    <div class="panel-head">
+      <h3 id="modalTitle">Dialog</h3>
+      <button type="button" class="icon-btn" id="modalClose" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+    <div class="panel-body" id="modalBody"></div>
+    <div class="panel-foot row-between" id="modalFoot"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ─── helpers ─── */
+  var AUD = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
+  function money(n) { return AUD.format(n || 0); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function num(n) { return new Intl.NumberFormat("en-AU").format(n || 0); }
+  function pad(n, len) { n = String(n); while (n.length < len) n = "0" + n; return n; }
+
+  /* ─── Adelaide time ───────────────────────────────────────────────────────
+     The shop runs on Australia/Adelaide. Every clock the board prints is
+     wall-clock Adelaide, whatever timezone the tablet is set to, so a pickup
+     promise reads the same in the kitchen as it does on the counter. */
+  var TZ = "Australia/Adelaide";
+  var TZ_TIME = new Intl.DateTimeFormat("en-AU", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+  var TZ_DAY = new Intl.DateTimeFormat("en-AU", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" });
+  var TZ_PARTS = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  function fmtTime(ms) { return TZ_TIME.format(new Date(ms)).replace(/[\u202f\u00a0]/g, " "); }
+  function tzParts(ms) {
+    var o = {};
+    TZ_PARTS.formatToParts(new Date(ms)).forEach(function (p) { o[p.type] = p.value; });
+    return { year: +o.year, month: +o.month, day: +o.day, hour: (+o.hour) % 24, minute: +o.minute };
+  }
+  /* offset (ms) that turns a UTC instant into Adelaide wall-clock, DST-safe */
+  function tzOffsetMs(ms) {
+    var t = Math.round(ms / 60000) * 60000, p = tzParts(t);
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - t;
+  }
+  function adelaideISO(y, mo, d, h, mi) {
+    var guess = Date.UTC(y, mo - 1, d, h, mi, 0, 0);
+    var off = tzOffsetMs(guess);
+    var inst = guess - off;
+    var off2 = tzOffsetMs(inst);
+    if (off2 !== tzOffsetMs(guess)) inst = guess - off2;
+    return new Date(inst).toISOString();
+  }
+  function calendarDayDiff(ms) {
+    var a = tzParts(Date.now()), b = tzParts(ms);
+    return Math.round((Date.UTC(b.year, b.month - 1, b.day) - Date.UTC(a.year, a.month - 1, a.day)) / 86400000);
+  }
+  function dayLabel(ms) {
+    var d = calendarDayDiff(ms);
+    if (d === 0) return "Today";
+    if (d === 1) return "Tomorrow";
+    if (d === -1) return "Yesterday";
+    return TZ_DAY.format(new Date(ms));
+  }
+  function relLabel(ms) {
+    var day = calendarDayDiff(ms);
+    var u = Math.round((ms - Date.now()) / 60000);
+    if (day > 0) {
+      if (u < 60 * 24) return "in " + Math.max(1, Math.round(u / 60)) + " hr";
+      return "in " + day + " day" + (day > 1 ? "s" : "");
+    }
+    if (day < 0) return Math.abs(day) + " day" + (Math.abs(day) > 1 ? "s" : "") + " late";
+    if (u < -1) return Math.abs(u) + " min late";
+    if (u <= 0) return "due now";
+    if (u < 60) return "in " + u + " min";
+    return "in " + Math.round(u / 60) + " hr";
+  }
+
+  /* ─── status vocabulary (mirrors shared/lib/orderStatus) ─── */
+  var STAGES = ["placed", "confirmed", "ready"];
+  var STAGE_META = {
+    placed:    { key: "placed",    label: "New",     api: "Pending" },
+    confirmed: { key: "confirmed", label: "Cooking", api: "Confirmed" },
+    ready:     { key: "ready",     label: "Ready",   api: "Ready" }
+  };
+  var LOOKUP = { pending: "placed", placed: "placed", new: "placed", confirmed: "confirmed", preparing: "confirmed", ready: "ready" };
+  function stageOf(s) { return LOOKUP[String(s || "").trim().toLowerCase()] || "placed"; }
+  /* The verb belongs to where the order IS, not where it is going. */
+  var VERB = { placed: "Accept", confirmed: "Mark ready", ready: "Mark collected" };
+  function advanceOf(t) {
+    var from = stageOf(t.status);
+    if (from === "ready") return { to: "collected", stage: null, label: "Mark collected" };
+    var to = STAGES[STAGES.indexOf(from) + 1];
+    return { to: STAGE_META[to].api, stage: to, label: VERB[from] };
+  }
+
+  /* Order code — DD.MM.TT.NNN.  TT: 00 dine-in · 01 takeaway · 02 delivery.
+     NNN is the running order number for the day, so two orders never read alike. */
+  var TYPE_CODE = { DineIn: "00", Takeaway: "01", Delivery: "02" };
+  var TYPE_LABEL = { DineIn: "Dine in", Takeaway: "Takeaway", Delivery: "Delivery" };
+  function orderCode(t) {
+    var d = tzParts(t.createdMs); /* the shop's calendar day, not the device's */
+    return pad(d.day, 2) + "." + pad(d.month, 2) + "." + (TYPE_CODE[t.orderType] || "01") + "." + pad(t.seq, 3);
+  }
+
+  /* Urgency comes from the promised pickup time — every order now carries one,
+     so "late" means the same thing to the wok and to the front counter. */
+  var DUE_SOON_MINUTES = 10;
+  function minutesUntilWanted(t) { return Math.round((t.wantedAt - Date.now()) / 60000); }
+  function urgencyOf(t) {
+    var u = minutesUntilWanted(t);
+    if (u < 0) return "late";
+    if (u <= DUE_SOON_MINUTES) return "warning";
+    return "normal";
+  }
+
+  /* Money, as the shop needs to read it. */
+  function readPayment(status, method) {
+    var s = String(status || "").toLowerCase(), m = String(method || "").toLowerCase();
+    if (s === "succeeded") return { label: "Paid online", attention: false };
+    if (s === "failed") return { label: "Declined", attention: true };
+    if (s === "processing" || s === "requiresaction") return { label: "Payment unfinished", attention: true };
+    if (m === "cash") return { label: "Pay at counter", attention: false };
+    return { label: "Payment not taken", attention: true };
+  }
+
+  /* ─── board data (demo board — real menu lines, AUD, en-AU) ─── */
+  var NOW = Date.now();
+  function item(id, name, qty, opts) {
+    opts = opts || {};
+    return {
+      id: id, name: name, quantity: qty,
+      modifiers: opts.modifiers || null,
+      specialInstructions: opts.special || null,
+      kitchenNote: opts.note || null,
+      noteBy: opts.note ? "Linh Tran" : null,
+      isCompleted: !!opts.done
+    };
+  }
+
+  var TICKETS = [
+    { id: 43, seq: 43, orderType: "Takeaway", status: "Confirmed", customerName: "Marcus Lee", customerPhone: "0466 330 512",
+      ageMinutes: 28, isScheduled: false, paymentStatus: "failed", paymentMethod: "card", allergyDeclaration: null, notes: null,
+      isHeld: false, items: [
+        item(101, "Mix veg in cashew nut (Beef)", 1, { note: "out of beansprouts, used cabbage" }),
+        item(102, "Honey Chicken", 1, { done: true }),
+        item(103, "Spring roll (serve of 3)", 2)
+      ] },
+    { id: 44, seq: 44, orderType: "Takeaway", status: "Confirmed", customerName: "Tom Whitfield", customerPhone: "0455 903 121",
+      ageMinutes: 17, isScheduled: false, paymentStatus: "succeeded", paymentMethod: "card", allergyDeclaration: null, notes: "No cutlery",
+      isHeld: false, items: [
+        item(104, "Crispy Pork (Roasted Pork) Banh Mi", 2, { done: true }),
+        item(105, "Pho - Beef noodle soup (Combo)", 1, { modifiers: "Extra soup", note: "extra broth on the side" }),
+        item(106, "Rice Bowl - Lemongrass Tofu", 1)
+      ] },
+    { id: 45, seq: 45, orderType: "Takeaway", status: "Confirmed", customerName: "Sofia Alvarez", customerPhone: "0433 771 208",
+      ageMinutes: 14, isScheduled: false, paymentStatus: "succeeded", paymentMethod: "card", allergyDeclaration: null, notes: null,
+      isHeld: true, heldReason: "waiting on the spring rolls", heldBy: "Linh Tran", items: [
+        item(107, "Spring roll (serve of 3)", 2),
+        item(108, "Chicken noodle soup", 1)
+      ] },
+    { id: 46, seq: 46, orderType: "DineIn", tableNumber: "6", status: "Confirmed", customerName: "Priya Nair", customerPhone: "0421 664 007",
+      ageMinutes: 9, isScheduled: false, paymentStatus: "succeeded", paymentMethod: "card", allergyDeclaration: null, notes: null,
+      isHeld: false, items: [
+        item(109, "Cold rolls (serve of 4)", 3, { done: true }),
+        item(110, "Pad Thai", 1, { special: "No coriander" })
+      ] },
+    { id: 47, seq: 47, orderType: "Takeaway", status: "Ready", customerName: "Noah Bennett", customerPhone: "0488 210 664",
+      ageMinutes: 8, isScheduled: false, paymentStatus: "succeeded", paymentMethod: "card", allergyDeclaration: null, notes: null,
+      isHeld: false, items: [
+        item(111, "Pad Thai", 1, { modifiers: "Extra protein", done: true }),
+        item(112, "Crispy Pork (Roasted Pork) Banh Mi", 1, { done: true })
+      ] },
+    { id: 48, seq: 48, orderType: "DineIn", tableNumber: "2", status: "Ready", customerName: "Grace Lim", customerPhone: "0410 998 320",
+      ageMinutes: 6, isScheduled: false, paymentStatus: "succeeded", paymentMethod: "card", allergyDeclaration: null, notes: null,
+      isHeld: false, items: [
+        item(113, "Salt & Pepper Squid / Fish", 1, { done: true }),
+        item(114, "Steamed rice", 2, { done: true }),
+        item(115, "Green bean in soy and garlic", 1, { done: true })
+      ] },
+    { id: 49, seq: 49, orderType: "DineIn", tableNumber: "3", status: "Pending", customerName: "Marisol Reyes", customerPhone: "0400 118 273",
+      ageMinutes: 5, isScheduled: false, paymentStatus: null, paymentMethod: "cash", allergyDeclaration: null, notes: "Extra napkins please",
+      isHeld: false, items: [
+        item(116, "Pad Thai", 1, { modifiers: "Extra protein" }),
+        item(117, "Satay skewers (serve of 3)", 2)
+      ] },
+    { id: 50, seq: 50, orderType: "Takeaway", status: "Pending", customerName: "Daniel Okafor", customerPhone: "0412 555 019",
+      ageMinutes: 2, isScheduled: false, paymentStatus: "succeeded", paymentMethod: "card", allergyDeclaration: null, notes: null,
+      isHeld: false, items: [
+        item(118, "Pho - Beef noodle soup (1 choice)", 2, { special: "No onion" }),
+        item(119, "Cold rolls (serve of 4)", 1)
+      ] },
+    { id: 51, seq: 51, orderType: "Delivery", status: "Pending", customerName: "Aisha Rahman", customerPhone: "0431 220 884",
+      ageMinutes: 1, isScheduled: true, wantedMinutes: 45, paymentStatus: "succeeded", paymentMethod: "card",
+      allergyDeclaration: "Peanuts", notes: "Leave at the door",
+      isHeld: false, items: [
+        item(120, "Salt & Pepper Tofu", 1, { special: "No peanuts" }),
+        item(121, "Homemade Dimsim (serve of 3)", 1)
+      ] },
+    /* The rare pre-order: taken today, picked up tomorrow. */
+    { id: 52, seq: 52, orderType: "Takeaway", status: "Pending", customerName: "Helen Nguyen", customerPhone: "0402 776 118",
+      ageMinutes: 3, isScheduled: true, tomorrowClock: [11, 30], paymentStatus: "succeeded", paymentMethod: "card",
+      allergyDeclaration: null, notes: "Birthday — keep the sauce separate",
+      isHeld: false, items: [
+        item(122, "Pad Thai", 4, { special: "Mild" }),
+        item(123, "Spring roll (serve of 3)", 2)
+      ] }
+  ];
+
+  /* unit prices from the printed menu — display only, the server re-prices */
+  var PRICE_BY_NAME = {
+    "Cold rolls (serve of 4)": 8.50, "Homemade Dimsim (serve of 3)": 6.00, "Satay skewers (serve of 3)": 7.80,
+    "Spring roll (serve of 3)": 5.80, "Pho - Beef noodle soup (1 choice)": 15.50, "Pho - Beef noodle soup (Combo)": 16.50,
+    "Pad Thai": 16.00, "Crispy Pork (Roasted Pork) Banh Mi": 8.50, "Rice Bowl - Lemongrass Tofu": 14.50,
+    "Salt & Pepper Tofu": 16.50, "Chicken noodle soup": 15.50, "Mix veg in cashew nut (Beef)": 19.80,
+    "Honey Chicken": 18.00, "Salt & Pepper Squid / Fish": 18.50, "Steamed rice": 2.00,
+    "Green bean in soy and garlic": 15.50
+  };
+  var MOD_BUMP = { "Extra protein": 4.00, "Extra soup": 3.00, "Extra rice/noodle": 2.00, "Extra sauce": 2.00 };
+
+  function lineUnit(i) {
+    var unit = PRICE_BY_NAME[i.name] || 0;
+    if (i.modifiers && MOD_BUMP[i.modifiers]) unit += MOD_BUMP[i.modifiers];
+    return unit;
+  }
+  function totalOf(t) {
+    return Math.round(t.items.reduce(function (s, i) { return s + lineUnit(i) * i.quantity; }, 0) * 100) / 100;
+  }
+  function itemCount(t) { return t.items.reduce(function (s, i) { return s + i.quantity; }, 0); }
+
+  /* Every order arrives with a pickup time. A counter order gets a prep estimate
+     (created + 20 min); a booked order keeps its promised slot; a rare pre-order
+     is pinned to a wall-clock tomorrow. */
+  TICKETS.forEach(function (t) {
+    t.createdMs = NOW - t.ageMinutes * 60000;
+    t.total = totalOf(t);
+    if (t.tomorrowClock) {
+      var a = tzParts(NOW), d = new Date(Date.UTC(a.year, a.month - 1, a.day + 1));
+      t.wantedAt = new Date(adelaideISO(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), t.tomorrowClock[0], t.tomorrowClock[1])).getTime();
+    } else if (t.isScheduled) {
+      t.wantedAt = t.createdMs + (t.wantedMinutes || 45) * 60000;
+    } else {
+      t.wantedAt = t.createdMs + 20 * 60000;
+    }
+    t.pos = t.id; /* arrival order → oldest first inside a column */
+  });
+
+  /* Counts LINES, not quantities — a line is binary (done / not done). */
+  function progressOf(t) {
+    return { done: t.items.filter(function (i) { return i.isCompleted; }).length, total: t.items.length };
+  }
+  function remainingOf(t) { return t.items.filter(function (i) { return !i.isCompleted; }).length; }
+
+  /* ─── shared board store (localStorage) ───────────────────────────────────
+     The board owns this store; the counter only ever posts new orders to an
+     inbox. That one-way flow means a refresh keeps everything — drags, ticks,
+     holds, pickup edits, collected orders — and a counter order taken in another
+     tab lands on the line without either screen clobbering the other. */
+  var STORE_KEY = "asiantaste.admin.board.v1";
+  var INBOX_KEY = "asiantaste.admin.inbox.v1";
+
+  function readJSON(key) { try { var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
+  function writeJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+
+  function sameShopDay(a, b) {
+    if (!a) return false;
+    var x = tzParts(a), y = tzParts(b);
+    return x.year === y.year && x.month === y.month && x.day === y.day;
+  }
+
+  function freshStore() {
+    return { orders: TICKETS, history: [], collectedToday: 42, revenueToday: 1486.50, seq: 52, nextId: 900, savedAt: NOW };
+  }
+
+  function normalizeTicket(t) {
+    if (t.createdMs == null) t.createdMs = Date.now() - (t.ageMinutes || 0) * 60000;
+    if (t.wantedAt == null) t.wantedAt = t.createdMs + 20 * 60000;
+    if (t.pos == null) t.pos = t.id;
+    if (t.total == null) t.total = totalOf(t);
+    t.ageMinutes = Math.max(0, Math.round((Date.now() - t.createdMs) / 60000));
+    return t;
+  }
+
+  function save() {
+    writeJSON(STORE_KEY, {
+      orders: state.tickets, history: state.history,
+      collectedToday: state.collectedToday, revenueToday: state.revenueToday,
+      seq: state.seq, nextId: state.nextId, savedAt: Date.now()
+    });
+  }
+
+  function loadStore() {
+    var s = readJSON(STORE_KEY);
+    /* A new trading day starts clean, the way a real till rolls over. */
+    if (!s || !s.orders || !sameShopDay(s.savedAt, Date.now())) {
+      s = freshStore();
+      writeJSON(STORE_KEY, s);
+    }
+    state.tickets = s.orders.map(normalizeTicket);
+    state.history = s.history || [];
+    state.collectedToday = s.collectedToday || 0;
+    state.revenueToday = s.revenueToday || 0;
+    state.seq = s.seq || 0;
+    state.nextId = s.nextId || 900;
+  }
+
+  /* Counter orders arrive here. The board assigns the board id and keeps the
+     order number the counter promised. */
+  function drainInbox() {
+    var inbox = readJSON(INBOX_KEY);
+    if (!inbox || !inbox.length) return false;
+    var s = readJSON(STORE_KEY);
+    if (!s || !s.orders) s = freshStore();
+    inbox.forEach(function (tk) {
+      tk.id = s.nextId++;
+      tk.seq = tk.seq || (s.seq + 1);
+      s.seq = Math.max(s.seq, tk.seq);
+      normalizeTicket(tk);
+      tk._isNew = true;
+      s.orders.push(tk);
+    });
+    s.savedAt = Date.now();
+    writeJSON(STORE_KEY, s);
+    writeJSON(INBOX_KEY, []);
+    return true;
+  }
+
+  /* ─── state ─── */
+  var state = { filter: "live", tickets: TICKETS, history: [], collectedToday: 42, revenueToday: 1486.50, seq: 52, nextId: 900 };
+  var FILTERS = [
+    { id: "live", label: "On the line" },
+    { id: "late", label: "Late" },
+    { id: "held", label: "Held" },
+    { id: "all", label: "Everything" }
+  ];
+  function shownTickets() {
+    return state.tickets.filter(function (t) {
+      switch (state.filter) {
+        case "live": return !t.isHeld;
+        case "late": return !t.isHeld && urgencyOf(t) === "late";
+        case "held": return t.isHeld;
+        default: return true;
+      }
+    });
+  }
+  function filterCounts() {
+    return {
+      live: state.tickets.filter(function (t) { return !t.isHeld; }).length,
+      late: state.tickets.filter(function (t) { return !t.isHeld && urgencyOf(t) === "late"; }).length,
+      held: state.tickets.filter(function (t) { return t.isHeld; }).length,
+      all: state.tickets.length
+    };
+  }
+
+  /* ─── elements ─── */
+  var filtersEl = document.getElementById("boardFilters");
+  var metricsEl = document.getElementById("boardMetrics");
+  var columnsEl = document.getElementById("boardColumns");
+  var toastEl = document.getElementById("toast");
+
+  var GRIP_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+    '<circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/>' +
+    '<circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+  var NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 12h7M4 18h5"/><path d="M16.5 15.5 20 12a2.1 2.1 0 0 1 3 3l-3.5 3.5-3.5 1z"/></svg>';
+  var CLOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
+  var HOLD_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>';
+  var PENCIL_SVG = '<svg class="t-time-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L20 8l-4-4L4 16z"/></svg>';
+
+  /* ─── render: toolbar ─── */
+  function renderMetrics() {
+    var live = state.tickets.filter(function (t) { return !t.isHeld; });
+    var cook = live.reduce(function (s, t) { return s + remainingOf(t); }, 0);
+    var late = live.filter(function (t) { return urgencyOf(t) === "late"; }).length;
+    var held = state.tickets.filter(function (t) { return t.isHeld; }).length;
+    metricsEl.innerHTML =
+      '<span class="bm"><strong>' + num(cook) + '</strong> dishes to cook</span>' +
+      (late ? '<span class="bm is-late"><strong>' + num(late) + '</strong> late</span>' : "") +
+      (held ? '<span class="bm"><strong>' + num(held) + '</strong> held</span>' : "") +
+      '<span class="bm"><strong>' + num(state.collectedToday) + '</strong> collected</span>' +
+      '<span class="bm"><strong>' + money(state.revenueToday) + '</strong> today</span>';
+  }
+  function renderFilters() {
+    var c = filterCounts();
+    filtersEl.innerHTML = FILTERS.map(function (f) {
+      return '<button type="button" data-filter="' + f.id + '" aria-pressed="' + (state.filter === f.id) + '">' +
+        esc(f.label) + '<span class="seg-count">' + c[f.id] + "</span></button>";
+    }).join("");
+  }
+
+  /* ─── render: one card ─── */
+  function whoLabel(t) {
+    return t.customerName || (t.orderType === "DineIn" ? "Dine in" : "Walk-in");
+  }
+  function typeLabel(t) {
+    if (t.orderType === "DineIn") return t.tableNumber ? "Dine in · Table " + t.tableNumber : "Dine in";
+    return TYPE_LABEL[t.orderType] || "Takeaway";
+  }
+  function dishDetailHTML(i) {
+    var parts = [];
+    if (i.modifiers) parts.push(esc(i.modifiers));
+    if (i.specialInstructions) parts.push(esc(i.specialInstructions));
+    if (i.kitchenNote) parts.push('<span class="k">Kitchen:</span> ' + esc(i.kitchenNote) + (i.noteBy ? ' <span class="meta">(' + esc(i.noteBy) + ")</span>" : ""));
+    return parts.length ? parts.join(' <span class="dot">·</span> ') : "";
+  }
+  function restaurantNoteHTML(t) {
+    var parts = [];
+    if (t.allergyDeclaration) parts.push('<span class="allergy">' + esc(t.allergyDeclaration) + " allergy</span>");
+    if (t.notes) parts.push(esc(t.notes));
+    if (!parts.length) return "";
+    return '<p class="t-note' + (t.allergyDeclaration ? " has-allergy" : "") + '"><span class="t-note-label">Restaurant note:</span><span>' +
+      parts.join(' <span class="dot">·</span> ') + "</span></p>";
+  }
+
+  function ticketHTML(t) {
+    var stage = stageOf(t.status);
+    var urgency = urgencyOf(t);
+    var payment = readPayment(t.paymentStatus, t.paymentMethod);
+    var action = advanceOf(t);
+    var cls = "ticket" + (urgency === "late" ? " late" : urgency === "warning" ? " warn" : "") + (t.isHeld ? " held" : "");
+
+    var h = '<article class="' + cls + '" data-ticket-id="' + t.id + '" data-od-id="ticket-' + t.id + '" data-stage="' + stage + '">';
+
+    h += '<div class="t-head">' +
+      '<button type="button" class="t-grip" data-drag-handle aria-label="Drag to move order ' + esc(orderCode(t)) + '">' + GRIP_SVG + "</button>" +
+      '<span class="t-code">' + esc(orderCode(t)) + "</span>" +
+      '<span class="t-type">' + esc(typeLabel(t)) + "</span></div>";
+
+    h += '<div class="t-main"><span class="t-who">' + esc(whoLabel(t)) +
+      (t.customerPhone ? '<span class="t-phone">' + esc(t.customerPhone) + "</span>" : "") +
+      '</span><span class="t-total">' + money(t.total) + "</span></div>";
+
+    /* Pickup time — the one line the kitchen runs on. Tap it to change it. */
+    var day = dayLabel(t.wantedAt);
+    h += '<button type="button" class="t-time' + (urgency === "late" ? " is-late" : urgency === "warning" ? " is-warn" : "") +
+      '" data-pickup="' + t.id + '" aria-label="Edit pickup time, ' + esc(day + " " + fmtTime(t.wantedAt)) + '">' +
+      CLOCK_SVG +
+      '<span class="t-time-val">' + esc(fmtTime(t.wantedAt)) + "</span>" +
+      (day !== "Today" ? '<span class="t-time-day">' + esc(day) + "</span>" : "") +
+      '<span class="t-time-rel">' + esc(relLabel(t.wantedAt)) + "</span>" +
+      PENCIL_SVG +
+      "</button>";
+
+    h += '<div class="t-sub"><span>' + t.ageMinutes + ' min on the line</span><span class="dot">·</span><span>' + num(itemCount(t)) +
+      ' items</span></div>';
+
+    var flags = "";
+    if (payment.attention) flags += '<span class="t-flag pay">' + esc(payment.label) + "</span>";
+    if (t.isHeld) flags += '<span class="t-flag hold">Held</span>';
+    if (flags) h += '<div class="t-flags">' + flags + "</div>";
+
+    h += restaurantNoteHTML(t);
+
+    if (t.isHeld) {
+      h += '<p class="boh-held"><strong>Held' + (t.heldBy ? " by " + esc(t.heldBy) : "") + ":</strong> " + esc(t.heldReason) + "</p>";
+    }
+
+    var p = progressOf(t);
+    var allDone = p.total > 0 && p.done === p.total;
+    h += '<div class="t-items">';
+    t.items.forEach(function (i) {
+      var detail = dishDetailHTML(i);
+      h += '<div class="dish' + (i.isCompleted ? " is-done" : "") + '">' +
+        '<div class="dish-row">' +
+          '<button type="button" class="dish-tap" data-tick-item="' + i.id + '" data-tick-ticket="' + t.id + '" aria-pressed="' + i.isCompleted + '">' +
+            '<span class="dish-qty">' + i.quantity + "×</span>" +
+            '<span class="dish-name">' + esc(i.name) + "</span>" +
+          "</button>" +
+          '<button type="button" class="dish-note' + (i.kitchenNote ? " has-note" : "") + '" data-note-item="' + i.id + '" data-note-ticket="' + t.id + '" ' +
+            'aria-label="' + (i.kitchenNote ? "Edit" : "Add") + " a kitchen note for " + esc(i.name) + '">' + NOTE_SVG + "</button>" +
+        "</div>" +
+        (detail ? '<p class="dish-detail">' + detail + "</p>" : "") +
+      "</div>";
+    });
+    h += "</div>";
+    if (allDone) h += '<p class="t-alldone">Every dish done — ready to hand over.</p>';
+
+    h += '<div class="t-foot">' +
+      '<button type="button" class="btn btn-sm btn-advance" data-advance="' + t.id + '">' + esc(action.label) + "</button>" +
+      (t.isHeld
+        ? '<button type="button" class="t-act" data-resume="' + t.id + '" title="Put back on the line">' + HOLD_SVG + "Resume</button>"
+        : '<button type="button" class="t-act" data-hold="' + t.id + '" title="Park this order">' + HOLD_SVG + "Hold</button>") +
+      "</div>";
+
+    h += "</article>";
+    return h;
+  }
+
+  function renderBoard() {
+    var shown = shownTickets();
+    if (!shown.length) {
+      columnsEl.innerHTML = '<p class="board-empty" style="grid-column:1/-1">Nothing in this filter. ' +
+        (state.filter === "late" ? "No order is past its time." : state.filter === "held" ? "No order is held." : "") + "</p>";
+      return;
+    }
+    columnsEl.innerHTML = STAGES.map(function (key) {
+      var meta = STAGE_META[key];
+      var list = shown.filter(function (t) { return stageOf(t.status) === key; })
+        .sort(function (a, b) { return a.pos - b.pos; });
+      var body = list.length
+        ? list.map(ticketHTML).join("")
+        : '<p class="board-empty">Nothing here.</p>';
+      return '<div class="col" data-stage="' + key + '" data-od-id="board-col-' + key + '">' +
+        '<div class="col-head"><h3>' + meta.label + '</h3><span class="count">' + list.length + "</span></div>" +
+        '<div class="col-scroll">' + body + "</div></div>";
+    }).join("");
+  }
+
+  function render() { renderMetrics(); renderFilters(); renderBoard(); }
+
+  /* ─── toast ─── */
+  var toastTimer = null;
+  function toast(message) {
+    toastEl.textContent = message;
+    toastEl.classList.add("is-open");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("is-open"); }, 2600);
+  }
+  function ticketById(id) { for (var i = 0; i < state.tickets.length; i++) if (state.tickets[i].id === id) return state.tickets[i]; return null; }
+
+  /* ─── dialogs ─── */
+  var modalScrim = document.getElementById("modalScrim");
+  var modalShell = document.getElementById("modalShell");
+  var modalPanel = document.getElementById("modalPanel");
+  var modalTitle = document.getElementById("modalTitle");
+  var modalBody = document.getElementById("modalBody");
+  var modalFoot = document.getElementById("modalFoot");
+  var modalKind = null, modalTicket = null, modalItem = null;
+
+  function openModal(kind, title, bodyHTML, footHTML, focusId) {
+    modalKind = kind; modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHTML; modalFoot.innerHTML = footHTML;
+    modalScrim.hidden = false; modalShell.hidden = false;
+    document.body.classList.add("is-locked");
+    var f = focusId && document.getElementById(focusId);
+    (f || modalPanel).focus();
+  }
+  function closeModal() {
+    modalKind = null; modalTicket = null; modalItem = null;
+    modalScrim.hidden = true; modalShell.hidden = true;
+    modalBody.innerHTML = ""; modalFoot.innerHTML = "";
+    document.body.classList.remove("is-locked");
+  }
+
+  function openHold(id) {
+    modalTicket = ticketById(id);
+    if (!modalTicket) return;
+    openModal("hold", "Hold " + orderCode(modalTicket) + "?",
+      '<p style="margin:0 0 12px">The order keeps its stage and its dishes — it simply stops being the next thing the kitchen picks up, and comes back when you say so.</p>' +
+      '<label class="counter-note-field"><span>Why is it held? (the next person reads this)</span>' +
+      '<input class="input" id="holdReason" placeholder="waiting on the spring rolls" /></label>',
+      '<button type="button" class="btn btn-ghost" data-modal-cancel>Cancel</button>' +
+      '<button type="button" class="btn btn-primary" id="holdConfirm" disabled>Hold it</button>', "holdReason");
+    var field = document.getElementById("holdReason");
+    var confirm = document.getElementById("holdConfirm");
+    field.addEventListener("input", function () { confirm.disabled = field.value.trim().length === 0; });
+  }
+
+  function openNote(ticketId, itemId) {
+    modalTicket = ticketById(ticketId);
+    if (!modalTicket) return;
+    modalItem = null;
+    modalTicket.items.forEach(function (i) { if (i.id === itemId) modalItem = i; });
+    if (!modalItem) return;
+    var asked = modalItem.specialInstructions ? '<p class="meta" style="margin-top:0">The customer asked for: <strong>' + esc(modalItem.specialInstructions) + "</strong></p>" : "";
+    openModal("note", "Note on " + modalItem.name,
+      asked + '<label class="counter-note-field"><span>What the kitchen needs to know (empty clears it)</span>' +
+      '<input class="input" id="noteReason" value="' + esc(modalItem.kitchenNote || "") + '" placeholder="out of beansprouts, used cabbage" /></label>',
+      '<button type="button" class="btn btn-ghost" data-modal-cancel>Cancel</button>' +
+      '<button type="button" class="btn btn-primary" id="noteConfirm">Save note</button>', "noteReason");
+    document.getElementById("noteReason").focus();
+  }
+
+  /* ─── pickup time editor ──────────────────────────────────────────────────
+     Opens on the order's current promised time, shows the shop's real clock,
+     and puts hour + minute first — most orders move by minutes, so the
+     steppers and 0–2h chips are the fast path; another day is the rare case. */
+  var pickupDraft = 0;
+  function pickupBodyHTML() {
+    var now = Date.now();
+    var day = calendarDayDiff(pickupDraft);
+    var p = tzParts(pickupDraft);
+    var hour12 = (p.hour % 12) || 12;
+    var ampm = p.hour < 12 ? "am" : "pm";
+    return '<div class="pick">' +
+      '<p class="pick-now"><span class="pick-now-label">Now</span><strong>' + esc(fmtTime(now)) + '</strong><span class="pick-tz">Adelaide</span></p>' +
+      '<div class="pick-preview">' +
+        '<span class="pick-time">' + esc(fmtTime(pickupDraft)) + '</span>' +
+        '<span class="pick-meta"><span class="pick-day">' + esc(dayLabel(pickupDraft)) + '</span><span class="dot">·</span>' + esc(relLabel(pickupDraft)) + '</span>' +
+      '</div>' +
+      (modalTicket && modalTicket.wantedAt ? '<p class="pick-was">Currently promised <strong>' + esc(fmtTime(modalTicket.wantedAt)) + '</strong></p>' : "") +
+      '<div class="pick-quick" role="group" aria-label="Push the pickup time">' +
+        '<button type="button" class="pick-chip" data-pick-add="15">+15 min</button>' +
+        '<button type="button" class="pick-chip" data-pick-add="30">+30 min</button>' +
+        '<button type="button" class="pick-chip" data-pick-add="60">+1 hr</button>' +
+        '<button type="button" class="pick-chip" data-pick-add="120">+2 hr</button>' +
+        '<button type="button" class="pick-chip" data-pick-now>Now</button>' +
+      '</div>' +
+      '<div class="pick-steppers">' +
+        '<div class="pick-step"><span class="pick-step-label">Hour</span><div class="pick-step-ctl">' +
+          '<button type="button" class="pick-round" data-pick-step="hour" data-dir="-1" aria-label="One hour earlier">−</button>' +
+          '<span class="pick-step-val">' + hour12 + '<span class="pick-ampm">' + ampm + '</span></span>' +
+          '<button type="button" class="pick-round" data-pick-step="hour" data-dir="1" aria-label="One hour later">+</button>' +
+        '</div></div>' +
+        '<div class="pick-step"><span class="pick-step-label">Minute</span><div class="pick-step-ctl">' +
+          '<button type="button" class="pick-round" data-pick-step="minute" data-dir="-1" aria-label="Five minutes earlier">−</button>' +
+          '<span class="pick-step-val">' + pad(p.minute, 2) + '</span>' +
+          '<button type="button" class="pick-round" data-pick-step="minute" data-dir="1" aria-label="Five minutes later">+</button>' +
+        '</div></div>' +
+      '</div>' +
+      '<div class="seg-sm pick-dayrow" role="group" aria-label="Pickup day">' +
+        '<button type="button" data-pick-day="0" aria-pressed="' + (day === 0) + '">Today</button>' +
+        '<button type="button" data-pick-day="1" aria-pressed="' + (day === 1) + '">Tomorrow</button>' +
+      '</div>' +
+      '<p class="pick-hint">Most orders move by 15–120 min. Pick Tomorrow only for a pre-order.</p>' +
+    '</div>';
+  }
+  function renderPickupDraft() { modalBody.innerHTML = pickupBodyHTML(); }
+  function pickupAdd(mins) { pickupDraft = Date.now() + mins * 60000; renderPickupDraft(); }
+  function pickupStep(unit, dir) { pickupDraft += dir * (unit === "hour" ? 60 : 5) * 60000; renderPickupDraft(); }
+  function pickupSetDay(offset) {
+    var a = tzParts(Date.now()), p = tzParts(pickupDraft);
+    var d = new Date(Date.UTC(a.year, a.month - 1, a.day + offset));
+    pickupDraft = new Date(adelaideISO(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), p.hour, p.minute)).getTime();
+    renderPickupDraft();
+  }
+  function openPickup(id) {
+    modalTicket = ticketById(id);
+    if (!modalTicket) return;
+    pickupDraft = Date.now(); /* the editor opens on now — nudge from there */
+    openModal("pickup", "Pickup time — " + orderCode(modalTicket),
+      pickupBodyHTML(),
+      '<button type="button" class="btn btn-ghost" data-modal-cancel>Cancel</button>' +
+      '<button type="button" class="btn btn-primary" id="pickupConfirm">Save time</button>');
+    document.getElementById("pickupConfirm").focus();
+  }
+
+  function confirmModalAction() {
+    if (modalKind === "hold") {
+      var reason = document.getElementById("holdReason").value.trim();
+      if (!reason) return;
+      modalTicket.isHeld = true; modalTicket.heldReason = reason; modalTicket.heldBy = "Linh Tran";
+      var orderNo = orderCode(modalTicket);
+      closeModal(); render(); save(); toast(orderNo + " held — it is off the line");
+    } else if (modalKind === "note") {
+      var note = document.getElementById("noteReason").value.trim();
+      modalItem.kitchenNote = note || null;
+      modalItem.noteBy = note ? "Linh Tran" : null;
+      closeModal(); render(); save(); toast(note ? "Note saved to the kitchen" : "Note cleared");
+    } else if (modalKind === "pickup") {
+      var t = modalTicket, code = orderCode(t);
+      t.wantedAt = pickupDraft; t.isScheduled = true;
+      closeModal(); render(); save();
+      toast("Pickup time for " + code + " set to " + fmtTime(t.wantedAt) + (dayLabel(t.wantedAt) !== "Today" ? " " + dayLabel(t.wantedAt) : ""));
+    }
+  }
+
+  /* ─── actions ─── */
+  function advance(id) {
+    var t = ticketById(id);
+    if (!t) return;
+    var action = advanceOf(t);
+    if (action.to === "collected") {
+      state.tickets = state.tickets.filter(function (x) { return x.id !== id; });
+      state.collectedToday += 1;
+      state.revenueToday = Math.round((state.revenueToday + t.total) * 100) / 100;
+      t.status = "Completed"; t.collectedMs = Date.now();
+      state.history.unshift(t);
+      toast(orderCode(t) + " collected — " + money(t.total) + " recorded");
+    } else {
+      t.status = action.to;
+      toast(orderCode(t) + (action.stage === "confirmed" ? " accepted — on the wok" : " is ready for collection"));
+    }
+    render(); save();
+  }
+
+  function tickItem(ticketId, itemId) {
+    var t = ticketById(ticketId);
+    if (!t) return;
+    var item = null;
+    t.items.forEach(function (i) { if (i.id === itemId) item = i; });
+    if (!item) return;
+    item.isCompleted = !item.isCompleted;
+    if (progressOf(t).done === progressOf(t).total) {
+      toast("Every dish done — " + orderCode(t) + " is ready, call the number out");
+    }
+    render(); save();
+  }
+
+  /* ─── pointer drag & drop (works for mouse AND touch — iPad) ─── */
+  var drag = null, slotEl = null, dropTarget = null;
+
+  function ensureSlot() {
+    if (slotEl) return;
+    slotEl = document.createElement("div");
+    slotEl.className = "drop-slot";
+  }
+  function showFocus(el) { if (el) el.focus({ preventScroll: true }); }
+
+  function columnAt(x, y) {
+    var cols = columnsEl.querySelectorAll(".col");
+    var best = null, bestDist = Infinity;
+    for (var i = 0; i < cols.length; i++) {
+      var r = cols[i].getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return cols[i];
+      var cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+      var d = Math.abs(x - cx) + Math.abs(y - cy);
+      if (d < bestDist) { bestDist = d; best = cols[i]; }
+    }
+    return best;
+  }
+  function clearDrop() {
+    if (slotEl && slotEl.parentNode) slotEl.parentNode.removeChild(slotEl);
+    var cols = columnsEl.querySelectorAll(".col");
+    for (var i = 0; i < cols.length; i++) cols[i].classList.remove("drop-target");
+    dropTarget = null;
+  }
+  function updateDrop(x, y) {
+    var col = columnAt(x, y);
+    if (!col) { clearDrop(); return; }
+    ensureSlot();
+    var scroll = col.querySelector(".col-scroll");
+    var cards = scroll.querySelectorAll(".ticket:not(.is-source)");
+    var index = cards.length;
+    for (var i = 0; i < cards.length; i++) {
+      var cr = cards[i].getBoundingClientRect();
+      if (y < cr.top + cr.height / 2) { index = i; break; }
+    }
+    var ref = cards[index] || null;
+    scroll.insertBefore(slotEl, ref);
+    for (var j = 0; j < columnsEl.children.length; j++) {
+      columnsEl.children[j].classList.toggle("drop-target", columnsEl.children[j] === col);
+    }
+    dropTarget = {
+      stage: col.getAttribute("data-stage"),
+      index: index,
+      ids: Array.prototype.map.call(cards, function (c) { return Number(c.getAttribute("data-ticket-id")); })
+    };
+    /* auto-scroll the column when the pointer nears an edge */
+    var or = scroll.getBoundingClientRect();
+    if (y < or.top + 44) scroll.scrollTop -= 12;
+    else if (y > or.bottom - 44) scroll.scrollTop += 12;
+  }
+
+  function beginDrag(card, e) {
+    var rect = card.getBoundingClientRect();
+    var ghost = card.cloneNode(true);
+    ghost.removeAttribute("data-ticket-id");
+    ghost.className = card.className + " drag-ghost";
+    ghost.style.width = rect.width + "px";
+    ghost.style.left = rect.left + "px";
+    ghost.style.top = rect.top + "px";
+    document.body.appendChild(ghost);
+    card.classList.add("is-source");
+    drag = { id: Number(card.getAttribute("data-ticket-id")), card: card, ghost: ghost, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    document.body.classList.add("is-dragging");
+    document.addEventListener("pointermove", onDragMove, { passive: false });
+    document.addEventListener("pointerup", onDragEnd);
+    document.addEventListener("pointercancel", onDragEnd);
+    updateDrop(e.clientX, e.clientY);
+  }
+  function onDragMove(e) {
+    if (!drag) return;
+    e.preventDefault();
+    drag.ghost.style.left = (e.clientX - drag.dx) + "px";
+    drag.ghost.style.top = (e.clientY - drag.dy) + "px";
+    updateDrop(e.clientX, e.clientY);
+  }
+  function onDragEnd() {
+    if (!drag) return;
+    document.removeEventListener("pointermove", onDragMove);
+    document.removeEventListener("pointerup", onDragEnd);
+    document.removeEventListener("pointercancel", onDragEnd);
+    document.body.classList.remove("is-dragging");
+    if (drag.ghost.parentNode) drag.ghost.parentNode.removeChild(drag.ghost);
+
+    var moved = dropTarget;
+    clearDrop();
+    var t = ticketById(drag.id);
+    var card = drag.card;
+    drag = null;
+    if (card) card.classList.remove("is-source");
+    if (!t || !moved) { render(); return; }
+
+    var fromStage = stageOf(t.status);
+    var ids = moved.ids.slice();
+    ids.splice(moved.index, 0, t.id);
+    ids.forEach(function (id, i) {
+      var x = ticketById(id);
+      if (!x) return;
+      x.pos = i + 1;
+      x.status = STAGE_META[moved.stage].api;
+    });
+    render(); save();
+    if (fromStage !== moved.stage) {
+      toast(orderCode(t) + " → " + STAGE_META[moved.stage].label);
+    }
+  }
+
+  columnsEl.addEventListener("pointerdown", function (e) {
+    var grip = e.target.closest("[data-drag-handle]");
+    if (!grip) return;
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    var card = grip.closest("[data-ticket-id]");
+    if (!card) return;
+    showFocus(grip);
+    beginDrag(card, e);
+  });
+
+  /* ─── click actions (delegated) ─── */
+  filtersEl.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-filter]");
+    if (!b) return;
+    state.filter = b.getAttribute("data-filter");
+    render();
+  });
+
+  columnsEl.addEventListener("click", function (e) {
+    var adv = e.target.closest("[data-advance]");
+    if (adv) { advance(Number(adv.getAttribute("data-advance"))); return; }
+
+    var tick = e.target.closest("[data-tick-item]");
+    if (tick) { tickItem(Number(tick.getAttribute("data-tick-ticket")), Number(tick.getAttribute("data-tick-item"))); return; }
+
+    var note = e.target.closest("[data-note-item]");
+    if (note) { openNote(Number(note.getAttribute("data-note-ticket")), Number(note.getAttribute("data-note-item"))); return; }
+
+    var hold = e.target.closest("[data-hold]");
+    if (hold) { openHold(Number(hold.getAttribute("data-hold"))); return; }
+
+    var resume = e.target.closest("[data-resume]");
+    if (resume) {
+      var rt = ticketById(Number(resume.getAttribute("data-resume")));
+      if (rt) { rt.isHeld = false; rt.heldReason = null; rt.heldBy = null; render(); save(); toast(orderCode(rt) + " back on the line"); }
+      return;
+    }
+
+    var pickup = e.target.closest("[data-pickup]");
+    if (pickup) { openPickup(Number(pickup.getAttribute("data-pickup"))); return; }
+  });
+
+  modalScrim.addEventListener("click", closeModal);
+  document.getElementById("modalClose").addEventListener("click", closeModal);
+  modalFoot.addEventListener("click", function (e) {
+    if (e.target.closest("[data-modal-cancel]")) { closeModal(); return; }
+    if (e.target.closest("#holdConfirm") || e.target.closest("#noteConfirm") || e.target.closest("#pickupConfirm")) confirmModalAction();
+  });
+  modalBody.addEventListener("click", function (e) {
+    if (modalKind !== "pickup") return;
+    var add = e.target.closest("[data-pick-add]");
+    if (add) { pickupAdd(Number(add.getAttribute("data-pick-add"))); return; }
+    if (e.target.closest("[data-pick-now]")) { pickupAdd(0); return; }
+    var step = e.target.closest("[data-pick-step]");
+    if (step) { pickupStep(step.getAttribute("data-pick-step"), Number(step.getAttribute("data-dir"))); return; }
+    var day = e.target.closest("[data-pick-day]");
+    if (day) { pickupSetDay(Number(day.getAttribute("data-pick-day"))); return; }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (modalShell.hidden) return;
+    if (e.key === "Escape") { closeModal(); return; }
+    if (e.key !== "Tab") return;
+    var focusable = Array.prototype.filter.call(
+      modalPanel.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+      function (el) { return el.offsetParent !== null; }
+    );
+    if (!focusable.length) return;
+    var first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  /* rail collapse + account menu */
+  document.getElementById("railToggle").addEventListener("click", function () {
+    var admin = document.getElementById("admin");
+    var collapsed = admin.getAttribute("data-rail") === "collapsed";
+    admin.setAttribute("data-rail", collapsed ? "expanded" : "collapsed");
+    this.setAttribute("aria-expanded", String(collapsed));
+    document.getElementById("railChevron").setAttribute("d", collapsed ? "m14 6-6 6 6 6" : "m10 6 6 6-6 6");
+  });
+  document.getElementById("accountBtn").addEventListener("click", function () {
+    var menu = document.getElementById("accountMenu");
+    var open = menu.hidden;
+    menu.hidden = !open;
+    this.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".admin-account")) {
+      document.getElementById("accountMenu").hidden = true;
+      document.getElementById("accountBtn").setAttribute("aria-expanded", "false");
+    }
+  });
+
+  /* ─── the shop clock + live countdowns ─── */
+  var clockEl = document.getElementById("adminClock");
+  function renderClock() { if (clockEl) clockEl.textContent = "Adelaide " + fmtTime(Date.now()); }
+  function tickTimes() {
+    if (drag || !modalShell.hidden) return; /* never disturb a drag or an open dialog */
+    var nodes = columnsEl.querySelectorAll("[data-pickup]");
+    Array.prototype.forEach.call(nodes, function (btn) {
+      var t = ticketById(Number(btn.getAttribute("data-pickup")));
+      if (!t) return;
+      var rel = btn.querySelector(".t-time-rel");
+      if (rel) rel.textContent = relLabel(t.wantedAt);
+      btn.classList.toggle("is-late", urgencyOf(t) === "late");
+      btn.classList.toggle("is-warn", urgencyOf(t) === "warning");
+    });
+  }
+  setInterval(function () { renderClock(); tickTimes(); }, 30000);
+
+  /* ─── boot ─── */
+  drainInbox();
+  loadStore();
+  renderClock();
+  render();
+
+  /* Other tabs (the counter, a second board) write to the store; re-read and
+     repaint when they do, so every screen shows the same line. */
+  function refresh() {
+    if (drag || !modalShell.hidden) return;
+    drainInbox();
+    loadStore();
+    render();
+  }
+  window.addEventListener("storage", function (e) {
+    if (e.key === STORE_KEY || e.key === INBOX_KEY) refresh();
+  });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+  window.addEventListener("focus", refresh);
+})();
+</script>
+</body>
+</html>
