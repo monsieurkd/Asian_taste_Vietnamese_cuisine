@@ -1,10 +1,16 @@
 import { NavLink, Link, useLocation } from "react-router-dom"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useAuthStore } from "@/stores/authStore"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 import { Avatar } from "@/components/ui/Primitives"
 
 const ICONS = {
+  home: (
+    <>
+      <path d="M4 11.5 12 4l8 7.5" />
+      <path d="M6 10v9h12v-9" />
+    </>
+  ),
   grid: (
     <>
       <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
@@ -48,9 +54,13 @@ function Icon({ paths }: { paths: React.ReactNode }) {
 }
 
 const NAV = [
-  // The board is the one working screen and it carries the day's numbers too, so it is the
-  // first and the default entry. It replaced two entries — "Back of house" and "Dashboard" —
-  // that rendered the same orders with different halves of the job missing; see KitchenPage.
+  // Overview is the console's front door: today's numbers and a way into every
+  // screen. It is the default entry because a manager opening the console wants
+  // the state of service before the board loads.
+  { to: "/", label: "Overview", icon: ICONS.home },
+  // The board is the one working screen and it carries the day's numbers too; it
+  // replaced two entries — "Back of house" and "Dashboard" — that rendered the
+  // same orders with different halves of the job missing; see KitchenPage.
   { to: "/kitchen", label: "Board", icon: ICONS.grid },
   { to: "/counter", label: "Counter", icon: ICONS.counter },
   { to: "/orders", label: "Orders", icon: ICONS.list },
@@ -107,7 +117,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     <div className="admin" data-rail={collapsed ? "collapsed" : "expanded"}>
       <aside className="admin-rail">
         <div className="rail-top">
-          <Link className="brand" to="/kitchen">
+          <Link className="brand" to="/">
             <span className="brand-mark">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" aria-hidden="true">
                 <path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z" />
@@ -139,19 +149,25 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="admin-nav" id="admin-nav" aria-label="Staff sections">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              // The label is the accessible name even when it is not painted, so a
-              // collapsed icon is announced as "Counter" rather than as an unlabelled link.
-              title={item.label}
-              aria-current={pathname.startsWith(item.to) ? "page" : undefined}
-            >
-              <Icon paths={item.icon} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+          {NAV.map((item) => {
+            // The overview lives at "/", so a prefix test would mark it current on
+            // every route; it is the only entry that has to match exactly.
+            const current = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === "/"}
+                // The label is the accessible name even when it is not painted, so a
+                // collapsed icon is announced as "Counter" rather than as an unlabelled link.
+                title={item.label}
+                aria-current={current ? "page" : undefined}
+              >
+                <Icon paths={item.icon} />
+                <span>{item.label}</span>
+              </NavLink>
+            )
+          })}
         </nav>
 
         <div className="admin-rail-foot">
@@ -201,10 +217,41 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * The shop clock.
+ *
+ * Read in Australia/Adelaide rather than the device's own timezone: the console's
+ * "today" and every pickup time are Adelaide time, and a tablet that has been
+ * carried in from another timezone must not disagree with the till. Ticks every
+ * half minute, which is often enough for a clock with no seconds on it.
+ */
+function ShopClock() {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 30_000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const time = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Adelaide",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(now)
+
+  return (
+    <span className="admin-clock" title="The shop clock — Australia/Adelaide">
+      Adelaide {time}
+    </span>
+  )
+}
+
+/**
  * The sticky console header.
  *
  * `title`/`sub` are rendered here rather than duplicated in each page, so the
- * heading and the browser tab cannot disagree.
+ * heading and the browser tab cannot disagree. The shop clock is appended after
+ * whatever page actions a screen passes, so it is the last thing in the corner on
+ * every screen.
  */
 export function AdminTop({ title, sub, actions }: { title: string; sub?: string; actions?: React.ReactNode }) {
   return (
@@ -213,7 +260,10 @@ export function AdminTop({ title, sub, actions }: { title: string; sub?: string;
         <h1>{title}</h1>
         {sub && <p className="sub">{sub}</p>}
       </div>
-      {actions && <div className="admin-top-actions">{actions}</div>}
+      <div className="admin-top-actions">
+        {actions}
+        <ShopClock />
+      </div>
     </header>
   )
 }

@@ -50,6 +50,10 @@
   --font-sans: var(--font-body);
   --font-serif: var(--font-display);
 
+  /* The shop clock's tabular face. A time that jitters as the minutes tick is
+     harder to read at a glance from across the counter. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   --radius-sm: 8px;
   --radius: 10px;
   --radius-lg: 16px;
@@ -613,6 +617,23 @@
     align-items: center;
     gap: 12px;
   }
+  /* The shop clock. The whole console runs on Adelaide time — one screen should
+     say which clock "today" and pickup times are read against. */
+  .admin-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 6px 13px;
+    white-space: nowrap;
+  }
   .admin-page {
     padding: clamp(18px, 3vw, 32px);
     display: flex;
@@ -677,6 +698,95 @@
   }
   .stat-card.is-accent .stat-delta {
     color: var(--color-on-dark);
+  }
+
+  /* ─── overview launcher ──────────────────────────────────────────────── */
+  /* The overview reuses `.stat-grid`/`.stat-card` for its snapshot, so the
+     only patterns it adds are the screen cards and the little flow strip. */
+  .ov-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 18px;
+  }
+  .ov-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 22px;
+    text-decoration: none;
+    color: inherit;
+    transition:
+      border-color 0.15s ease,
+      transform 0.15s ease;
+  }
+  .ov-card:hover {
+    border-color: var(--color-accent-line);
+    transform: translateY(-2px);
+  }
+  .ov-card-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+  }
+  .ov-card-icon svg {
+    width: 21px;
+    height: 21px;
+  }
+  .ov-card h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+  }
+  .ov-card p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--color-muted);
+    line-height: 1.5;
+  }
+  .ov-card .go {
+    margin-top: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-accent);
+  }
+  .ov-card .go svg {
+    width: 15px;
+    height: 15px;
+  }
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--color-muted);
+  }
+  .flow .step {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font-weight: 600;
+  }
+  .flow .step svg {
+    width: 15px;
+    height: 15px;
+    color: var(--color-accent);
+  }
+  .flow .arrow {
+    color: var(--color-gold);
+    font-weight: 800;
   }
 
   /* ─── data table ─────────────────────────────────────────────────────── */

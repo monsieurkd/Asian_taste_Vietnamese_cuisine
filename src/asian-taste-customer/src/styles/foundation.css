@@ -45,6 +45,10 @@
   --font-sans: var(--font-body);
   --font-serif: var(--font-display);
 
+  /* Tabular figures for times and order numbers, where a jittering digit reads
+     as a change. Shared with the console, which shows a shop clock. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   /* ─── space (8-pt) ────────────────────────────────────────────────── */
   --container-shell: 1180px;
   --radius-sm: 8px;
