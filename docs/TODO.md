@@ -2669,3 +2669,41 @@ defects found by running the code, and two that were about money.
 306 API tests and 188 frontend tests pass, nothing skipped; both apps build and lint clean;
 CI, Deploy and `check-deployment-health.sh` all green; no containers, servers or scratch
 files left behind; the working tree is clean and `main` is current.
+
+---
+
+## 31. Porting the console set for real, and a pickup time that moves on its own — 2026-10-04
+
+The ratified mockups in `docs/DESIGN/mockups/admin-console/` are the target the deployed
+admin app is now being rebuilt onto, screen by screen, rather than left as static pages
+served beside the old UI. This session landed the **kitchen board** (`/kitchen`): the
+stat-grid and pill layout is gone, replaced by the board-bar, the board metrics, scrolling
+stage columns and the ticket card with the shop clock, dish rows, flags and one verb per
+stage. Drag-to-advance is kept and still gated on `canTransition` — an illegal drop snaps
+back with the rule's reason. The **counter screen (`/counter`) is next** and is not in
+this change.
+
+### The pickup-time endpoint, and what is left to finish it
+
+The mockup lets staff **tap a pickup time to change it**, but no endpoint accepted a time
+change without also rewriting the order's items. The only write that carried a
+`requested_time` was `PUT /admin/orders/{id}/items` → `ReplaceOrderItemsAsync`, which
+deletes and re-inserts every `order_items` row — so moving the time silently wiped the
+kitchen's per-dish ticks, cook state and notes. A five-minute delay must not knock the food
+off the pass.
+
+Added this session: `PUT /admin/orders/{id}/pickup-time` (`SetOrderPickupTimeAsync`), a
+column-level `UPDATE` of `orders.requested_time` only, judged by the same trading rule as
+checkout (`ShopClosedException` → 409) and recorded as a `PickupTimeChanged` activity with
+the actor and reason. The request carries no items, so it cannot damage the line. The
+console's tap-to-edit modal is wired to it.
+
+**Still to build before this is finished in production** — kept here rather than invented
+now:
+
+| | Item | Why it is not done | Shape of the work |
+|---|---|---|---|
+| **P1** | **Tell the other screens.** | The write logs the change but does not broadcast, so a second open board (or the orders list) only shows the new time on its next refetch. | Broadcast a `status_update` after the write; the client's `status_update` handler already invalidates `["orders"]`, so no client change is needed. |
+| **P2** | **Tell the customer.** | Moving the time is silent to the guest; the confirmation page still shows the old time and nothing is sent. | Decide the channel (email vs SMS) and send "your pickup time moved to X" from the same method, reusing the order-email queue. |
+| **P3** | **Counter parity.** | The counter screen cannot move a time (a walk-in has none); the phone-edit path can carry one. | Decide whether the counter gains the same tap-to-edit, or stays out of it. |
+| **P4** | **One urgency number.** | The mockup warns at `DUE_SOON_MINUTES = 10`; the app uses warn 15 / late 25. | Pick the canonical threshold so the board and the counter agree on "late". |
