@@ -372,22 +372,18 @@ export function CounterOrderPage() {
     setPulseSig(lineSignature({ menuItemId: dish.id, modifiers, note: note.trim() }))
   }
 
-  /** Add a dish, opening its options first when it has any. */
+  /**
+   * Add a dish straight onto the ticket — one tap, no dialog.
+   *
+   * Options are edited afterwards from the line's Edit button (`editLine`), which is where a
+   * staff member already looks to correct a line. Opening the picker on every tap made the
+   * common case — a dish with no choices, or one taking every default — cost a second press
+   * and a dialog, which is the exact flow the counter is meant to avoid. Every dish is still
+   * re-priced on the way in, so a defaulted line is never a cheaper line.
+   */
   const choose = (dish: MenuItemDetail) => {
-    // "Has options" is about whether there is anything to CHOOSE, not whether a flag
-    // says so. This read `g.isActive && m.isActive`, neither of which the server sends —
-    // so every dish looked option-less and went straight onto the ticket, and a dish with
-    // a required choice could be added without ever being asked for it.
-    if (!hasOptions(dish)) {
-      setLines((current) => addLine(current, dish))
-      pulse(dish, [])
-      return
-    }
-
-    setEditingLineKey(null)
-    setPending([])
-    setPendingNote("")
-    setOpenDish(dish)
+    setLines((current) => addLine(current, dish))
+    pulse(dish, [])
   }
 
   /**
@@ -678,46 +674,29 @@ export function CounterOrderPage() {
                   </p>
                 ) : (
                   dishesInView.map((dish) => {
-                    // One shared rule, so the glyph on the button and the panel it opens
-                    // cannot disagree. A dish WITH options shows a chooser arrow; the rest
-                    // show a plus, because those go straight onto the bill.
-                    const opensPanel = hasOptions(dish)
-
                     return (
                       <button
                         key={dish.id}
                         type="button"
                         className="dish-key"
-                        aria-label={
-                          opensPanel
-                            ? `Choose options for ${dish.name} — ${formatCurrency(dish.price)}`
-                            : `Add ${dish.name} — ${formatCurrency(dish.price)}`
-                        }
+                        aria-label={`Add ${dish.name} — ${formatCurrency(dish.price)}`}
                         onClick={() => choose(dish)}
                       >
                         <span className="dk-name">{dish.name}</span>
                         <span className="dk-foot">
                           <span className="dk-price">{formatCurrency(dish.price)}</span>
                           <span className="dk-add" aria-hidden="true">
-                            {opensPanel ? (
-                              <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
-                                <circle cx="3" cy="8" r="1.5" />
-                                <circle cx="8" cy="8" r="1.5" />
-                                <circle cx="13" cy="8" r="1.5" />
-                              </svg>
-                            ) : (
-                              <svg
-                                viewBox="0 0 16 16"
-                                width="12"
-                                height="12"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.2"
-                                strokeLinecap="round"
-                              >
-                                <path d="M8 3v10M3 8h10" />
-                              </svg>
-                            )}
+                            <svg
+                              viewBox="0 0 16 16"
+                              width="12"
+                              height="12"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.2"
+                              strokeLinecap="round"
+                            >
+                              <path d="M8 3v10M3 8h10" />
+                            </svg>
                           </span>
                         </span>
                       </button>
