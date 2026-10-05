@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ordersApi } from "@/api/orders"
 import { kitchenApi, type KitchenItem, type KitchenTicket } from "@/api/kitchenApi"
@@ -11,7 +11,15 @@ import { PickupTimeEditor } from "@/components/orders/PickupTimeEditor"
 import { apiStatusValue, OPEN_STATUSES, STATUS_META, statusKey, type StatusKey } from "@/lib/orderStatus"
 import { urgencyOf } from "@/lib/kitchenBoard"
 import { formatCurrency } from "@/lib/utils"
-import { canTransition } from "@shared/lib/orderTransitions"
+import { dropCheck } from "@/lib/boardDrop"
+import {
+  insertInColumn,
+  rankColumn,
+  readRanks,
+  setColumnOrder,
+  writeRanks,
+  type BoardRanks,
+} from "@/lib/boardOrder"
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 import type { Order, OrderStatus } from "@/types"
 
@@ -19,7 +27,7 @@ import type { Order, OrderStatus } from "@/types"
  * The board — the one screen for working orders, and today's numbers.
  *
  * THIS USED TO BE TWO SCREENS. `/dashboard` had the stage columns, the tap-to-cross-out
- * dishes and the money; `/kitchen` had Hold, History and the per-dish notes. Both rendered
+ * dishes and the money; `/kitchen` had Hold and the per-dish notes. Both rendered
  * the same orders, both rendered the same four stat cards, and neither was complete — so a
  * cook holding one order had two tabs open and something missing on whichever they were
  * looking at. That is the overlap the owner reported, and the fix is deletion, not addition.
@@ -33,9 +41,8 @@ import type { Order, OrderStatus } from "@/types"
  *   * **The tap-to-cross-out dish list** (from the dashboard), which is now the industry
  *     norm and what the owner asked for by name. It is the SAME `OrderItems` component the
  *     Orders table and the ticket page use — tickable on all three or on none.
- *   * **Hold, History and per-dish notes** (from back of house). "Waiting on the spring
- *     rolls" is not a cancellation, and "who ticked this" is the question asked after a bag
- *     goes out wrong.
+ *   * **Hold and per-dish notes** (from back of house). "Waiting on the spring rolls" is
+ *     not a cancellation, and the note is where the kitchen says what it is waiting for.
  *   * **Today's numbers** (from the dashboard), from the SERVER's summary. They were once
  *     computed by filtering the last 100 fetched orders, which silently truncated the
  *     figure on a busy day — a revenue number that is wrong at close is the one the owner
@@ -78,7 +85,6 @@ export function KitchenPage() {
   const [holdReason, setHoldReason] = useState("")
   const [noting, setNoting] = useState<{ ticket: KitchenTicket; item: KitchenItem } | null>(null)
   const [noteDraft, setNoteDraft] = useState("")
-  const [historyFor, setHistoryFor] = useState<KitchenTicket | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
   /** The single dish currently being ticked, so only its own row reads "saving". */
   const [tickingItemId, setTickingItemId] = useState<number | null>(null)
@@ -93,6 +99,16 @@ export function KitchenPage() {
   const dragOrigin = useRef<{ id: number; from: StatusKey } | null>(null)
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [dropStage, setDropStage] = useState<StatusKey | null>(null)
+  /** Where inside the target column the card would land, among the cards already there. */
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
+
+  /**
+   * The kitchen's own order within each column, restored from this device.
+   *
+   * Kept in state as well as the store so a reorder repaints immediately and the poll's
+   * refetch does not fight it. See `lib/boardOrder.ts` for why it is per-device.
+   */
+  const [ranks, setRanks] = useState<BoardRanks>(() => readRanks())
 
   /** The pickup-time editor: which ticket, and the draft time in the shop's own clock. */
   const [pickupFor, setPickupFor] = useState<KitchenTicket | null>(null)
@@ -155,41 +171,95 @@ export function KitchenPage() {
     e.preventDefault()
     dragOrigin.current = { id: ticket.id, from: statusKey(ticket.status) }
     setDraggingId(ticket.id)
+    setDropIndex(null)
   }
 
   useEffect(() => {
     if (draggingId === null) return
 
-    const columnUnder = (x: number, y: number): StatusKey | null => {
+    /**
+     * The column under the pointer, and where in it the card would land.
+     *
+     * `index` counts the OTHER cards — the dragged one is skipped, because it is still
+     * rendered at its old spot and must not be counted as a slot in its own destination.
+     * `order` is those others in the order they are shown, so a drop can freeze the exact
+     * arrangement the cook saw rather than re-deriving it from stale state.
+     */
+    const targetAt = (
+      x: number,
+      y: number,
+      draggedId: number,
+    ): { stage: StatusKey; index: number; order: number[] } | null => {
       const el = document.elementFromPoint(x, y) as HTMLElement | null
       const col = el?.closest<HTMLElement>("[data-stage]")
-      return (col?.dataset.stage as StatusKey | undefined) ?? null
+      if (!col) return null
+
+      const others = Array.from(col.querySelectorAll<HTMLElement>("[data-ticket-id]"))
+        .map((card) => ({ id: Number(card.dataset.ticketId), rect: card.getBoundingClientRect() }))
+        .filter((card) => card.id !== draggedId)
+
+      let index = others.length
+      for (let i = 0; i < others.length; i++) {
+        if (y < others[i].rect.top + others[i].rect.height / 2) {
+          index = i
+          break
+        }
+      }
+
+      return { stage: col.dataset.stage as StatusKey, index, order: others.map((card) => card.id) }
     }
 
-    const onMove = (e: PointerEvent) => setDropStage(columnUnder(e.clientX, e.clientY))
+    const onMove = (e: PointerEvent) => {
+      const target = targetAt(e.clientX, e.clientY, draggingId)
+      setDropStage(target?.stage ?? null)
+      setDropIndex(target?.index ?? null)
+    }
 
     /**
-     * Finish the drag. The move is decided by `canTransition`, NOT by how far the card was
-     * dragged: a WebSocket frame that moved the ticket while it was in the air, or a drop on
-     * a non-adjacent column, must not talk the board into an illegal move. A refused drop
-     * snaps back and says why.
+     * Finish the drag.
+     *
+     * A drop in the SAME column is a reorder and never touches the server. A drop in another
+     * column is checked by `dropCheck` — NOT by how far the card was dragged, because a
+     * WebSocket frame can move the ticket while it is in the air. Backwards is allowed;
+     * a forward skip is refused and says why.
      */
     const finish = (e: PointerEvent, cancelled: boolean) => {
       const origin = dragOrigin.current
       dragOrigin.current = null
       setDraggingId(null)
       setDropStage(null)
+      setDropIndex(null)
       if (!origin || cancelled) return
 
-      const to = columnUnder(e.clientX, e.clientY)
-      if (!to || to === origin.from) return
+      const target = targetAt(e.clientX, e.clientY, origin.id)
+      if (!target) return
 
-      const check = canTransition(origin.from, to)
-      if (check.allowed) {
-        advance.mutate({ id: origin.id, status: to })
-      } else {
-        showAdminToast(check.reason)
+      // Reorder within a column: keep the card where it was dropped and stop.
+      if (target.stage === origin.from) {
+        const order = insertInColumn(target.order, origin.id, target.index)
+        setRanks((prev) => {
+          const next = setColumnOrder(prev, target.stage, origin.id, order)
+          writeRanks(next)
+          return next
+        })
+        return
       }
+
+      const check = dropCheck(origin.from, target.stage)
+      if (!check.allowed) {
+        showAdminToast(check.reason)
+        return
+      }
+
+      // Cross-column: land the card where it was dropped AND move the stage. The refetch
+      // that follows keeps the position, because the saved order outranks the default sort.
+      const order = insertInColumn(target.order, origin.id, target.index)
+      setRanks((prev) => {
+        const next = setColumnOrder(prev, target.stage, origin.id, order)
+        writeRanks(next)
+        return next
+      })
+      advance.mutate({ id: origin.id, status: target.stage })
     }
 
     const onUp = (e: PointerEvent) => finish(e, false)
@@ -348,10 +418,16 @@ export function KitchenPage() {
 
   // The columns carry only the OPEN stages. Collected orders have left the board and land in
   // the day's numbers instead of sitting in a column nobody has a reason to look at again.
+  // The kitchen's saved order is laid over the default age order. A column the kitchen has
+  // never reordered has no entry and reads exactly as before.
   const inColumn = (key: StatusKey) =>
-    shown
-      .filter((t) => statusKey(t.status) === key)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    rankColumn(
+      shown
+        .filter((t) => statusKey(t.status) === key)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+      key,
+      ranks,
+    )
 
   // "Collected today" and "Revenue today" come from the SERVER's summary, not from the
   // fetched page. Filtering the fetched page is how a busy day silently truncated the
@@ -366,11 +442,26 @@ export function KitchenPage() {
     all: tickets.length,
   }
 
+  // Where to draw the drop line: before a specific card, counting only the cards that are
+  // not the one being dragged, so the line previews exactly where `targetAt` will insert.
+  const dropLineBefore = (stage: StatusKey, list: KitchenTicket[], ticketId: number): boolean => {
+    if (dropStage !== stage || dropIndex === null || ticketId === draggingId) return false
+    let seen = 0
+    for (const t of list) {
+      if (t.id === ticketId) return seen === dropIndex
+      if (t.id !== draggingId) seen++
+    }
+    return false
+  }
+
+  const dropLineAtEnd = (stage: StatusKey, list: KitchenTicket[]): boolean =>
+    dropStage === stage && dropIndex !== null && dropIndex === list.filter((t) => t.id !== draggingId).length
+
   return (
     <>
       <AdminTop
         title="Board"
-        sub="Every order on the line, and today's numbers. Tick a dish to strike it through."
+        sub="Every order on the line, and today's numbers. Tick a dish, or drag a ticket between columns."
         actions={
           // A connection cue, NOT a status pill. This passed `status="ready"` and only
           // overrode the label, so a green "ready" dot rendered the word "Reconnecting" —
@@ -446,38 +537,49 @@ export function KitchenPage() {
                     </p>
 
                     {list.length === 0 ? (
-                      <p className="board-empty">Nothing here.</p>
+                      // An empty column still shows the drop line while a card is over it, so
+                      // the first ticket into a stage lands somewhere visible rather than on
+                      // a bare "Nothing here."
+                      dropStage === column.key ? (
+                        <div className="drop-line" />
+                      ) : (
+                        <p className="board-empty">Nothing here.</p>
+                      )
                     ) : (
-                      list.map((ticket) => (
-                      <BoardTicket
-                        key={ticket.id}
-                        ticket={ticket}
-                        saving={savingId === ticket.id}
-                        tickingItemId={tickingItemId}
-                        dragging={draggingId === ticket.id}
-                        onDragHandlePointerDown={beginDrag(ticket)}
-                        onAdvance={(status) => advance.mutate({ id: ticket.id, status })}
-                        onTick={(itemId, isCompleted) =>
-                          tick.mutate({ orderId: ticket.id, itemId, isCompleted })
-                        }
-                        onHold={() => {
-                          setHolding(ticket)
-                          setHoldReason("")
-                        }}
-                        onResume={() => setHold.mutate({ orderId: ticket.id, held: false })}
-                        onNote={(item) => {
-                          setNoting({ ticket, item })
-                          setNoteDraft(item.kitchenNote ?? "")
-                        }}
-                        onHistory={() => setHistoryFor(ticket)}
-                        onPickup={() => {
-                          setPickupFor(ticket)
-                          const openedAt = Date.now()
-                          setPickupDraft(openedAt)
-                          setPickupNow(openedAt)
-                        }}
-                      />
-                    ))
+                      <>
+                        {list.map((ticket) => (
+                          <Fragment key={ticket.id}>
+                            {dropLineBefore(column.key, list, ticket.id) && <div className="drop-line" />}
+                            <BoardTicket
+                              ticket={ticket}
+                              saving={savingId === ticket.id}
+                              tickingItemId={tickingItemId}
+                              dragging={draggingId === ticket.id}
+                              onDragHandlePointerDown={beginDrag(ticket)}
+                              onAdvance={(status) => advance.mutate({ id: ticket.id, status })}
+                              onTick={(itemId, isCompleted) =>
+                                tick.mutate({ orderId: ticket.id, itemId, isCompleted })
+                              }
+                              onHold={() => {
+                                setHolding(ticket)
+                                setHoldReason("")
+                              }}
+                              onResume={() => setHold.mutate({ orderId: ticket.id, held: false })}
+                              onNote={(item) => {
+                                setNoting({ ticket, item })
+                                setNoteDraft(item.kitchenNote ?? "")
+                              }}
+                              onPickup={() => {
+                                setPickupFor(ticket)
+                                const openedAt = Date.now()
+                                setPickupDraft(openedAt)
+                                setPickupNow(openedAt)
+                              }}
+                            />
+                          </Fragment>
+                        ))}
+                        {dropLineAtEnd(column.key, list) && <div className="drop-line" />}
+                      </>
                     )}
                   </div>
                 </div>
@@ -584,56 +686,7 @@ export function KitchenPage() {
           onClose={() => setPickupFor(null)}
         />
       )}
-
-      {historyFor && <TicketHistory ticket={historyFor} onClose={() => setHistoryFor(null)} />}
     </>
-  )
-}
-
-/**
- * What has happened to this ticket, and who did it.
- *
- * The question asked an hour later when something has gone wrong. Every other screen shows
- * current state, which is enough to run a service and useless for that question.
- */
-function TicketHistory({ ticket, onClose }: { ticket: KitchenTicket; onClose: () => void }) {
-  const { data: events = [], isLoading } = useQuery({
-    queryKey: ["kitchen", "activity", ticket.id],
-    queryFn: () => kitchenApi.getActivity(ticket.id),
-  })
-
-  return (
-    <AdminModal
-      title={`History — ${ticket.orderNumber}`}
-      labelledBy="history-title"
-      onClose={onClose}
-      footer={
-        <Button variant="ghost" onClick={onClose}>
-          Close
-        </Button>
-      }
-    >
-      {isLoading ? (
-        <p className="meta">Loading…</p>
-      ) : events.length === 0 ? (
-        <p className="meta">
-          Nothing recorded yet. Actions taken from this screen — ticking a dish, holding the
-          ticket, writing a note — appear here with who did them.
-        </p>
-      ) : (
-        <ol className="boh-history">
-          {events.map((e) => (
-            <li key={e.id}>
-              <span className="boh-history-detail">{e.detail}</span>
-              <span className="meta">
-                {new Date(e.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                {e.statusAtEvent ? ` · ${e.statusAtEvent}` : ""}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </AdminModal>
   )
 }
 

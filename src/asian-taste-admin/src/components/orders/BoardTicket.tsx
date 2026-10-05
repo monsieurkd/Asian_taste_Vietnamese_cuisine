@@ -30,7 +30,6 @@ export function BoardTicket({
   onHold,
   onResume,
   onNote,
-  onHistory,
   onPickup,
   onDragHandlePointerDown,
   dragging,
@@ -43,7 +42,6 @@ export function BoardTicket({
   onHold: () => void
   onResume: () => void
   onNote: (item: KitchenItem) => void
-  onHistory: () => void
   onPickup: () => void
   onDragHandlePointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => void
   dragging: boolean
@@ -255,22 +253,6 @@ export function BoardTicket({
             No further step.
           </span>
         )}
-
-        <button type="button" className="t-act" title="This ticket's history" onClick={() => onHistory()}>
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <circle cx="12" cy="12" r="8.5" />
-            <path d="M12 7.5V12l3 2" />
-          </svg>
-          History
-        </button>
 
         {ticket.isHeld ? (
           <button type="button" className="t-act" title="Put back on the line" onClick={onResume}>

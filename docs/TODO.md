@@ -2679,8 +2679,9 @@ admin app is now being rebuilt onto, screen by screen, rather than left as stati
 served beside the old UI. This session landed the **kitchen board** (`/kitchen`) and then
 the **counter screen** (`/counter`). The board's stat-grid and pill layout is gone,
 replaced by the board-bar, the board metrics, scrolling stage columns and the ticket card
-with the shop clock, dish rows, flags and one verb per stage. Drag-to-advance is kept and
-still gated on `canTransition` — an illegal drop snaps back with the rule's reason. The
+with the shop clock, dish rows, flags and one verb per stage. Drag-to-advance is kept; the
+drop rule itself was relaxed in §32 (backwards allowed, forward skips still refused), and an
+illegal drop snaps back with the rule's reason. The
 counter is now the mockup's screen too: the always-on menu search and mode switch share one
 toolbar, the rail leads with a **Popular** row, the dish tiles are price-forward with a
 glyph that says add-vs-choose, quantity is one stepper, a newly added line flashes, and the
@@ -2710,3 +2711,49 @@ the shape it took — not invented after the fact:
 | **P2** | **Tell the customer.** | The same method queues an `OrderStatusUpdateEmailJob` with status `PickupTimeChanged` and "your pickup/serve time for order N has moved to X", reusing the existing `OrderEmailQueue`. Channel is email, because that is what the order already holds; a counter order has no address and is skipped (the walk-in was told face-to-face). Also best-effort. |
 | **P3** | **Counter parity.** | `CreateCounterOrderDto` gained an optional `PickupTime`, defaulting to ASAP, so a walk-in can be given a promise. The counter's new pickup field sets it on create, and it is hidden when ADDING to an existing order — that order already has a time and the board owns changing it. |
 | **P4** | **One urgency number.** | The canonical due-soon threshold is **10 minutes**. `lib/kitchenBoard.ts` now exports `DUE_SOON_MINUTES = 10` and a shared `urgencyForDue(minutesUntil)`; `urgencyOf`'s scheduled branch delegates to it, so the board and the counter tint a promise the same way. |
+
+## 32. The board's drag is the correction gesture, not a shortcut — 2026-10-05
+
+The board's stage button walks the happy path one step forward and refuses everything else,
+which is right for a button. A drag is a different control: it is the cook saying "this ticket
+is actually at another stage", and the moves the button cannot express are the ones that
+gesture exists for. The owner ratified the flexibility and, when asked about skipping, chose
+**block skips, allow backwards**.
+
+### The rule, in one place
+
+`lib/boardDrop.ts` → `dropCheck(from, to)`, deliberately separate from the shared
+`canTransition` (which still drives the order-detail screen and the board's advance button):
+
+- **Forward, one stage at a time.** `New → Ready` would mark food handed over that was never
+  cooked, and the board's numbers are the owner's record of the day. Same refusal, same words
+  as the button guard.
+- **Backwards, however far.** Cooking set by mistake, a ticket marked ready too early, an
+  accept the front wants to undo — all real, all safe, because the dishes and their ticks are
+  untouched. `Ready → New` is allowed.
+- **Never off a closed order**, and **never onto a closed stage** (Collected/Cancelled are not
+  columns). This is also the guard that stops a stale WebSocket frame putting a finished
+  ticket back on the board.
+
+### Reorder within a column, per-device
+
+The mockup let a cook reorder a column, and the board now does too, via
+`lib/boardOrder.ts`. A drop in the same column reorders and never touches the server; a drop
+in another column moves the stage AND lands the card where it was dropped. The order is saved
+in `localStorage` (`asiantaste.admin.board.order.v1`) and layered ON TOP of the default
+oldest-first sort, so a column nobody has reordered reads exactly as before and a new ticket
+lands at the bottom rather than jumping above the arrangement the kitchen set.
+
+**This is per-device, on purpose.** Reordering is a gesture on the screen in front of you, and
+the alternative — a new column, an endpoint and a migration on the table the kitchen writes to
+all day — is a larger change than the feature earns. The honest cost: two tablets can order
+the same column differently, and the order does not survive clearing site data. If the owner
+ever wants "the order is the same on every screen", the follow-up is an `orders.board_rank`
+integer plus a `PUT /admin/orders/{id}/board-rank`, ordered per stage server-side; the client
+rule in `boardOrder.ts` is already isolated enough to swap that in.
+
+### Verified
+
+`dropCheck` and `boardOrder` are covered by unit tests (backwards allowed, forward skip
+refused, closed orders refused, ranked-before-unranked, moved id removed from its old
+column). Admin app: lint clean, `tsc -b` clean, **209** tests pass, production build succeeds.

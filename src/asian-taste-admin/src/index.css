@@ -587,6 +587,14 @@
     min-height: 0;
     overflow: hidden;
   }
+  /* The board owns its own scrolling too — one scroll region per stage column — so its page
+     gets the same pinning. Without this the board page sized to its content taller than the
+     fixed-height `.admin-main`, which then clipped it: the columns below the fold were
+     unreachable and the whole board could not be scrolled. Pinned exactly like the counter. */
+  .admin-main:has(.board-page) > .admin-page.board-page {
+    min-height: 0;
+    overflow: hidden;
+  }
   .admin-top {
     display: flex;
     align-items: center;
@@ -3304,6 +3312,15 @@
      clips. Later in the cascade than the older board rules above, so these win.
      ========================================================================== */
 
+  /* `flex: 1` and `min-height: 0` let the page fill the fixed-height `.admin-main` column
+     instead of collapsing to its content height. That bounded height is what the `.board`
+     below distributes to the columns, and what lets each `.col-scroll` be a scroll region. */
+  .board-page {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .board-bar {
     display: flex;
     align-items: center;
@@ -3403,6 +3420,20 @@
   }
   .ticket.is-source {
     opacity: 0.35;
+  }
+
+  /* The slot a dragged card would drop into. A line rather than a full placeholder, so it
+     reads as "it lands here" without the column jumping as the finger moves. It rides the
+     column's own `gap`, so it needs no margin of its own. */
+  .drop-line {
+    flex: none;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-accent) 16%, transparent);
+  }
+  .col.drop-target .drop-line {
+    background: var(--color-accent);
   }
 
   .t-head {
