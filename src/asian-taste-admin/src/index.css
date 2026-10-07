@@ -604,13 +604,13 @@
     min-height: 0;
     overflow: hidden;
   }
-  /* The board owns its own scrolling too — one scroll region per stage column — so its page
-     gets the same pinning. Without this the board page sized to its content taller than the
-     fixed-height `.admin-main`, which then clipped it: the columns below the fold were
-     unreachable and the whole board could not be scrolled. Pinned exactly like the counter. */
+  /* The board scrolls as ONE page, not one region per column. Bounded (`flex: 1`,
+     `min-height: 0`) so it can scroll at all, and `overflow-y: auto` makes the whole board —
+     toolbar and all three columns together — a single scroll region. The columns grow to
+     their content instead of clipping it into their own little viewports. */
   .admin-main:has(.board-page) > .admin-page.board-page {
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
   }
   /* The shop clock. It lives in the rail rather than a per-page header: the whole
      console runs on Adelaide time, so every screen reads "today" and pickup times
@@ -3139,12 +3139,13 @@
      ========================================================================== */
 
   /* `flex: 1` and `min-height: 0` let the page fill the fixed-height `.admin-main` column
-     instead of collapsing to its content height. That bounded height is what the `.board`
-     below distributes to the columns, and what lets each `.col-scroll` be a scroll region. */
+     instead of collapsing to its content height. The page itself is the board's single
+     scroll region (see the `.admin-main:has(.board-page)` rule): the `.board` below grows to
+     its content and the whole board scrolls together, rather than each column scrolling
+     inside a pinned viewport. */
   .board-page {
     flex: 1;
     min-height: 0;
-    overflow: hidden;
   }
 
   .board-bar {
@@ -3191,8 +3192,7 @@
   .board {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
-    flex: 1;
-    min-height: 0;
+    flex: none;
     align-items: stretch;
   }
   .col {
@@ -3200,7 +3200,7 @@
     flex-direction: column;
     min-height: 0;
     padding: 0;
-    overflow: hidden;
+    overflow: visible;
     transition: border-color 0.12s ease, box-shadow 0.12s ease;
   }
   .col.drop-target {
@@ -3216,8 +3216,6 @@
   .col-scroll {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
     padding: 10px;
     display: flex;
     flex-direction: column;
