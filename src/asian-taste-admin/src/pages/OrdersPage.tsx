@@ -3,7 +3,6 @@ import { Link } from "react-router-dom"
 import type { Order } from "@/types"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ordersApi } from "@/api/orders"
-import { AdminTop } from "@/components/AdminLayout"
 import { Panel, PanelBody, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
 import { STATUS_META, STATUS_ORDER, statusKey, type StatusKey } from "@/lib/orderStatus"
@@ -167,8 +166,6 @@ export function OrdersPage() {
 
   return (
     <>
-      <AdminTop title="Orders" sub="Search, filter and open any order from today's service." />
-
       <div className="admin-page">
         <Panel data-od-id="orders-filters">
           <PanelBody>

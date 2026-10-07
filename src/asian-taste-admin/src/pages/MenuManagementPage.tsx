@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { menuAdminApi, type MenuItemDetail } from "@/api/menuApi"
-import { AdminTop } from "@/components/AdminLayout"
 import { Button, Panel, PanelBody, PanelHead, Pill, SkeletonRows } from "@/components/ui/Primitives"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { DishEditor } from "@/components/menu/DishEditor"
@@ -81,11 +80,6 @@ export function MenuManagementPage() {
 
   return (
     <>
-      <AdminTop
-        title="Menu"
-        sub={`${items.length} dishes across ${categories.length} categories. Toggle availability the moment the kitchen runs out.`}
-      />
-
       <div className="admin-page">
         <Panel data-od-id="menu-tools">
           <PanelBody>

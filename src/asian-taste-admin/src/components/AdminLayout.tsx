@@ -162,6 +162,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="admin-rail-foot">
+          {/* The shop's clock, kept in the rail rather than a per-screen header: every
+              page passes pickup times and "today" against Adelaide, so the clock is a
+              console-wide fact and does not belong to any one screen. */}
+          <ShopClock />
+
           {/* The kitchen's only cue that live orders are arriving. Offline is a
               warning, not a silent decoration. */}
           <span className={`live-dot ${isConnected ? "" : "is-off"}`} title={isConnected ? "Kitchen online" : "Reconnecting"}>
@@ -236,25 +241,3 @@ function ShopClock() {
   )
 }
 
-/**
- * The sticky console header.
- *
- * `title`/`sub` are rendered here rather than duplicated in each page, so the
- * heading and the browser tab cannot disagree. The shop clock is appended after
- * whatever page actions a screen passes, so it is the last thing in the corner on
- * every screen.
- */
-export function AdminTop({ title, sub, actions }: { title: string; sub?: string; actions?: React.ReactNode }) {
-  return (
-    <header className="admin-top">
-      <div>
-        <h1>{title}</h1>
-        {sub && <p className="sub">{sub}</p>}
-      </div>
-      <div className="admin-top-actions">
-        {actions}
-        <ShopClock />
-      </div>
-    </header>
-  )
-}

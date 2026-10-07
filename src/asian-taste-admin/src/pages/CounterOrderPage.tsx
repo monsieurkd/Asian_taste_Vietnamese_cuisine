@@ -3,8 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { menuAdminApi, type MenuItemDetail, type Modifier } from "@/api/menuApi"
 import { counterOrderApi, type CounterOrderCandidate } from "@/api/counterOrderApi"
 import { ordersApi } from "@/api/orders"
-import { AdminTop } from "@/components/AdminLayout"
-import { Button, Panel, PanelBody, PanelHead, Pill, SkeletonRows } from "@/components/ui/Primitives"
+import { Button, Panel, PanelBody, PanelHead, SkeletonRows } from "@/components/ui/Primitives"
 import { AdminModal } from "@/components/ui/AdminModal"
 import { PickupTimeEditor } from "@/components/orders/PickupTimeEditor"
 import { showAdminToast } from "@/components/ui/AdminToast"
@@ -21,7 +20,6 @@ import {
   pricedUnit,
   removeLine,
   setQuantity,
-  ticketItemCount,
   ticketTotal,
   toRequest,
   toggleModifier,
@@ -474,8 +472,6 @@ export function CounterOrderPage() {
     setOpenDish(null)
   }
 
-  const itemCount = ticketItemCount(lines)
-
   /** The promise's own clock state: whether it has passed or is nearly due, per the shop day. */
   const minsToPromise = Math.round((wantedAt - now) / 60_000)
   const promiseIsToday = shopDayOffset(wantedAt) === 0
@@ -487,20 +483,6 @@ export function CounterOrderPage() {
 
   return (
     <>
-      <AdminTop
-        title={isAddingToOrder ? `Add to ${target!.orderNumber}` : "Counter order"}
-        sub={
-          isAddingToOrder
-            ? "Add what they asked for. The order is re-priced when you save."
-            : "Take an order for someone standing with you. No payment is taken here."
-        }
-        actions={
-          <Pill neutral>
-            {itemCount} {itemCount === 1 ? "item" : "items"} · {formatCurrency(total)}
-          </Pill>
-        }
-      />
-
       <div className="admin-page counter-page" data-od-id="counter">
         {/* ── The toolbar ────────────────────────────────────────────────────────
             Mode, the always-on menu search, and the order lookup that appears only

@@ -2,7 +2,6 @@ import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as Re
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ordersApi } from "@/api/orders"
 import { kitchenApi, type KitchenItem, type KitchenTicket } from "@/api/kitchenApi"
-import { AdminTop } from "@/components/AdminLayout"
 import { Button } from "@/components/ui/Primitives"
 import { AdminModal } from "@/components/ui/AdminModal"
 import { showAdminToast } from "@/components/ui/AdminToast"
@@ -78,7 +77,8 @@ const FILTERS = [
 ]
 
 export function KitchenPage() {
-  const { isConnected } = useOrderWebSocket()
+  // Mounted for its side effect: subscribing to live orders and invalidating the board.
+  useOrderWebSocket()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState<"live" | "late" | "held" | "all">("live")
   const [holding, setHolding] = useState<KitchenTicket | null>(null)
@@ -459,21 +459,6 @@ export function KitchenPage() {
 
   return (
     <>
-      <AdminTop
-        title="Board"
-        sub="Every order on the line, and today's numbers. Tick a dish, or drag a ticket between columns."
-        actions={
-          // A connection cue, NOT a status pill. This passed `status="ready"` and only
-          // overrode the label, so a green "ready" dot rendered the word "Reconnecting" —
-          // the pill's colour came from the status while its text said the opposite. The
-          // board's ticket pills say where an ORDER is; this says whether the screen is
-          // live, which is a different question and gets a different control.
-          <span className={`live-dot ${isConnected ? "" : "is-off"}`}>
-            {isConnected ? "Live" : "Reconnecting"}
-          </span>
-        }
-      />
-
       <div className="admin-page board-page">
         {/* One compact toolbar: the filters, and the numbers that say whether the line is
             keeping up. The mockup puts both here rather than in four stat cards, so the

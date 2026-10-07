@@ -3,12 +3,11 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ordersApi } from "@/api/orders"
 import type { OrderStatus } from "@/types"
-import { AdminTop } from "@/components/AdminLayout"
 import { Avatar, Button, Kv, KvRow, Panel, PanelBody, PanelHead, Pill, SkeletonRows, SumRow } from "@/components/ui/Primitives"
 import { StatusPill } from "@/components/ui/StatusPill"
 import { apiStatusValue, isClosed as isOrderClosed, STATUS_META, STATUS_ORDER, statusKey } from "@/lib/orderStatus"
 import { readPayment } from "@/lib/payment"
-import { formatCurrency, formatDate, minutesAgo } from "@/lib/utils"
+import { formatCurrency, formatDate } from "@/lib/utils"
 import { showAdminToast } from "@/components/ui/AdminToast"
 import { AdminModal } from "@/components/ui/AdminModal"
 import { OrderEditor } from "@/components/orders/OrderEditor"
@@ -134,7 +133,6 @@ export function OrderDetailPage() {
   if (isLoading) {
     return (
       <>
-        <AdminTop title="Order" sub="Loading this ticket…" />
         <div className="admin-page">
           <SkeletonRows rows={4} />
         </div>
@@ -145,7 +143,6 @@ export function OrderDetailPage() {
   if (!order) {
     return (
       <>
-        <AdminTop title="Order" />
         <div className="admin-page">
           <Panel>
             <div className="state-block error">
@@ -180,17 +177,6 @@ export function OrderDetailPage() {
 
   return (
     <>
-      <AdminTop
-        title={order.orderNumber}
-        sub={`Placed ${formatDate(order.createdAt, "long")} · ${minutesAgo(order.createdAt)} min ago`}
-        actions={
-          <>
-            <StatusPill status={order.status} />
-            {payment.attention && <Pill className="pill-warn">{payment.label}</Pill>}
-          </>
-        }
-      />
-
       <div className="admin-page">
         <div className="filterbar">
           <Link className="btn btn-ghost" to="/orders">
@@ -204,6 +190,12 @@ export function OrderDetailPage() {
             <span>
               <strong>{order.customerName}</strong>
               <span className="meta">{order.customerPhone}</span>
+            </span>
+          </span>
+          <span className="head-code">
+            {payment.attention && <Pill className="pill-warn">{payment.label}</Pill>}
+            <span className="head-code-num" title="Order number">
+              {order.orderNumber}
             </span>
           </span>
         </div>
