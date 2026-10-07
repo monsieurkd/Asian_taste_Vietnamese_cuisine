@@ -6,7 +6,6 @@ import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { AdminLayout } from "@/components/AdminLayout"
 import { ToastHost } from "@/components/ui/Toast"
 import { LoginPage } from "@/pages/LoginPage"
-import { OverviewPage } from "@/pages/OverviewPage"
 import { OrdersPage } from "@/pages/OrdersPage"
 import { OrderDetailPage } from "@/pages/OrderDetailPage"
 import { MenuManagementPage } from "@/pages/MenuManagementPage"
@@ -52,12 +51,13 @@ function App() {
               </ProtectedRoute>
             }
           >
-            {/* Overview is the console's home: today's numbers and a way into any
-                screen. The board is one click away and still owns /kitchen. */}
-            <Route path="/" element={<OverviewPage />} />
-            {/* /overview is an alias so a link written against the mockups' file
-                name keeps working. */}
-            <Route path="/overview" element={<Navigate to="/" replace />} />
+            {/* The console opens on the board. It is the one screen for WORKING
+                orders and it already carries today's numbers, so the old Overview
+                front door was a redundant click before the shift's real work. */}
+            <Route path="/" element={<Navigate to="/kitchen" replace />} />
+            {/* /overview was the front door's file name in the mockups; it and the
+                retired route both land on the board now. */}
+            <Route path="/overview" element={<Navigate to="/kitchen" replace />} />
             {/* /dashboard is the board. It used to be a second, incomplete copy of it —
                 the same orders with the same stat cards and none of the kitchen's actions
                 — so the route redirects rather than rendering a rival screen. Bookmarks

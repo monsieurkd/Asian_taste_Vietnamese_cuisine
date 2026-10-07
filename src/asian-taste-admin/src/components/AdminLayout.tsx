@@ -5,12 +5,6 @@ import { useOrderWebSocket } from "@/hooks/useOrderWebSocket"
 import { Avatar } from "@/components/ui/Primitives"
 
 const ICONS = {
-  home: (
-    <>
-      <path d="M4 11.5 12 4l8 7.5" />
-      <path d="M6 10v9h12v-9" />
-    </>
-  ),
   grid: (
     <>
       <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
@@ -54,13 +48,11 @@ function Icon({ paths }: { paths: React.ReactNode }) {
 }
 
 const NAV = [
-  // Overview is the console's front door: today's numbers and a way into every
-  // screen. It is the default entry because a manager opening the console wants
-  // the state of service before the board loads.
-  { to: "/", label: "Overview", icon: ICONS.home },
-  // The board is the one working screen and it carries the day's numbers too; it
-  // replaced two entries — "Back of house" and "Dashboard" — that rendered the
-  // same orders with different halves of the job missing; see KitchenPage.
+  // The board is the console's home and its one working screen: it carries the
+  // day's numbers too, so a manager who opens the console is already looking at
+  // the state of service. It replaced two entries — "Back of house" and
+  // "Dashboard" — that rendered the same orders with different halves of the job
+  // missing; see KitchenPage.
   { to: "/kitchen", label: "Board", icon: ICONS.grid },
   { to: "/counter", label: "Counter", icon: ICONS.counter },
   { to: "/orders", label: "Orders", icon: ICONS.list },
@@ -150,14 +142,13 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
         <nav className="admin-nav" id="admin-nav" aria-label="Staff sections">
           {NAV.map((item) => {
-            // The overview lives at "/", so a prefix test would mark it current on
-            // every route; it is the only entry that has to match exactly.
-            const current = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)
+            // Prefix match so the order list stays current on /orders/:id, with a
+            // boundary so /orders does not also light up for a sibling route.
+            const current = pathname === item.to || pathname.startsWith(`${item.to}/`)
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === "/"}
                 // The label is the accessible name even when it is not painted, so a
                 // collapsed icon is announced as "Counter" rather than as an unlabelled link.
                 title={item.label}
