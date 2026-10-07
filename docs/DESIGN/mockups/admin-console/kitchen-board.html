@@ -178,21 +178,11 @@
   }
 
   .admin-main { min-width: 0; display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }
-  .admin-top {
-    display: flex; align-items: center; justify-content: space-between; gap: 1.25rem;
-    padding: 14px clamp(18px, 3vw, 30px);
-    border-bottom: 1px solid var(--color-border);
-    background: color-mix(in oklch, var(--color-bg) 88%, transparent);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-    position: sticky; top: 0; z-index: 30; flex: none;
-  }
-  .admin-top h1 { font-family: var(--font-display); font-size: clamp(21px, 2.4vw, 27px); font-weight: 600; margin: 0; }
-  .admin-top .sub { font-size: 12.5px; color: var(--color-muted); margin: 2px 0 0; }
-  .admin-top-actions { display: flex; align-items: center; gap: 12px; }
   .admin-page { padding: clamp(14px, 2vw, 24px); display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; }
 
-  /* Board fills the console; each column scrolls on its own (the live-scroll fix). */
-  .admin-main:has(.board-page) > .admin-page.board-page { overflow: hidden; }
+  /* The board scrolls as ONE page, not one region per column: the toolbar and
+     all three columns move together in a single scroll region. */
+  .admin-main:has(.board-page) > .admin-page.board-page { overflow-y: auto; }
 
   /* ─── panel / button / pill / input ─── */
   .panel { background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
@@ -300,8 +290,8 @@
   }
 
   /* ==========================================================================
-     The board. One compact toolbar, then three stage columns that own their
-     own scroll. Nothing else scrolls, so the last column never clips.
+     The board. One compact toolbar, then three stage columns that grow to their
+     content and scroll together with the whole page.
      ========================================================================== */
   .board-bar {
     display: flex; align-items: center; justify-content: space-between; gap: 10px 16px;
@@ -322,7 +312,7 @@
   .board-metrics .bm strong { color: var(--color-fg); font-weight: 800; font-variant-numeric: tabular-nums; }
   .board-metrics .bm.is-late strong { color: var(--color-deal); }
 
-  .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; flex: 1; min-height: 0; align-items: stretch; }
+  .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; flex: none; align-items: stretch; }
 
   .col {
     display: flex; flex-direction: column; min-height: 0;
@@ -338,7 +328,7 @@
     background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 999px; padding: 2px 9px;
     font-variant-numeric: tabular-nums;
   }
-  .col-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .col-scroll { flex: 1; min-height: 0; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
   .board-empty { border: 1px dashed var(--color-border); border-radius: var(--radius); padding: 18px; text-align: center; color: var(--color-muted); font-size: 13px; }
 
   /* ─── the order card ─── */
@@ -540,6 +530,8 @@
     </nav>
 
     <div class="admin-rail-foot">
+      <span class="admin-clock" id="adminClock" title="The shop clock — Australia/Adelaide">Adelaide —</span>
+
       <span class="live-dot" id="liveDot" title="Kitchen online">Kitchen online</span>
 
       <div class="admin-account">
@@ -566,16 +558,6 @@
   </aside>
 
   <div class="admin-main">
-    <header class="admin-top">
-      <div>
-        <h1 id="pageTitle">Board</h1>
-        <p class="sub" id="pageSub">Drag an order between its stages, tap a dish to strike it through, tap a pickup time to change it.</p>
-      </div>
-      <div class="admin-top-actions">
-        <span class="admin-clock" id="adminClock" title="The shop clock — Australia/Adelaide">Adelaide —</span>
-        <span class="live-dot" id="connDot" title="The screen is live">Live</span>
-      </div>
-    </header>
 
     <div class="admin-page board-page" data-od-id="board">
 
